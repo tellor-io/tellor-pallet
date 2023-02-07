@@ -11,6 +11,7 @@ mod tests;
 mod api;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+mod contracts;
 mod types;
 mod xcm;
 

@@ -1,7 +1,5 @@
-use super::MAX_ETHEREUM_XCM_INPUT_SIZE;
 use crate::types::Address;
-use sp_core::bounded::BoundedVec;
-use sp_core::{ConstU32, U256};
+use sp_core::U256;
 
 mod governance;
 mod staking;
@@ -46,7 +44,7 @@ impl<'a> Call<'a> {
         self
     }
 
-    fn encode(mut self) -> Result<BoundedVec<u8, ConstU32<MAX_ETHEREUM_XCM_INPUT_SIZE>>, Vec<u8>> {
+    fn encode(mut self) -> Vec<u8> {
         let mut buffer = [0u8; 32];
 
         // Add head parts: https://docs.soliditylang.org/en/latest/abi-spec.html#function-selector-and-argument-encoding
@@ -82,7 +80,7 @@ impl<'a> Call<'a> {
             }
         }
 
-        self.function.try_into()
+        self.function
     }
 }
 
@@ -122,7 +120,7 @@ pub(crate) mod tests {
         let address = Address::random();
         assert_eq!(
             encode(&[Token::Address(address)])[..],
-            Call::new(&[0; 4]).address(address).encode().unwrap()[4..]
+            Call::new(&[0; 4]).address(address).encode()[4..]
         );
     }
 
@@ -131,7 +129,7 @@ pub(crate) mod tests {
         let value = 12345u128;
         assert_eq!(
             encode(&[Token::Uint(U256::from(value))])[..],
-            Call::new(&[0; 4]).uint(value).encode().unwrap()[4..]
+            Call::new(&[0; 4]).uint(value).encode()[4..]
         );
     }
 }

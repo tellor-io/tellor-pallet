@@ -5,7 +5,7 @@ fn confirm_parachain_staking_withdraw_request(
     para_id: ParaId,
     reporter: Address,
     amount: impl Into<Amount>,
-) -> Result<BoundedVec<u8, ConstU32<MAX_ETHEREUM_XCM_INPUT_SIZE>>, Vec<u8>> {
+) -> Vec<u8> {
     const FUNCTION: [u8; 4] = [141, 45, 83, 196];
     Call::new(&FUNCTION)
         .uint(para_id)
@@ -16,10 +16,8 @@ fn confirm_parachain_staking_withdraw_request(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        types::Address,
-        xcm::ethereum_xcm::contracts::tests::{encode_function_selector, param},
-    };
+    use super::super::tests::{encode_function_selector, param};
+    use crate::types::Address;
     use ethabi::{Function, ParamType, Token};
 
     fn confirm_parachain_staking_withdraw_request() -> Function {
@@ -61,7 +59,7 @@ mod tests {
                     Token::Uint(amount.into()),
                 ])
                 .unwrap()[..],
-            super::confirm_parachain_staking_withdraw_request(para_id, reporter, amount).unwrap()[..]
+            super::confirm_parachain_staking_withdraw_request(para_id, reporter, amount)[..]
         )
     }
 }

@@ -1,6 +1,6 @@
-use super::{Call, MAX_ETHEREUM_XCM_INPUT_SIZE};
+use super::Call;
 use crate::{types::Address, types::ParaId};
-use sp_core::{bounded::BoundedVec, ConstU32, U256};
+use sp_core::U256;
 
 pub(crate) fn begin_parachain_dispute(
     para_id: ParaId,
@@ -10,7 +10,7 @@ pub(crate) fn begin_parachain_dispute(
     value: &[u8],
     disputed_reporter: Address,
     dispute_initiator: Address,
-) -> Result<BoundedVec<u8, ConstU32<MAX_ETHEREUM_XCM_INPUT_SIZE>>, Vec<u8>> {
+) -> Vec<u8> {
     const FUNCTION: [u8; 4] = [40, 254, 222, 231];
 
     Call::new(&FUNCTION)
@@ -26,8 +26,8 @@ pub(crate) fn begin_parachain_dispute(
 
 #[cfg(test)]
 mod tests {
+    use super::super::tests::{encode_function_selector, param};
     use crate::types::Address;
-    use crate::xcm::ethereum_xcm::contracts::tests::{encode_function_selector, param};
     use ethabi::{Function, ParamType, Token};
     use sp_core::keccak_256;
 
@@ -95,8 +95,7 @@ mod tests {
                 &value,
                 disputed_reporter,
                 dispute_initiator
-            )
-            .unwrap()[..]
+            )[..]
         )
     }
 }
