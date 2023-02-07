@@ -1,8 +1,8 @@
 use crate::types::Address;
 use sp_core::U256;
 
-mod governance;
-mod staking;
+pub(crate) mod governance;
+pub(crate) mod staking;
 
 struct Call<'a> {
     function: Vec<u8>,

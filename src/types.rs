@@ -8,6 +8,8 @@ pub(crate) type Amount = U256;
 pub(crate) type AmountOf<T> = <T as Config>::Amount;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
 pub(crate) type DisputeIdOf<T> = <T as Config>::DisputeId;
+pub(crate) type DisputeOf<T> =
+    governance::Dispute<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, ValueOf<T>>;
 pub(crate) type FeedIdOf<T> = <T as Config>::Hash;
 pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AccountIdOf<T>, TimestampOf<T>>;
 pub(crate) type HashOf<T> = <T as Config>::Hash;
@@ -126,15 +128,15 @@ mod governance {
     use super::*;
 
     #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-    struct Dispute<AccountId, QueryId, Timestamp, Value> {
+    pub(crate) struct Dispute<AccountId, QueryId, Timestamp, Value> {
         /// Query identifier of disputed value
-        query_id: QueryId,
+        pub(crate) query_id: QueryId,
         /// Timestamp of disputed value.
-        timestamp: Timestamp,
+        pub(crate) timestamp: Timestamp,
         /// Disputed value.
-        value: Value,
+        pub(crate) value: Value,
         /// Reporter who submitted the disputed value.
-        dispute_reporter: AccountId,
+        pub(crate) dispute_reporter: AccountId,
     }
 
     #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]

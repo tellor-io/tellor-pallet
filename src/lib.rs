@@ -13,11 +13,15 @@ mod api;
 mod benchmarking;
 mod contracts;
 mod types;
-mod xcm;
+pub mod xcm;
 
 #[frame_support::pallet(dev_mode)]
 pub mod pallet {
-    use super::types::*;
+    use super::{
+        contracts::governance,
+        types::*,
+        xcm::{self, ethereum_xcm},
+    };
     use ::xcm::latest::prelude::*;
     use frame_support::traits::fungible::{Inspect, Transfer};
     use frame_support::{
@@ -30,6 +34,7 @@ pub mod pallet {
         PalletId,
     };
     use frame_system::pallet_prelude::*;
+    use sp_core::U256;
     use sp_runtime::{traits::AccountIdConversion, Saturating};
     use sp_std::{fmt::Debug, prelude::*, result};
 
@@ -64,11 +69,16 @@ pub mod pallet {
             + Debug
             + MaybeDisplay
             + Ord
-            + MaxEncodedLen;
+            + MaxEncodedLen
+            + Default
+            + Into<U256>;
 
         /// Percentage, 1000 is 100%, 50 is 5%, etc
         #[pallet::constant]
         type Fee: Get<u8>;
+
+        #[pallet::constant]
+        type Governance: Get<MultiLocation>;
 
         /// The output of the `Hasher` function.
         type Hash: Parameter
@@ -125,8 +135,13 @@ pub mod pallet {
         #[pallet::constant]
         type MaxVotes: Get<u32>;
 
+        /// The identifier of the pallet within the runtime.
         #[pallet::constant]
         type PalletId: Get<PalletId>;
+
+        /// The local parachain's own identifier.
+        #[pallet::constant]
+        type ParachainId: Get<ParaId>;
 
         /// Base amount of time before a reporter is able to submit a value again.
         #[pallet::constant]
@@ -199,6 +214,8 @@ pub mod pallet {
     #[pallet::storage]
     pub type DisputeIdsByReporter<T> =
         StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Blake2_128Concat, DisputeIdOf<T>, ()>;
+    #[pallet::storage]
+    pub type VoteCount<T> = StorageValue<_, DisputeIdOf<T>, ValueQuery>;
     // Query Data
     #[pallet::storage]
     pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, QueryDataOf<T>>;
@@ -298,6 +315,11 @@ pub mod pallet {
 
         NoValueExists,
         NotStaking,
+        // XCM
+        InvalidContractAddress,
+        MaxEthereumXcmInputSizeExceeded,
+        SendFailure,
+        Unreachable,
     }
 
     /// Origin for the Tellor module.
@@ -487,13 +509,63 @@ pub mod pallet {
         ) -> DispatchResult {
             let dispute_initiator = ensure_signed(origin)?;
             ensure!(
-                StakerDetails::<T>::contains_key(dispute_initiator),
+                StakerDetails::<T>::contains_key(&dispute_initiator),
                 Error::<T>::NotStaking
             );
             ensure!(
                 Reports::<T>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
                 Error::<T>::NoValueExists
             );
+
+            let dispute = DisputeOf::<T> {
+                query_id,
+                timestamp,
+                value: <ValueOf<T>>::default(),
+                dispute_reporter: dispute_initiator.clone(),
+            };
+
+            let dispute_id = <VoteCount<T>>::get();
+            let query_id = [0u8; 32];
+            let timestamp = 12345;
+            let disputed_reporter = Address::random();
+            let dispute_initiator = Address::random();
+
+            const GAS_LIMIT: u32 = 71_000;
+
+            let destination = T::Governance::get();
+            // Balances pallet on destination chain
+            let self_reserve = MultiLocation {
+                parents: 0,
+                interior: X1(PalletInstance(3)),
+            };
+            let message = xcm::transact(
+                MultiAsset {
+                    id: Concrete(self_reserve),
+                    fun: Fungible(1_000_000_000_000_000_u128),
+                },
+                WeightLimit::Unlimited,
+                5_000_000_000u64,
+                ethereum_xcm::transact(
+                    xcm::contract_address(&destination)
+                        .ok_or(Error::<T>::InvalidContractAddress)?
+                        .into(),
+                    governance::begin_parachain_dispute(
+                        T::ParachainId::get(),
+                        &query_id.into(),
+                        timestamp,
+                        dispute_id,
+                        &dispute.value,
+                        disputed_reporter,
+                        dispute_initiator,
+                    )
+                    .try_into()
+                    .map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+                    GAS_LIMIT.into(),
+                    None,
+                ),
+            );
+            Self::send_xcm(destination, message)?;
+
             Ok(())
         }
 
@@ -594,6 +666,16 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        fn send_xcm(
+            destination: impl Into<MultiLocation>,
+            message: Xcm<()>,
+        ) -> Result<(), Error<T>> {
+            T::Xcm::send_xcm(destination, message).map_err(|e| match e {
+                SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
+                _ => Error::<T>::SendFailure,
+            })
+        }
+
         fn store_data(query_id: QueryIdOf<T>, query_data: &QueryDataOf<T>) {
             QueryData::<T>::insert(query_id, query_data);
             Self::deposit_event(Event::QueryDataStored { query_id });

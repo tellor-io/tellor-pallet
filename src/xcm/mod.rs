@@ -1,11 +1,13 @@
+use crate::types::Address;
+use crate::Config;
 use ::xcm::latest::{prelude::*, MultiLocation};
 use core::marker::PhantomData;
 use frame_support::{log, traits::OriginTrait};
 use sp_core::Get;
-use sp_std::fmt::Debug;
+use sp_std::{fmt::Debug, vec::Vec};
 use xcm_executor::traits::{Convert, ConvertOrigin};
 
-mod ethereum_xcm;
+pub(crate) mod ethereum_xcm;
 
 pub struct LocationToPalletAccount<Location, Account, AccountId>(
     PhantomData<(Location, Account, AccountId)>,
@@ -48,5 +50,65 @@ where
             OriginKind::SovereignAccount if origin == Location::get() => Ok(PalletOrigin::get()),
             _ => Err(origin),
         }
+    }
+}
+
+pub(crate) fn transact(
+    fees: MultiAsset,
+    weight_limit: WeightLimit,
+    require_weight_at_most: u64,
+    call: Vec<u8>,
+) -> Xcm<()> {
+    let withdrawal_assets =
+        MultiAssets::from_sorted_and_deduplicated_skip_checks(vec![fees.clone()]);
+
+    // Construct xcm message
+    Xcm(vec![
+        WithdrawAsset(withdrawal_assets),
+        BuyExecution { fees, weight_limit },
+        Transact {
+            origin_type: OriginKind::SovereignAccount,
+            require_weight_at_most,
+            call: call.into(),
+        },
+    ])
+}
+
+pub(crate) fn contract_address(location: &MultiLocation) -> Option<&[u8; 20]> {
+    match location {
+        MultiLocation {
+            parents: _parents,
+            interior:
+                X2(
+                    Parachain(_para_id),
+                    AccountKey20 {
+                        key,
+                        network: _network,
+                    },
+                ),
+        } => Some(key),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contract_address_matches() {
+        let address = Address::random().0;
+        let location: MultiLocation = MultiLocation {
+            parents: 1,
+            interior: Junctions::X2(
+                Parachain(2000),
+                AccountKey20 {
+                    network: Any,
+                    key: address,
+                },
+            ),
+        };
+
+        assert_eq!(&address, contract_address(&location).unwrap())
     }
 }

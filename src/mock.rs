@@ -82,6 +82,7 @@ impl tellor::Config for Test {
     type Amount = u64;
     type DisputeId = u128;
     type Fee = ();
+    type Governance = ();
     type Hash = H256;
     type Hasher = Keccak256;
     type MaxClaimTimestamps = ();
@@ -94,6 +95,7 @@ impl tellor::Config for Test {
     type MaxValueLength = ();
     type MaxVotes = ();
     type PalletId = TellotPalletId;
+    type ParachainId = ();
     type ReportingLock = ();
     type Time = Timestamp;
     type Token = Balances;

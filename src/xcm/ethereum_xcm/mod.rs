@@ -4,7 +4,7 @@ use sp_core::{H160, H256, U256};
 use sp_std::vec::Vec;
 
 /// Max. allowed size of 65_536 bytes.
-pub const MAX_ETHEREUM_XCM_INPUT_SIZE: u32 = 2u32.pow(16);
+pub(crate) const MAX_ETHEREUM_XCM_INPUT_SIZE: u32 = 2u32.pow(16);
 
 // The fixed index of `pallet-ethereum-xcm` within various runtimes.
 #[derive(Clone, Eq, PartialEq, Encode)]
@@ -72,7 +72,6 @@ pub struct EthereumXcmTransactionV2 {
 #[derive(Clone, Debug, Eq, PartialEq, Encode, TypeInfo)]
 pub enum TransactionAction {
     Call(H160),
-    Create,
 }
 
 pub(crate) fn transact(
