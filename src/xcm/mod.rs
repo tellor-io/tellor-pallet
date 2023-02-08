@@ -1,10 +1,8 @@
-use crate::types::Address;
-use crate::Config;
 use ::xcm::latest::{prelude::*, MultiLocation};
 use core::marker::PhantomData;
 use frame_support::{log, traits::OriginTrait};
 use sp_core::Get;
-use sp_std::{fmt::Debug, vec::Vec};
+use sp_std::{fmt::Debug, vec, vec::Vec};
 use xcm_executor::traits::{Convert, ConvertOrigin};
 
 pub(crate) mod ethereum_xcm;

@@ -527,8 +527,8 @@ pub mod pallet {
             let dispute_id = <VoteCount<T>>::get();
             let query_id = [0u8; 32];
             let timestamp = 12345;
-            let disputed_reporter = Address::random();
-            let dispute_initiator = Address::random();
+            let disputed_reporter = Address::default();
+            let dispute_initiator = Address::default();
 
             const GAS_LIMIT: u32 = 71_000;
 
@@ -710,6 +710,7 @@ pub mod pallet {
 use api::autopay::*;
 use api::ApiResult;
 use codec::Codec;
+use sp_std::vec::Vec;
 use types::autopay::*;
 
 sp_api::decl_runtime_apis! {

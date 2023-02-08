@@ -1,4 +1,4 @@
-use super::Call;
+use super::*;
 use crate::{types::Address, types::ParaId};
 use sp_core::U256;
 

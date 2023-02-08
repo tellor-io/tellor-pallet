@@ -1,5 +1,6 @@
 use codec::{Decode, Encode};
 use frame_support::RuntimeDebug;
+use sp_std::vec::Vec;
 
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug)]
 pub enum ApiError {}
