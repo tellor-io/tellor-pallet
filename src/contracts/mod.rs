@@ -99,7 +99,7 @@ pub(crate) mod tests {
     use super::Call;
     use crate::types::Address;
     use ethabi::{encode, Param, ParamType, Token};
-    use sp_core::{keccak_256, U256};
+    use sp_core::U256;
 
     // Helper for creating a parameter
     pub(crate) fn param(name: &str, kind: ParamType) -> Param {

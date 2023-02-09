@@ -148,7 +148,6 @@ sp_api::decl_runtime_apis! {
 
 pub(crate) mod autopay {
     use super::*;
-    use crate::types::autopay::*;
 
     #[derive(Encode, Decode)]
     pub struct FeedDetailsWithQueryData<Amount, Timestamp> {
