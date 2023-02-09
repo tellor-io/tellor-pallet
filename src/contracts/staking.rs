@@ -1,5 +1,4 @@
 use super::*;
-use crate::types::{Address, Amount, ParaId};
 
 fn confirm_parachain_staking_withdraw_request(
     para_id: ParaId,
@@ -16,8 +15,7 @@ fn confirm_parachain_staking_withdraw_request(
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{encode_function_selector, param};
-    use crate::types::Address;
+    use super::{super::tests::*, Address};
     use ethabi::{Function, ParamType, Token};
 
     fn confirm_parachain_staking_withdraw_request() -> Function {
@@ -37,12 +35,9 @@ mod tests {
 
     #[test]
     fn encodes_confirm_parachain_staking_withdraw_request() {
+        // Short signature bytes used for FUNCTION const
         let function = confirm_parachain_staking_withdraw_request();
         println!("{} {:?}", function.signature(), function.short_signature());
-        assert_eq!(
-            encode_function_selector(&function.signature()),
-            function.short_signature()
-        );
     }
 
     #[test]

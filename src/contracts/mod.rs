@@ -1,4 +1,4 @@
-use crate::types::Address;
+use crate::types::{Address, Amount, ParaId};
 use sp_core::U256;
 use sp_std::{vec, vec::Vec};
 
@@ -101,13 +101,7 @@ pub(crate) mod tests {
     use ethabi::{encode, Param, ParamType, Token};
     use sp_core::{keccak_256, U256};
 
-    // https://docs.soliditylang.org/en/v0.8.17/abi-spec.html#function-selector
-    pub(crate) fn encode_function_selector(function_signature: &str) -> [u8; 4] {
-        keccak_256(function_signature.as_bytes())[..4]
-            .try_into()
-            .expect("keccak256 always returns 32-bytes")
-    }
-
+    // Helper for creating a parameter
     pub(crate) fn param(name: &str, kind: ParamType) -> Param {
         Param {
             name: name.to_string(),

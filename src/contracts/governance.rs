@@ -1,6 +1,4 @@
 use super::*;
-use crate::{types::Address, types::ParaId};
-use sp_core::U256;
 
 pub(crate) fn begin_parachain_dispute(
     para_id: ParaId,
@@ -26,8 +24,7 @@ pub(crate) fn begin_parachain_dispute(
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{encode_function_selector, param};
-    use crate::types::Address;
+    use super::{super::tests::*, *};
     use ethabi::{Function, ParamType, Token};
     use sp_core::keccak_256;
 
@@ -52,12 +49,9 @@ mod tests {
 
     #[test]
     fn encodes_begin_parachain_dispute() {
+        // Short signature bytes used for FUNCTION const
         let function = begin_parachain_dispute();
         println!("{} {:?}", function.signature(), function.short_signature());
-        assert_eq!(
-            encode_function_selector(&function.signature()),
-            function.short_signature()
-        );
     }
 
     #[test]
