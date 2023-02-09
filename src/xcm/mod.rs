@@ -92,6 +92,7 @@ pub(crate) fn contract_address(location: &MultiLocation) -> Option<&[u8; 20]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Address;
 
     #[test]
     fn contract_address_matches() {
