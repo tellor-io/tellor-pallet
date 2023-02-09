@@ -1,3 +1,4 @@
+use crate::types::ParaId;
 use ::xcm::latest::{prelude::*, MultiLocation};
 use core::marker::PhantomData;
 use frame_support::{log, traits::OriginTrait};
@@ -51,6 +52,36 @@ where
     }
 }
 
+pub fn controller(para_id: ParaId, address: [u8; 20]) -> MultiLocation {
+    MultiLocation {
+        parents: 1,
+        interior: X2(
+            Parachain(para_id),
+            AccountKey20 {
+                network: Any,
+                key: address,
+            },
+        ),
+    }
+}
+
+pub(crate) fn contract_address(location: &MultiLocation) -> Option<&[u8; 20]> {
+    match location {
+        MultiLocation {
+            parents: _parents,
+            interior:
+                X2(
+                    Parachain(_para_id),
+                    AccountKey20 {
+                        key,
+                        network: _network,
+                    },
+                ),
+        } => Some(key),
+        _ => None,
+    }
+}
+
 pub(crate) fn transact(
     fees: MultiAsset,
     weight_limit: WeightLimit,
@@ -72,42 +103,35 @@ pub(crate) fn transact(
     ])
 }
 
-pub(crate) fn contract_address(location: &MultiLocation) -> Option<&[u8; 20]> {
-    match location {
-        MultiLocation {
-            parents: _parents,
-            interior:
-                X2(
-                    Parachain(_para_id),
-                    AccountKey20 {
-                        key,
-                        network: _network,
-                    },
-                ),
-        } => Some(key),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::Address;
 
+    const PARA_ID: u32 = 12345;
+
+    #[test]
+    fn controller() {
+        let address = Address::random().0;
+        assert_eq!(
+            super::controller(PARA_ID, address),
+            MultiLocation {
+                parents: 1,
+                interior: X2(
+                    Parachain(PARA_ID),
+                    AccountKey20 {
+                        network: Any,
+                        key: address,
+                    },
+                ),
+            }
+        )
+    }
+
     #[test]
     fn contract_address_matches() {
         let address = Address::random().0;
-        let location: MultiLocation = MultiLocation {
-            parents: 1,
-            interior: Junctions::X2(
-                Parachain(2000),
-                AccountKey20 {
-                    network: Any,
-                    key: address,
-                },
-            ),
-        };
-
+        let location = super::controller(PARA_ID, address);
         assert_eq!(&address, contract_address(&location).unwrap())
     }
 }
