@@ -1,4 +1,6 @@
 use crate as tellor;
+use crate::types::Address;
+use ::xcm::latest::{prelude::*, MultiLocation};
 use frame_support::traits::{ConstU16, ConstU64};
 use frame_support::{parameter_types, PalletId};
 use frame_system as system;
@@ -74,6 +76,8 @@ impl pallet_timestamp::Config for Test {
 
 parameter_types! {
     pub const TellotPalletId: PalletId = PalletId(*b"py/tellr");
+    pub TellorGovernance: MultiLocation = crate::xcm::controller(2000,Address::random().0);
+    pub TellorStaking: MultiLocation = crate::xcm::controller(2000,Address::random().0);
 }
 
 impl tellor::Config for Test {
@@ -82,7 +86,7 @@ impl tellor::Config for Test {
     type Amount = u64;
     type DisputeId = u128;
     type Fee = ();
-    type Governance = ();
+    type Governance = TellorGovernance;
     type Hash = H256;
     type Hasher = Keccak256;
     type MaxClaimTimestamps = ();
@@ -97,6 +101,7 @@ impl tellor::Config for Test {
     type PalletId = TellotPalletId;
     type ParachainId = ();
     type ReportingLock = ();
+    type Staking = TellorStaking;
     type Time = Timestamp;
     type Token = Balances;
     type Xcm = ();

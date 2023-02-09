@@ -77,6 +77,7 @@ pub mod pallet {
         #[pallet::constant]
         type Fee: Get<u8>;
 
+        /// The location of the governance controller contract.
         #[pallet::constant]
         type Governance: Get<MultiLocation>;
 
@@ -146,6 +147,10 @@ pub mod pallet {
         /// Base amount of time before a reporter is able to submit a value again.
         #[pallet::constant]
         type ReportingLock: Get<TimestampOf<Self>>;
+
+        /// The location of the staking controller contract.
+        #[pallet::constant]
+        type Staking: Get<MultiLocation>;
 
         /// The on-chain time provider.
         type Time: Time;
