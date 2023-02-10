@@ -1,6 +1,6 @@
 use crate as tellor;
 use crate::types::Address;
-use ::xcm::latest::{prelude::*, MultiLocation};
+use ::xcm::latest::MultiLocation;
 use frame_support::traits::{ConstU16, ConstU64};
 use frame_support::{parameter_types, PalletId};
 use frame_system as system;

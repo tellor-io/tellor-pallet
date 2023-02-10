@@ -35,7 +35,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_core::U256;
-    use sp_runtime::{traits::AccountIdConversion, Saturating};
+    use sp_runtime::{traits::AccountIdConversion, traits::SaturatedConversion, Saturating};
     use sp_std::{fmt::Debug, prelude::*, result};
 
     #[pallet::pallet]
@@ -605,11 +605,15 @@ pub mod pallet {
         pub fn report_stake_deposited(
             origin: OriginFor<T>,
             reporter: AccountIdOf<T>,
-            amount: AmountOf<T>,
+            amount: Amount,
             address: Address,
         ) -> DispatchResult {
             // ensure origin is staking controller contract
             ensure_staking(<T as Config>::RuntimeOrigin::from(origin))?;
+
+            let amount = amount
+                .saturated_into::<u128>() // todo: handle in single call skipping u128
+                .saturated_into::<AmountOf<T>>();
 
             Self::deposit_event(Event::NewStakerReported {
                 staker: reporter,
@@ -628,7 +632,7 @@ pub mod pallet {
         pub fn report_staking_withdraw_request(
             origin: OriginFor<T>,
             reporter: AccountIdOf<T>,
-            amount: AmountOf<T>,
+            amount: Amount,
             address: Address,
         ) -> DispatchResult {
             // ensure origin is staking controller contract
@@ -645,7 +649,7 @@ pub mod pallet {
         pub fn report_stake_withdrawal(
             origin: OriginFor<T>,
             reporter: AccountIdOf<T>,
-            amount: AmountOf<T>,
+            amount: Amount,
             address: Address,
         ) -> DispatchResult {
             // ensure origin is staking controller contract
@@ -663,7 +667,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             reporter: Address,
             recipient: Address,
-            amount: AmountOf<T>,
+            amount: Amount,
         ) -> DispatchResult {
             // ensure origin is governance controller contract
             ensure_governance(<T as Config>::RuntimeOrigin::from(origin))?;
