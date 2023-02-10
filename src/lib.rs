@@ -343,6 +343,7 @@ pub mod pallet {
         ///
         /// - `query_id`: Identifier of reported data.
         /// - `timestamps`: Batch of timestamps of reported data eligible for reward.
+        #[pallet::call_index(0)]
         pub fn claim_onetime_tip(
             origin: OriginFor<T>,
             query_id: QueryIdOf<T>,
@@ -369,6 +370,7 @@ pub mod pallet {
         /// - `feed_id`: Unique feed identifier.
         /// - `query_id`: Identifier of reported data.
         /// - `timestamps`: Batch of timestamps of reported data eligible for reward.
+        #[pallet::call_index(1)]
         pub fn claim_tip(
             _origin: OriginFor<T>,
             _feed_id: FeedIdOf<T>,
@@ -383,6 +385,7 @@ pub mod pallet {
         /// - `feed_id`: Unique feed identifier.
         /// - `query_id`: Identifier of reported data.
         /// - `timestamps`: Batch of timestamps of reported data eligible for reward.
+        #[pallet::call_index(2)]
         pub fn fund_feed(
             _origin: OriginFor<T>,
             _feed_id: FeedIdOf<T>,
@@ -403,6 +406,7 @@ pub mod pallet {
         /// - `reward_increase_per_second`: Amount reward increases per second within a window (0 for flat reward).
         /// - `query_data`: The data used by reporters to fulfil the query.
         /// - `amount`: Optional initial amount to fund it with.
+        #[pallet::call_index(3)]
         pub fn setup_data_feed(
             _origin: OriginFor<T>,
             _query_id: QueryIdOf<T>,
@@ -423,6 +427,7 @@ pub mod pallet {
         /// - `query_id`: Identifier of tipped data.
         /// - `amount`: Amount to tip.
         /// - `query_data`: The data used by reporters to fulfil the query.
+        #[pallet::call_index(4)]
         pub fn tip(
             origin: OriginFor<T>,
             query_id: QueryIdOf<T>,
@@ -476,6 +481,7 @@ pub mod pallet {
         ///
         /// - `query_id`: Identifier of the specific data feed.
         /// - `timestamp`: The timestamp of the value to remove.
+        #[pallet::call_index(5)]
         pub fn remove_value(
             origin: OriginFor<T>,
             _query_id: QueryIdOf<T>,
@@ -492,6 +498,7 @@ pub mod pallet {
         /// - `value`: Value the user submits to the oracle.
         /// - `nonce`: The current value count for the query identifier.
         /// - `query_data`: The data used to fulfil the data query.
+        #[pallet::call_index(6)]
         pub fn submit_value(
             origin: OriginFor<T>,
             _query_id: QueryIdOf<T>,
@@ -507,6 +514,7 @@ pub mod pallet {
         ///
         /// - `query_id`: Query identifier being disputed.
         /// - `timestamp`: Timestamp being disputed.
+        #[pallet::call_index(7)]
         pub fn begin_dispute(
             origin: OriginFor<T>,
             query_id: QueryIdOf<T>,
@@ -578,6 +586,7 @@ pub mod pallet {
         ///
         /// - `dispute_id`: The identifier of the dispute.
         /// - `supports`: Whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
+        #[pallet::call_index(8)]
         pub fn vote(
             origin: OriginFor<T>,
             dispute_id: DisputeIdOf<T>,
@@ -592,6 +601,7 @@ pub mod pallet {
         /// - `reporter`: The reporter who deposited a stake.
         /// - `amount`: The amount staked.
         /// - `address`: The corresponding address on the controlling chain.
+        #[pallet::call_index(9)]
         pub fn report_stake_deposited(
             origin: OriginFor<T>,
             reporter: AccountIdOf<T>,
@@ -608,6 +618,7 @@ pub mod pallet {
         /// - `reporter`: The reporter who requested a withdrawal.
         /// - `amount`: The amount requested to withdraw.
         /// - `address`: The corresponding address on the controlling chain.
+        #[pallet::call_index(10)]
         pub fn report_staking_withdraw_request(
             origin: OriginFor<T>,
             reporter: AccountIdOf<T>,
@@ -624,6 +635,7 @@ pub mod pallet {
         /// - `reporter`: The reporter who withdrew a stake.
         /// - `amount`: The total amount withdrawn.
         /// - `address`: The corresponding address on the controlling chain.
+        #[pallet::call_index(11)]
         pub fn report_stake_withdrawal(
             origin: OriginFor<T>,
             reporter: AccountIdOf<T>,
@@ -640,6 +652,7 @@ pub mod pallet {
         /// - `reporter`: The address of the slashed reporter.
         /// - `recipient`: The address of the recipient.
         /// - `amount`: The slashed amount.
+        #[pallet::call_index(12)]
         pub fn report_slash(
             origin: OriginFor<T>,
             reporter: Address,
@@ -651,6 +664,7 @@ pub mod pallet {
             Ok(())
         }
 
+        #[pallet::call_index(13)]
         pub fn report_invalid_dispute(
             origin: OriginFor<T>,
             dispute_id: DisputeIdOf<T>,
@@ -660,6 +674,7 @@ pub mod pallet {
             Ok(())
         }
 
+        #[pallet::call_index(14)]
         pub fn slash_dispute_initiator(
             origin: OriginFor<T>,
             dispute_id: DisputeIdOf<T>,
