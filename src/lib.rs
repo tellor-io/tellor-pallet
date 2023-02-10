@@ -610,6 +610,12 @@ pub mod pallet {
         ) -> DispatchResult {
             // ensure origin is staking controller contract
             ensure_staking(<T as Config>::RuntimeOrigin::from(origin))?;
+
+            Self::deposit_event(Event::NewStakerReported {
+                staker: reporter,
+                amount,
+                address,
+            });
             Ok(())
         }
 
