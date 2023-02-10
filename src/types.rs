@@ -31,6 +31,7 @@ pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<
     QueryIdOf<T>,
     <T as Config>::MaxQueriesPerReporter,
 >;
+pub(crate) type Timestamp = U256;
 pub(crate) type TimestampOf<T> = <<T as Config>::Time as Time>::Moment;
 pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>, TimestampOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;

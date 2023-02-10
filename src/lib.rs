@@ -485,10 +485,15 @@ pub mod pallet {
         pub fn remove_value(
             origin: OriginFor<T>,
             query_id: QueryIdOf<T>,
-            timestamp: TimestampOf<T>,
+            timestamp: Timestamp,
         ) -> DispatchResult {
             // ensure origin is governance controller contract
             ensure_governance(<T as Config>::RuntimeOrigin::from(origin))?;
+
+            let timestamp = timestamp
+                .saturated_into::<u128>() // todo: handle in single call skipping u128
+                .saturated_into::<TimestampOf<T>>();
+
             Self::deposit_event(Event::ValueRemoved {
                 query_id,
                 timestamp,
