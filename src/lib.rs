@@ -554,15 +554,29 @@ pub mod pallet {
 		pub fn submit_value(
 			origin: OriginFor<T>,
 			query_id: QueryIdOf<T>,
-			_value: ValueOf<T>,
-			_nonce: Nonce,
-			_query_data: QueryDataOf<T>,
+			value: ValueOf<T>,
+			nonce: Nonce,
+			query_data: QueryDataOf<T>,
 		) -> DispatchResult {
-			let _reporter = ensure_signed(origin)?;
+			let reporter = ensure_signed(origin)?;
 
+			let timestamp = T::Time::now();
 			let mut timestamps = BoundedVec::default();
-			timestamps
-				.try_push(T::Time::now())
+			timestamps.try_push(timestamp).map_err(|_| <Error<T>>::MaxTimestampsReached)?;
+
+			let mut timestamp_to_block_number = BoundedBTreeMap::default();
+			timestamp_to_block_number
+				.try_insert(timestamp, frame_system::Pallet::<T>::block_number())
+				.map_err(|_| <Error<T>>::MaxTimestampsReached)?;
+
+			let mut value_by_timestamp = BoundedBTreeMap::default();
+			value_by_timestamp
+				.try_insert(timestamp, value.clone())
+				.map_err(|_| <Error<T>>::MaxTimestampsReached)?;
+
+			let mut reporter_by_timestamp = BoundedBTreeMap::default();
+			reporter_by_timestamp
+				.try_insert(timestamp, reporter.clone())
 				.map_err(|_| <Error<T>>::MaxTimestampsReached)?;
 
 			<Reports<T>>::insert(
@@ -570,13 +584,21 @@ pub mod pallet {
 				ReportOf::<T> {
 					timestamps,
 					timestamp_index: BoundedBTreeMap::default(),
-					timestamp_to_block_number: BoundedBTreeMap::default(),
-					value_by_timestamp: BoundedBTreeMap::default(),
-					reporter_by_timestamp: BoundedBTreeMap::default(),
+					timestamp_to_block_number,
+					value_by_timestamp,
+					reporter_by_timestamp,
 					is_disputed: BoundedBTreeMap::default(),
 				},
 			);
 
+			Self::deposit_event(Event::NewReport {
+				query_id,
+				time: timestamp,
+				value,
+				nonce,
+				query_data,
+				reporter,
+			});
 			Ok(())
 		}
 
