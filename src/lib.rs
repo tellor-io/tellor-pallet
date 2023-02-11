@@ -735,10 +735,12 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(15)]
-		pub fn register(origin: OriginFor<T>) -> DispatchResult {
+		pub fn register(
+			origin: OriginFor<T>,
+			require_weight_at_most: u64,
+			gas_limit: u128,
+		) -> DispatchResult {
 			ensure_root(origin)?; // todo: use configurable origin
-
-			const GAS_LIMIT: u32 = 15_000_000; // todo: make configurable
 
 			let registry = T::Registry::get();
 
@@ -750,7 +752,7 @@ pub mod pallet {
 					fun: Fungible(1_000_000_000_000_000_u128),
 				},
 				WeightLimit::Unlimited,
-				50_000_000_000u64,
+				require_weight_at_most,
 				ethereum_xcm::transact(
 					xcm::contract_address(&registry)
 						.ok_or(Error::<T>::InvalidContractAddress)?
@@ -758,7 +760,7 @@ pub mod pallet {
 					registry::register(T::ParachainId::get(), Pallet::<T>::index() as u8, 100)
 						.try_into()
 						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					GAS_LIMIT.into(),
+					gas_limit.into(),
 					None,
 				),
 			);
