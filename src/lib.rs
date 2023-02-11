@@ -750,7 +750,7 @@ pub mod pallet {
 					fun: Fungible(1_000_000_000_000_000_u128),
 				},
 				WeightLimit::Unlimited,
-				5_000_000_000u64,
+				50_000_000_000u64,
 				ethereum_xcm::transact(
 					xcm::contract_address(&registry)
 						.ok_or(Error::<T>::InvalidContractAddress)?
