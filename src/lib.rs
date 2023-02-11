@@ -364,10 +364,7 @@ pub mod pallet {
 			// Balances pallet on destination chain
 			let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 			let message = xcm::transact(
-				MultiAsset {
-					id: Concrete(self_reserve),
-					fun: Fungible(1_000_000_000_000_000_u128),
-				},
+				MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000_u128) },
 				WeightLimit::Unlimited,
 				require_weight_at_most,
 				ethereum_xcm::transact(
