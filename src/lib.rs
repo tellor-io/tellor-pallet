@@ -65,7 +65,8 @@ pub mod pallet {
 			+ Copy
 			+ MaybeSerializeDeserialize
 			+ MaxEncodedLen
-			+ TypeInfo;
+			+ TypeInfo
+			+ Into<U256>;
 
 		/// The identifier used for disputes.
 		type DisputeId: Parameter
@@ -352,6 +353,7 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		pub fn register(
 			origin: OriginFor<T>,
+			stake_amount: AmountOf<T>,
 			require_weight_at_most: u64,
 			gas_limit: u128,
 		) -> DispatchResult {
@@ -372,9 +374,13 @@ pub mod pallet {
 					xcm::contract_address(&registry)
 						.ok_or(Error::<T>::InvalidContractAddress)?
 						.into(),
-					registry::register(T::ParachainId::get(), Pallet::<T>::index() as u8, 100)
-						.try_into()
-						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+					registry::register(
+						T::ParachainId::get(),
+						Pallet::<T>::index() as u8,
+						stake_amount,
+					)
+					.try_into()
+					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
 					gas_limit.into(),
 					None,
 				),
