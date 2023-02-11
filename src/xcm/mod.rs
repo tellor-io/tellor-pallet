@@ -140,10 +140,11 @@ mod tests {
 	}
 
 	#[test]
-	fn calculate_derivative_multilocation_account() {
+	fn calculate_multilocation_derivative_account() {
 		const PARA_ID: u32 = 3000;
 		const PALLET_INSTANCE: u8 = 40;
 
+		// https://docs.moonbeam.network/builders/interoperability/xcm/remote-evm-calls/#calculate-multilocation-derivative
 		let location = MultiLocation {
 			parents: 1,
 			interior: X2(Parachain(PARA_ID), PalletInstance(PALLET_INSTANCE)),
