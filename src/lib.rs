@@ -331,6 +331,7 @@ pub mod pallet {
 		NotStaking,
 		// XCM
 		InvalidContractAddress,
+		InvalidDestination,
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,
 		Unreachable,
@@ -565,7 +566,7 @@ pub mod pallet {
 
 			const GAS_LIMIT: u32 = 71_000;
 
-			let destination = T::Governance::get();
+			let governance = T::Governance::get();
 			// Balances pallet on destination chain
 			let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 			let message = xcm::transact(
@@ -576,7 +577,7 @@ pub mod pallet {
 				WeightLimit::Unlimited,
 				5_000_000_000u64,
 				ethereum_xcm::transact(
-					xcm::contract_address(&destination)
+					xcm::contract_address(&governance)
 						.ok_or(Error::<T>::InvalidContractAddress)?
 						.into(),
 					governance::begin_parachain_dispute(
@@ -594,7 +595,10 @@ pub mod pallet {
 					None,
 				),
 			);
-			Self::send_xcm(destination, message)?;
+			Self::send_xcm(
+				xcm::destination(&governance).ok_or(Error::<T>::InvalidDestination)?,
+				message,
+			)?;
 
 			Self::deposit_event(Event::NewDispute {
 				dispute_id: _dispute_id,
@@ -736,7 +740,8 @@ pub mod pallet {
 
 			const GAS_LIMIT: u32 = 71_000;
 
-			let destination = T::Registry::get();
+			let registry = T::Registry::get();
+
 			// Balances pallet on destination chain
 			let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 			let message = xcm::transact(
@@ -747,7 +752,7 @@ pub mod pallet {
 				WeightLimit::Unlimited,
 				5_000_000_000u64,
 				ethereum_xcm::transact(
-					xcm::contract_address(&destination)
+					xcm::contract_address(&registry)
 						.ok_or(Error::<T>::InvalidContractAddress)?
 						.into(),
 					registry::register(T::ParachainId::get(), Pallet::<T>::index() as u8, 100)
@@ -757,7 +762,10 @@ pub mod pallet {
 					None,
 				),
 			);
-			Self::send_xcm(destination, message)?;
+			Self::send_xcm(
+				xcm::destination(&registry).ok_or(Error::<T>::InvalidDestination)?,
+				message,
+			)?;
 
 			Ok(())
 		}
