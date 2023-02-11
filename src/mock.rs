@@ -79,10 +79,13 @@ impl pallet_timestamp::Config for Test {
 	type WeightInfo = ();
 }
 
+const PARA_ID: u32 = 2000;
+
 parameter_types! {
 	pub const TellotPalletId: PalletId = PalletId(*b"py/tellr");
-	pub TellorGovernance: MultiLocation = crate::xcm::controller(2000,Address::random().0);
-	pub TellorStaking: MultiLocation = crate::xcm::controller(2000,Address::random().0);
+	pub TellorRegistry: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
+	pub TellorGovernance: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
+	pub TellorStaking: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
 }
 
 impl tellor::Config for Test {
@@ -105,6 +108,7 @@ impl tellor::Config for Test {
 	type MaxVotes = ();
 	type PalletId = TellotPalletId;
 	type ParachainId = ();
+	type Registry = TellorRegistry;
 	type ReportingLock = ();
 	type Staking = TellorStaking;
 	type Time = Timestamp;

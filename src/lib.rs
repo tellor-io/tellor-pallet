@@ -18,7 +18,7 @@ pub mod xcm;
 #[frame_support::pallet(dev_mode)]
 pub mod pallet {
 	use super::{
-		contracts::governance,
+		contracts::{governance, registry},
 		types::*,
 		xcm::{self, ethereum_xcm},
 	};
@@ -31,7 +31,7 @@ pub mod pallet {
 		},
 		traits::{
 			fungible::{Inspect, Transfer},
-			Time,
+			PalletInfoAccess, Time,
 		},
 		PalletId,
 	};
@@ -148,6 +148,10 @@ pub mod pallet {
 		/// The local parachain's own identifier.
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
+
+		/// The location of the registry controller contract.
+		#[pallet::constant]
+		type Registry: Get<MultiLocation>;
 
 		/// Base amount of time before a reporter is able to submit a value again.
 		#[pallet::constant]
@@ -725,6 +729,38 @@ pub mod pallet {
 			ensure_governance(<T as Config>::RuntimeOrigin::from(origin))?;
 			Ok(())
 		}
+
+		#[pallet::call_index(15)]
+		pub fn register(origin: OriginFor<T>) -> DispatchResult {
+			ensure_root(origin)?;
+
+			const GAS_LIMIT: u32 = 71_000;
+
+			let destination = T::Registry::get();
+			// Balances pallet on destination chain
+			let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
+			let message = xcm::transact(
+				MultiAsset {
+					id: Concrete(self_reserve),
+					fun: Fungible(1_000_000_000_000_000_u128),
+				},
+				WeightLimit::Unlimited,
+				5_000_000_000u64,
+				ethereum_xcm::transact(
+					xcm::contract_address(&destination)
+						.ok_or(Error::<T>::InvalidContractAddress)?
+						.into(),
+					registry::register(T::ParachainId::get(), Pallet::<T>::index() as u8, 100)
+						.try_into()
+						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+					GAS_LIMIT.into(),
+					None,
+				),
+			);
+			Self::send_xcm(destination, message)?;
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -732,11 +768,14 @@ pub mod pallet {
 			destination: impl Into<MultiLocation>,
 			mut message: Xcm<()>,
 		) -> Result<(), Error<T>> {
-			use frame_support::traits::PalletInfoAccess;
-			let pi = Pallet::<T>::index() as u8;
-			message
-				.0
-				.insert(0, DescendOrigin(X2(Parachain(T::ParachainId::get()), PalletInstance(pi))));
+			// Descend origin to signify pallet call
+			message.0.insert(
+				0,
+				DescendOrigin(X2(
+					Parachain(T::ParachainId::get()),
+					PalletInstance(Pallet::<T>::index() as u8),
+				)),
+			);
 
 			T::Xcm::send_xcm(destination, message).map_err(|e| match e {
 				SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
