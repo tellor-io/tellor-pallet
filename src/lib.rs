@@ -736,9 +736,9 @@ pub mod pallet {
 
 		#[pallet::call_index(15)]
 		pub fn register(origin: OriginFor<T>) -> DispatchResult {
-			ensure_root(origin)?;
+			ensure_root(origin)?; // todo: use configurable origin
 
-			const GAS_LIMIT: u32 = 71_000;
+			const GAS_LIMIT: u32 = 15_000_000; // todo: make configurable
 
 			let registry = T::Registry::get();
 
