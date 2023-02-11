@@ -104,6 +104,9 @@ pub(crate) fn transact(
 mod tests {
 	use super::*;
 	use crate::types::Address;
+	use codec::Encode;
+	use sp_core::blake2_256;
+	use std::borrow::Borrow;
 
 	const PARA_ID: u32 = 12345;
 
@@ -134,5 +137,22 @@ mod tests {
 			MultiLocation { parents: 1, interior: X1(Parachain(PARA_ID)) },
 			destination(&location).unwrap()
 		)
+	}
+
+	#[test]
+	fn calculate_derivative_multilocation_account() {
+		const PARA_ID: u32 = 3000;
+		const PALLET_INSTANCE: u8 = 40;
+
+		let location = MultiLocation {
+			parents: 1,
+			interior: X2(Parachain(PARA_ID), PalletInstance(PALLET_INSTANCE)),
+		};
+
+		// From: https://github.com/PureStake/moonbeam/blob/master/primitives/xcm/src/location_conversion.rs#L31
+		let hash: [u8; 32] = ("multiloc", location.borrow()).borrow().using_encoded(blake2_256);
+		let mut account_id = [0u8; 20];
+		account_id.copy_from_slice(&hash[0..20]);
+		println!("{:?}", account_id)
 	}
 }

@@ -5,7 +5,7 @@ use crate::{
 };
 use frame_support::{assert_noop, assert_ok, traits::PalletInfoAccess};
 use sp_core::{bounded_vec, H256};
-use xcm::prelude::{DescendOrigin, PalletInstance, Parachain, X2};
+use xcm::prelude::{DescendOrigin, PalletInstance, X1};
 
 #[test]
 fn reports_stake_deposited() {
@@ -60,7 +60,7 @@ fn begins_dispute() {
 		let (_, sent_message) = sent_messages.first().unwrap();
 		assert!(sent_message
 			.0
-			.contains(&DescendOrigin(X2(Parachain(0), PalletInstance(Tellor::index() as u8)))));
+			.contains(&DescendOrigin(X1(PalletInstance(Tellor::index() as u8)))));
 		// todo: check remaining instructions
 
 		// // Read pallet storage and assert an expected result.

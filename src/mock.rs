@@ -12,8 +12,7 @@ use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup, Keccak256},
 };
-use sp_std::{cell::RefCell, fmt::Debug};
-use std::borrow::BorrowMut;
+use sp_std::cell::RefCell;
 use xcm::latest::prelude::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;

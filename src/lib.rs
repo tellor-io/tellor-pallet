@@ -777,13 +777,9 @@ pub mod pallet {
 			mut message: Xcm<()>,
 		) -> Result<(), Error<T>> {
 			// Descend origin to signify pallet call
-			message.0.insert(
-				0,
-				DescendOrigin(X2(
-					Parachain(T::ParachainId::get()),
-					PalletInstance(Pallet::<T>::index() as u8),
-				)),
-			);
+			message
+				.0
+				.insert(0, DescendOrigin(X1(PalletInstance(Pallet::<T>::index() as u8))));
 
 			T::Xcm::send_xcm(destination, message).map_err(|e| match e {
 				SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
