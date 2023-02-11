@@ -328,6 +328,9 @@ pub mod pallet {
 		/// No tips submitted for this query identifier.
 		NoTipsSubmitted,
 
+		// Oracle
+		MaxTimestampsReached,
+
 		NoValueExists,
 		NotStaking,
 		// XCM
@@ -558,7 +561,9 @@ pub mod pallet {
 			let _reporter = ensure_signed(origin)?;
 
 			let mut timestamps = BoundedVec::default();
-			timestamps.try_push(T::Time::now()).unwrap(); // todo: return error
+			timestamps
+				.try_push(T::Time::now())
+				.map_err(|_| <Error<T>>::MaxTimestampsReached)?;
 
 			<Reports<T>>::insert(
 				query_id,
