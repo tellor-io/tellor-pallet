@@ -8,6 +8,8 @@ use sp_std::vec::Vec;
 use tellor::{FeedDetails, Tip};
 
 mod autopay;
+#[cfg(test)]
+mod tests;
 
 sp_api::decl_runtime_apis! {
 	pub trait AutoPayApi<AccountId: Codec, Amount: Codec, FeedId: Codec, QueryId: Codec, Timestamp: Codec>
