@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+pub use types::autopay::{FeedDetails, Tip};
+use types::*;
 
 #[cfg(test)]
 mod mock;
@@ -8,7 +10,6 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-mod api;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 mod contracts;
@@ -847,5 +848,13 @@ pub mod pallet {
 			Ok(Origin::Staking) => Ok(()),
 			_ => Err(BadOrigin),
 		}
+	}
+}
+
+impl<T: Config> Pallet<T> {
+	fn get_current_value(query_id: QueryIdOf<T>) -> Option<ValueOf<T>> {
+		// todo: implement properly
+		<Reports<T>>::get(query_id)
+			.and_then(|r| r.value_by_timestamp.last_key_value().and_then(|kv| Some(kv.1.clone())))
 	}
 }
