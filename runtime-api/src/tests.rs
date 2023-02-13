@@ -1,4 +1,4 @@
-use crate::OracleApi;
+use crate::TellorOracle;
 use frame_support::{
 	assert_ok, parameter_types,
 	sp_runtime::traits::Keccak256,
@@ -113,7 +113,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 mock_impl_runtime_apis! {
-	impl crate::OracleApi<Block, BlockNumber, QueryId, Moment, Value> for Test {
+	impl crate::TellorOracle<Block, BlockNumber, QueryId, Moment, Value> for Test {
 		fn get_block_number_by_timestamp(query_id: QueryId, timestamp: Moment) -> Option<BlockNumber> {
 			tellor::Pallet::<Test>::get_block_number_by_timestamp(query_id, timestamp)
 		}

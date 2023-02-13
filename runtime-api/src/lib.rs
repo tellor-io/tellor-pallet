@@ -12,7 +12,7 @@ mod autopay;
 mod tests;
 
 sp_api::decl_runtime_apis! {
-	pub trait AutoPayApi<AccountId: Codec, Amount: Codec, FeedId: Codec, QueryId: Codec, Timestamp: Codec>
+	pub trait TellorAutoPay<AccountId: Codec, Amount: Codec, FeedId: Codec, QueryId: Codec, Timestamp: Codec>
 	{
 		/// Read current data feeds.
 		/// # Arguments
@@ -121,7 +121,7 @@ sp_api::decl_runtime_apis! {
 		fn get_tips_by_address(user: AccountId) -> Amount;
 	}
 
-	pub trait OracleApi<BlockNumber: Codec, QueryId: Codec, Timestamp: Codec, Value: Codec> where
+	pub trait TellorOracle<BlockNumber: Codec, QueryId: Codec, Timestamp: Codec, Value: Codec> where
 	{
 		/// Returns the block number at a given timestamp.
 		/// # Arguments
@@ -141,7 +141,7 @@ sp_api::decl_runtime_apis! {
 		// todo: add remaining functions
 	}
 
-	pub trait GovernanceApi<AccountId: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec> where
+	pub trait TellorGovernance<AccountId: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec> where
 	{
 		/// Determines if an account voted for a specific dispute.
 		/// # Arguments
