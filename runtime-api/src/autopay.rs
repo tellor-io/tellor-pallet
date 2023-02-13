@@ -1,4 +1,5 @@
 use codec::{Decode, Encode};
+use sp_std::vec::Vec;
 use tellor::FeedDetails;
 
 #[derive(Encode, Decode)]

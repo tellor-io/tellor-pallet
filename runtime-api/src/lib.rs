@@ -1,3 +1,7 @@
+//! Runtime API definition for Tellor pallet.
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use autopay::*;
 use codec::Codec;
 use sp_std::vec::Vec;
