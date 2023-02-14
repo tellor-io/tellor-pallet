@@ -34,6 +34,7 @@ mod tests {
 	}
 
 	#[test]
+	#[ignore]
 	fn function_selector() {
 		// Short signature bytes used for FUNCTION const
 		let function = register();
@@ -41,7 +42,7 @@ mod tests {
 	}
 
 	#[test]
-	fn encodes_register() {
+	fn encodes_register_call() {
 		let para_id = 3000;
 		let pallet_index = 3;
 		let stake_amount = 1675711956967u128;

@@ -30,14 +30,15 @@ mod tests {
 	}
 
 	#[test]
-	fn encodes_confirm_parachain_staking_withdraw_request() {
+	#[ignore]
+	fn function_selector() {
 		// Short signature bytes used for FUNCTION const
 		let function = confirm_parachain_staking_withdraw_request();
 		println!("{} {:?}", function.signature(), function.short_signature());
 	}
 
 	#[test]
-	fn encode_begin_parachain_dispute() {
+	fn encodes_begin_parachain_dispute() {
 		let para_id = 3000;
 		let reporter = Address::random();
 		let amount = 1675711956967u128;

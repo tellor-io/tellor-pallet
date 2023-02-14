@@ -48,14 +48,15 @@ mod tests {
 	}
 
 	#[test]
-	fn encodes_begin_parachain_dispute() {
+	#[ignore]
+	fn function_selector() {
 		// Short signature bytes used for FUNCTION const
 		let function = begin_parachain_dispute();
 		println!("{} {:?}", function.signature(), function.short_signature());
 	}
 
 	#[test]
-	fn encode_begin_parachain_dispute() {
+	fn encodes_begin_parachain_dispute_call() {
 		let para_id = 3000;
 		let query_id = keccak_256("my_query".as_bytes());
 		let timestamp = 1675711956967u64;

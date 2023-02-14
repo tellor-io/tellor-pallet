@@ -148,6 +148,7 @@ fn gets_current_value() {
 }
 
 #[test]
+#[ignore]
 fn state_call_encoding() {
 	fn call(api: &str, function: &str, data: &[u8]) {
 		println!("{}_{}: 0x{}", api, function, hex::encode(data));
