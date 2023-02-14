@@ -21,6 +21,7 @@ tellor = { default-features = false, path = ".." }
 [dev-dependencies]
 frame-support = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
 frame-system = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
+hex = "0.4.3"
 pallet-balances = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
 scale-info = { version = "2.1.1", features = ["derive"] }

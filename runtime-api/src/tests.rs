@@ -1,4 +1,5 @@
 use crate::TellorOracle;
+use codec::Encode;
 use frame_support::{
 	assert_ok, parameter_types,
 	sp_runtime::traits::Keccak256,
@@ -12,6 +13,7 @@ use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -124,12 +126,14 @@ mock_impl_runtime_apis! {
 	}
 }
 
+const BLOCKID: BlockId<Block> = BlockId::Number(0);
+
 #[test]
 #[should_panic]
 fn gets_block_number_by_timestamp() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Test.get_block_number_by_timestamp(
-			&BlockId::Number(0),
+			&BLOCKID,
 			QueryId::random(),
 			Moment::default()
 		));
@@ -139,6 +143,21 @@ fn gets_block_number_by_timestamp() {
 #[test]
 fn gets_current_value() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Test.get_current_value(&BlockId::Number(0), QueryId::random()));
+		assert_ok!(Test.get_current_value(&BLOCKID, QueryId::random()));
 	});
+}
+
+#[test]
+fn state_call_encoding() {
+	fn call(api: &str, function: &str, data: &[u8]) {
+		println!("{}_{}: 0x{}", api, function, hex::encode(data));
+	}
+
+	let query_id = QueryId::random();
+	let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+	// Example encoding of runtime-api calls via state.call rpc
+	const ORACLE: &str = "TellorOracle";
+	call(ORACLE, "get_block_number_by_timestamp", &(query_id, timestamp).encode());
+	call(ORACLE, "get_current_value", &query_id.encode());
 }
