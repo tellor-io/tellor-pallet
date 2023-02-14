@@ -1,8 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
-pub use types::autopay::{FeedDetails, Tip};
 use types::*;
+pub use types::{
+	autopay::{FeedDetails, Tip},
+	oracle::StakeInfo,
+	Address,
+};
 
 #[cfg(test)]
 mod mock;
@@ -121,7 +125,7 @@ pub mod pallet {
 
 		/// The maximum number of queries (data feeds) per reporter.
 		#[pallet::constant]
-		type MaxQueriesPerReporter: Get<u32> + TypeInfo;
+		type MaxQueriesPerReporter: Get<u32>;
 
 		/// The maximum length of query data.
 		#[pallet::constant]
@@ -215,7 +219,7 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type RewardRate<T> = StorageValue<_, AmountOf<T>>;
 	#[pallet::storage]
-	pub type StakeAmount<T> = StorageValue<_, AmountOf<T>>;
+	pub type StakeAmount<T> = StorageValue<_, AmountOf<T>, ValueQuery>;
 	#[pallet::storage]
 	pub type StakerDetails<T> = StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
 	#[pallet::storage]
@@ -223,9 +227,9 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type TimeOfLastNewValue<T> = StorageValue<_, TimestampOf<T>>;
 	#[pallet::storage]
-	pub type TotalStakeAmount<T> = StorageValue<_, AmountOf<T>>;
+	pub type TotalStakeAmount<T> = StorageValue<_, AmountOf<T>, ValueQuery>;
 	#[pallet::storage]
-	pub type TotalStakers<T> = StorageValue<_, u128>;
+	pub type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
 	// Governance
 	#[pallet::storage]
 	pub type DisputeIdsByReporter<T> =
@@ -362,6 +366,8 @@ pub mod pallet {
 			gas_limit: u128,
 		) -> DispatchResult {
 			ensure_root(origin)?; // todo: use configurable origin
+
+			<StakeAmount<T>>::set(stake_amount);
 
 			let registry = T::Registry::get();
 
@@ -863,5 +869,26 @@ impl<T: Config> Pallet<T> {
 		// todo: implement properly
 		<Reports<T>>::get(query_id)
 			.and_then(|r| r.value_by_timestamp.last_key_value().and_then(|kv| Some(kv.1.clone())))
+	}
+
+	pub fn get_reporting_lock() -> TimestampOf<T> {
+		use sp_core::Get;
+		T::ReportingLock::get()
+	}
+
+	pub fn get_stake_amount() -> AmountOf<T> {
+		<StakeAmount<T>>::get()
+	}
+
+	pub fn get_staker_info(staker: AccountIdOf<T>) -> Option<StakeInfoOf<T>> {
+		<StakerDetails<T>>::get(staker)
+	}
+
+	pub fn get_total_stake_amount() -> AmountOf<T> {
+		<TotalStakeAmount<T>>::get()
+	}
+
+	pub fn get_total_stakers() -> u128 {
+		<TotalStakers<T>>::get()
 	}
 }

@@ -121,7 +121,7 @@ sp_api::decl_runtime_apis! {
 		fn get_tips_by_address(user: AccountId) -> Amount;
 	}
 
-	pub trait TellorOracle<BlockNumber: Codec, QueryId: Codec, Timestamp: Codec, Value: Codec> where
+	pub trait TellorOracle<AccountId: Codec, Amount: Codec, BlockNumber: Codec, QueryId: Codec, StakeInfo: Codec, Timestamp: Codec, Value: Codec> where
 	{
 		/// Returns the block number at a given timestamp.
 		/// # Arguments
@@ -138,7 +138,135 @@ sp_api::decl_runtime_apis! {
 		/// The latest submitted value for the given identifier.
 		fn get_current_value(query_id: QueryId) -> Option<Value>;
 
-		// todo: add remaining functions
+		/// Retrieves the latest value for the query identifier before the specified timestamp.
+		/// # Arguments
+		/// * `query_id` - The query identifier to look up the value for.
+		/// * `timestamp` - The timestamp before which to search for the latest value.
+		/// # Returns
+		/// The value retrieved and its timestamp, if found.
+		fn get_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<(Value, Timestamp)>;
+
+		/// Counts the number of values that have been submitted for the query identifier.
+		/// # Arguments
+		/// * `query_id` - The query identifier to look up.
+		/// # Returns
+		/// Count of the number of values received for the query identifier.
+		fn get_new_value_count_by_query_id(query_id: QueryId) -> u32;
+
+		// todo: getPendingRewardByStaker?
+		// todo: getRealStakingRewardsBalance?
+
+		/// Returns reporter and whether a value was disputed for a given query identifier and timestamp.
+		/// # Arguments
+		/// * `query_id` - The query identifier to look up.
+		/// * `timestamp` - The timestamp of the value to look up.
+		/// # Returns
+		/// The reporter who submitted the value and whether the value was disputed, provided a value exists.
+		fn get_report_details(query_id: QueryId, timestamp: Timestamp) -> Option<(AccountId, bool)>;
+
+		/// Returns the reporter who submitted a value for a query identifier at a specific time.
+		/// # Arguments
+		/// * `query_id` - The identifier of the specific data feed.
+		/// * `timestamp` - The timestamp to find a corresponding reporter for.
+		/// # Returns
+		/// Identifier of the reporter who reported the value for the query identifier at the given timestamp.
+		fn get_reporter_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<AccountId>;
+
+		/// Returns the timestamp of the reporter's last submission.
+		/// # Arguments
+		/// * `reporter` - The identifier of the reporter.
+		/// # Returns
+		/// The timestamp of the reporter's last submission, if one exists.
+		fn get_reporter_last_timestamp(reporter: AccountId) -> Option<Timestamp>;
+
+		/// Returns the reporting lock time, the amount of time a reporter must wait to submit again.
+		/// # Returns
+		/// The reporting lock time.
+		fn get_reporting_lock() -> Timestamp;
+
+		/// Returns the number of values submitted by a specific reporter.
+		/// # Arguments
+		/// * `reporter` - The identifier of the reporter.
+		/// # Returns
+		/// The number of values submitted by the given reporter.
+		fn get_reports_submitted_by_address(reporter: AccountId) -> u32;
+
+		/// Returns the number of values submitted to a specific query identifier by a specific reporter.
+		/// # Arguments
+		/// * `reporter` - The identifier of the reporter.
+		/// * `query_id` - Identifier of the specific data feed.
+		/// # Returns
+		/// The number of values submitted by the given reporter to the given query identifier.
+		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u32;
+
+		/// Returns the amount required to report oracle values.
+		/// # Returns
+		/// The stake amount.
+		fn get_stake_amount() -> Amount;
+
+		/// Returns all information about a staker.
+		/// # Arguments
+		/// * `staker` - The identifier of the staker inquiring about.
+		/// # Returns
+		/// All information about a staker, if found.
+		fn get_staker_info(staker: AccountId) -> Option<StakeInfo>;
+
+		/// Returns the timestamp for the last value of any identifier from the oracle.
+		/// # Returns
+		/// The timestamp of the last oracle value.
+		fn get_time_of_last_new_value() -> Timestamp;
+
+		/// Gets the timestamp for the value based on their index.
+		/// # Arguments
+		/// * `query_id` - The query identifier to look up.
+		/// * `index` - The value index to look up.
+		/// # Returns
+		/// A timestamp if found.
+		fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp>;
+
+		/// Retrieves latest index of data before the specified timestamp for the query identifier.
+		/// # Arguments
+		/// * `query_id` - The query identifier to look up the index for.
+		/// * `timestamp` - The timestamp before which to search for the latest index.
+		/// # Returns
+		/// Whether the index was found along with the latest index found before the supplied timestamp.
+		fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> (bool, u32);
+
+		/// Returns the index of a reporter timestamp in the timestamp array for a specific query identifier.
+		/// # Arguments
+		/// * `query_id` - Unique identifier of the data feed.
+		/// * `timestamp` - The timestamp to find within the available timestamps.
+		/// # Returns
+		/// The index of the reporter timestamp within the available timestamps for specific query identifier.
+		fn get_timestamp_index_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> u32;
+
+		/// Returns the total amount staked for reporting.
+		/// # Returns
+		/// The total amount of token staked.
+		fn get_total_stake_amount() -> Amount;
+
+		/// Returns the total number of current stakers.
+		/// # Returns
+		/// The total number of current stakers.
+		fn get_total_stakers() -> u128;
+
+		// todo: get_total_time_based_rewards_balance
+
+		/// Returns whether a given value is disputed.
+		/// # Arguments
+		/// * `query_id` - Unique identifier of the data feed.
+		/// * `timestamp` - Timestamp of the value.
+		/// # Returns
+		/// Whether the value is disputed.
+		fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool;
+
+		/// Retrieve value from the oracle based on timestamp.
+		/// # Arguments
+		/// * `query_id` - Identifier being requested.
+		/// * `timestamp` - Timestamp to retrieve data/value from.
+		/// # Returns
+		/// Value for timestamp submitted, if found.
+		fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Value>;
 	}
 
 	pub trait TellorGovernance<AccountId: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec> where

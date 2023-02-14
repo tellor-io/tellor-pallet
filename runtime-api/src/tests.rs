@@ -1,7 +1,7 @@
 use crate::TellorOracle;
 use codec::Encode;
 use frame_support::{
-	assert_ok, parameter_types,
+	parameter_types,
 	sp_runtime::traits::Keccak256,
 	traits::{ConstU16, ConstU64},
 	BoundedVec, PalletId,
@@ -18,9 +18,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
+type AccountId = u64;
+type Amount = u64;
 type BlockNumber = u64;
 type QueryId = H256;
 type Moment = u64;
+type StakeInfo =
+	tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter, QueryId, Moment>;
 type Value = BoundedVec<u8, ConstU32<100>>;
 
 // Configure a mock runtime to test implementation of the runtime-api
@@ -46,7 +50,7 @@ impl frame_system::Config for Test {
 	type BlockNumber = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	type AccountId = u64;
+	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
 	type RuntimeEvent = RuntimeEvent;
@@ -82,7 +86,7 @@ impl pallet_timestamp::Config for Test {
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
-	type Amount = u64;
+	type Amount = Amount;
 	type DisputeId = u128;
 	type Fee = ();
 	type Governance = ();
@@ -91,7 +95,7 @@ impl tellor::Config for Test {
 	type MaxClaimTimestamps = ();
 	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ();
-	type MaxQueriesPerReporter = ();
+	type MaxQueriesPerReporter = ConstU32<100>;
 	type MaxQueryDataLength = ();
 	type MaxTimestamps = ();
 	type MaxTipsPerQuery = ();
@@ -100,7 +104,7 @@ impl tellor::Config for Test {
 	type PalletId = TellotPalletId;
 	type ParachainId = ();
 	type Registry = ();
-	type ReportingLock = ();
+	type ReportingLock = ConstU64<42>;
 	type Staking = ();
 	type Time = Timestamp;
 	type Token = Balances;
@@ -115,13 +119,33 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 mock_impl_runtime_apis! {
-	impl crate::TellorOracle<Block, BlockNumber, QueryId, Moment, Value> for Test {
+	impl crate::TellorOracle<Block, AccountId, Amount, BlockNumber, QueryId, StakeInfo, Moment, Value> for Test {
 		fn get_block_number_by_timestamp(query_id: QueryId, timestamp: Moment) -> Option<BlockNumber> {
 			tellor::Pallet::<Test>::get_block_number_by_timestamp(query_id, timestamp)
 		}
 
 		fn get_current_value(query_id: QueryId) -> Option<Value> {
 			tellor::Pallet::<Test>::get_current_value(query_id)
+		}
+
+		fn get_reporting_lock() -> Moment {
+			tellor::Pallet::<Test>::get_reporting_lock()
+		}
+
+		fn get_stake_amount() -> Amount {
+			tellor::Pallet::<Test>::get_stake_amount()
+		}
+
+		fn get_staker_info(staker: AccountId) -> Option<StakeInfo>{
+			tellor::Pallet::<Test>::get_staker_info(staker)
+		}
+
+		fn get_total_stake_amount() -> Amount {
+			tellor::Pallet::<Test>::get_total_stake_amount()
+		}
+
+		fn get_total_stakers() -> u128 {
+			tellor::Pallet::<Test>::get_total_stakers()
 		}
 	}
 }
@@ -132,18 +156,53 @@ const BLOCKID: BlockId<Block> = BlockId::Number(0);
 #[should_panic]
 fn gets_block_number_by_timestamp() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Test.get_block_number_by_timestamp(
-			&BLOCKID,
-			QueryId::random(),
-			Moment::default()
-		));
+		assert_eq!(
+			Test.get_block_number_by_timestamp(&BLOCKID, QueryId::random(), Moment::default())
+				.unwrap(),
+			None
+		);
 	});
 }
 
 #[test]
 fn gets_current_value() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Test.get_current_value(&BLOCKID, QueryId::random()));
+		assert_eq!(Test.get_current_value(&BLOCKID, QueryId::random()).unwrap(), None);
+	});
+}
+
+#[test]
+fn gets_reporting_lock() {
+	new_test_ext().execute_with(|| {
+		assert_eq!(Test.get_reporting_lock(&BLOCKID).unwrap(), 42);
+	});
+}
+
+#[test]
+fn gets_stake_amount() {
+	new_test_ext().execute_with(|| {
+		assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), 0);
+	});
+}
+
+#[test]
+fn gets_staker_info() {
+	new_test_ext().execute_with(|| {
+		assert!(Test.get_staker_info(&BLOCKID, 0).unwrap().is_none());
+	});
+}
+
+#[test]
+fn gets_total_stake_amount() {
+	new_test_ext().execute_with(|| {
+		assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), 0);
+	});
+}
+
+#[test]
+fn gets_total_stakers() {
+	new_test_ext().execute_with(|| {
+		assert_eq!(Test.get_total_stakers(&BLOCKID).unwrap(), 0);
 	});
 }
 

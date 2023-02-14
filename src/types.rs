@@ -3,7 +3,7 @@ use frame_support::{pallet_prelude::*, traits::Time};
 use sp_core::{bounded::BoundedBTreeMap, H160, U256};
 
 pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-pub(crate) type Address = H160;
+pub type Address = H160;
 pub(crate) type Amount = U256;
 pub(crate) type AmountOf<T> = <T as Config>::Amount;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
@@ -28,9 +28,9 @@ pub(crate) type ReportOf<T> = oracle::Report<
 >;
 pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<
 	AmountOf<T>,
-	TimestampOf<T>,
-	QueryIdOf<T>,
 	<T as Config>::MaxQueriesPerReporter,
+	QueryIdOf<T>,
+	TimestampOf<T>,
 >;
 pub(crate) type Timestamp = U256;
 pub(crate) type TimestampOf<T> = <<T as Config>::Time as Time>::Moment;
@@ -102,7 +102,8 @@ pub(crate) mod oracle {
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct StakeInfo<Amount, Timestamp, QueryId, MaxQueries: Get<u32>> {
+	#[scale_info(skip_type_params(MaxQueries))]
+	pub struct StakeInfo<Amount, MaxQueries: Get<u32>, QueryId, Timestamp> {
 		/// The address on the staking chain.
 		pub(crate) address: Address,
 		/// Stake or withdrawal request start date.
