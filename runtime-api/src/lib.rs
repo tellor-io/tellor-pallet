@@ -230,7 +230,7 @@ sp_api::decl_runtime_apis! {
 		/// * `timestamp` - The timestamp before which to search for the latest index.
 		/// # Returns
 		/// Whether the index was found along with the latest index found before the supplied timestamp.
-		fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> (bool, u32);
+		fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32>;
 
 		/// Returns the index of a reporter timestamp in the timestamp array for a specific query identifier.
 		/// # Arguments
