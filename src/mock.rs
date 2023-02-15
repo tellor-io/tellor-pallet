@@ -2,8 +2,8 @@ use crate as tellor;
 use crate::types::Address;
 use ::xcm::latest::MultiLocation;
 use frame_support::{
-	parameter_types,
-	traits::{ConstU16, ConstU64},
+	assert_ok, parameter_types,
+	traits::{ConstU16, ConstU64, OnFinalize},
 	PalletId,
 };
 use frame_system as system;
@@ -13,6 +13,7 @@ use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup, Keccak256},
 };
 use sp_std::cell::RefCell;
+use std::time::{SystemTime, UNIX_EPOCH};
 use xcm::latest::prelude::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -98,12 +99,12 @@ impl tellor::Config for Test {
 	type Hasher = Keccak256;
 	type MaxClaimTimestamps = ();
 	type MaxFeedsPerQuery = ();
-	type MaxFundedFeeds = ();
+	type MaxFundedFeeds = ConstU32<10>;
 	type MaxQueriesPerReporter = ();
-	type MaxQueryDataLength = ();
-	type MaxTimestamps = ConstU32<100>;
-	type MaxTipsPerQuery = ();
-	type MaxValueLength = ();
+	type MaxQueryDataLength = ConstU32<1000>;
+	type MaxTimestamps = ConstU32<10>;
+	type MaxTipsPerQuery = ConstU32<10>;
+	type MaxValueLength = ConstU32<32>;
 	type MaxVotes = ();
 	type PalletId = TellotPalletId;
 	type ParachainId = ();
@@ -132,5 +133,24 @@ impl SendXcm for TestSendXcm {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	let mut ext: sp_io::TestExternalities =
+		system::GenesisConfig::default().build_storage::<Test>().unwrap().into();
+	ext.execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(Timestamp::set(
+			RuntimeOrigin::none(),
+			SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+		));
+	});
+	ext
+}
+
+pub(crate) fn next_block() {
+	let block = System::block_number();
+	let time = Timestamp::get();
+
+	Timestamp::on_finalize(block);
+	System::set_block_number(block + 1);
+
+	assert_ok!(Timestamp::set(RuntimeOrigin::none(), time + 1));
 }
