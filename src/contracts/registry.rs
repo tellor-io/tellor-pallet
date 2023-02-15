@@ -15,7 +15,7 @@ pub(crate) fn register(
 
 #[cfg(test)]
 mod tests {
-	use super::{super::tests::*, Address};
+	use super::super::tests::*;
 	use ethabi::{Function, ParamType, Token};
 
 	fn register() -> Function {

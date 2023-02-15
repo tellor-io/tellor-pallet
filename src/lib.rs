@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use frame_support::traits::Len;
 pub use pallet::*;
+use traits::UsingTellor;
 use types::*;
 pub use types::{
 	autopay::{FeedDetails, Tip},
@@ -17,6 +19,7 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 mod contracts;
+mod traits;
 mod types;
 pub mod xcm;
 
@@ -27,6 +30,7 @@ pub mod pallet {
 		types::*,
 		xcm::{self, ethereum_xcm},
 	};
+	use crate::{types::oracle::Report, Tip};
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
@@ -326,18 +330,36 @@ pub mod pallet {
 	#[pallet::error]
 	pub enum Error<T> {
 		// AutoPay
+		/// Feed must not be set up already.
+		FeedAlreadyExists,
 		/// Tip must be greater than zero.
 		InvalidAmount,
 		/// Query identifier must be a hash of bytes data.
 		InvalidQueryId,
+		/// The maximum number of feeds have been funded,
+		MaxFeedsFunded,
+		/// The maximum number of tips has been reached,
+		MaxTipsReached,
 		/// No tips submitted for this query identifier.
 		NoTipsSubmitted,
 
 		// Oracle
+		/// Balance must be greater than stake amount.
+		InsufficientStake,
+		/// Nonce must match the timestamp index.
+		InvalidNonce,
+		/// Value must be submitted.
+		InvalidValue,
+		/// The maximum number of timestamps has been reached,
 		MaxTimestampsReached,
+		/// Still in reporter time lock, please wait!
+		ReporterTimeLocked,
+		/// Timestamp already reported.
+		TimestampAlreadyReported,
 
 		NoValueExists,
 		NotStaking,
+		// Governance
 		// XCM
 		InvalidContractAddress,
 		InvalidDestination,
@@ -496,11 +518,14 @@ pub mod pallet {
 			query_data: QueryDataOf<T>,
 		) -> DispatchResult {
 			let tipper = ensure_signed(origin)?;
-			ensure!(query_id == HasherOf::<T>::hash_of(&query_data), Error::<T>::InvalidQueryId);
+			ensure!(
+				query_id == HasherOf::<T>::hash(&query_data.as_ref()),
+				Error::<T>::InvalidQueryId
+			);
 			ensure!(amount > AmountOf::<T>::default(), Error::<T>::InvalidAmount);
 
-			<Tips<T>>::try_mutate(query_id, |maybe_tips| -> DispatchResult {
-				match maybe_tips {
+			<Tips<T>>::try_mutate(query_id, |mut maybe_tips| -> DispatchResult {
+				match &mut maybe_tips {
 					None => {
 						*maybe_tips = Some(
 							BoundedVec::try_from(vec![TipOf::<T> {
@@ -508,17 +533,58 @@ pub mod pallet {
 								timestamp: T::Time::now(),
 								cumulative_tips: amount,
 							}])
-							.map_err(|_| Error::<T>::InvalidQueryId)?,
+							.map_err(|_| Error::<T>::MaxTipsReached)?,
 						);
 						Self::store_data(query_id, &query_data);
 						Ok(())
 					},
 					Some(tips) => {
-						todo!()
+						let timestamp_retrieved = Self::_get_current_value(query_id)
+							.map_or(<TimestampOf<T>>::default(), |v| v.1);
+						match tips.last_mut() {
+							Some(last_tip) if timestamp_retrieved < last_tip.timestamp => {
+								last_tip.timestamp = T::Time::now();
+								last_tip.amount = last_tip.amount.saturating_add(amount);
+								last_tip.cumulative_tips =
+									last_tip.cumulative_tips.saturating_add(amount);
+							},
+							_ => {
+								let cumulative_tips = tips
+									.last()
+									.map_or(<AmountOf<T>>::default(), |t| t.cumulative_tips);
+								tips.try_push(Tip {
+									amount,
+									timestamp: T::Time::now(),
+									cumulative_tips: cumulative_tips.saturating_add(amount),
+								})
+								.map_err(|_| Error::<T>::MaxTipsReached)?;
+							},
+						}
+						Ok(())
 					},
 				}
 			})?;
 
+			if <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default() == 0 &&
+				Self::get_current_tip(query_id) > <AmountOf<T>>::default()
+			{
+				let mut len: u32 = 0;
+				<QueryIdsWithFunding<T>>::try_mutate(|maybe| match maybe {
+					Some(query_ids) => {
+						query_ids.try_push(query_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
+						len = query_ids.len() as u32;
+						Ok::<(), Error<T>>(())
+					},
+					None => {
+						*maybe = Some(
+							BoundedVec::try_from(vec![query_id])
+								.map_err(|_| Error::<T>::MaxFeedsFunded)?,
+						);
+						Ok(())
+					},
+				})?;
+				<QueryIdsWithFundingIndex<T>>::set(query_id, Some(len));
+			}
 			T::Token::transfer(
 				&tipper,
 				&T::PalletId::get().into_account_truncating(),
@@ -566,38 +632,99 @@ pub mod pallet {
 			query_data: QueryDataOf<T>,
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
-
+			ensure!(
+				HasherOf::<T>::hash(value.as_ref()) != HasherOf::<T>::hash(&[]),
+				Error::<T>::InvalidValue
+			);
+			let report = <Reports<T>>::get(query_id);
+			ensure!(
+				nonce ==
+					report.as_ref().map_or(Nonce::default(), |r| r
+						.timestamps
+						.len()
+						.saturated_into::<Nonce>()),
+				Error::<T>::InvalidNonce
+			);
+			let mut staker =
+				<StakerDetails<T>>::get(&reporter).ok_or(Error::<T>::InsufficientStake)?;
+			ensure!(
+				staker.staked_balance >= <StakeAmount<T>>::get(),
+				Error::<T>::InsufficientStake
+			);
+			// Require reporter to abide by given reporting lock
 			let timestamp = T::Time::now();
-			let mut timestamps = BoundedVec::default();
-			timestamps.try_push(timestamp).map_err(|_| <Error<T>>::MaxTimestampsReached)?;
-
-			let mut timestamp_to_block_number = BoundedBTreeMap::default();
-			timestamp_to_block_number
-				.try_insert(timestamp, frame_system::Pallet::<T>::block_number())
-				.map_err(|_| <Error<T>>::MaxTimestampsReached)?;
-
-			let mut value_by_timestamp = BoundedBTreeMap::default();
-			value_by_timestamp
-				.try_insert(timestamp, value.clone())
-				.map_err(|_| <Error<T>>::MaxTimestampsReached)?;
-
-			let mut reporter_by_timestamp = BoundedBTreeMap::default();
-			reporter_by_timestamp
-				.try_insert(timestamp, reporter.clone())
-				.map_err(|_| <Error<T>>::MaxTimestampsReached)?;
-
-			<Reports<T>>::insert(
-				query_id,
-				ReportOf::<T> {
-					timestamps,
-					timestamp_index: BoundedBTreeMap::default(),
-					timestamp_to_block_number,
-					value_by_timestamp,
-					reporter_by_timestamp,
-					is_disputed: BoundedBTreeMap::default(),
-				},
+			ensure!(
+				// todo: refactor and handle divide by zero
+				(timestamp - staker.reporter_last_timestamp)
+					.saturated_into::<u128>()
+					.saturating_mul(1000) >
+					(T::ReportingLock::get().saturated_into::<u128>().saturating_mul(1000)) /
+						(staker.staked_balance / <StakeAmount<T>>::get())
+							.saturated_into::<u128>(),
+				Error::<T>::ReporterTimeLocked
+			);
+			ensure!(
+				query_id == HasherOf::<T>::hash(query_data.as_ref()),
+				Error::<T>::InvalidQueryId
+			);
+			staker.reporter_last_timestamp = timestamp;
+			// Checks for no double reporting of timestamps
+			ensure!(
+				report
+					.as_ref()
+					.map_or(true, |r| r.reporter_by_timestamp.contains_key(&timestamp)),
+				Error::<T>::TimestampAlreadyReported
 			);
 
+			// Update number of timestamps, value for given timestamp, and reporter for timestamp
+			let mut report = report.unwrap_or(Report::new());
+			report
+				.timestamp_index
+				.try_insert(timestamp, report.timestamps.len().saturated_into::<u32>());
+			report
+				.timestamps
+				.try_push(timestamp)
+				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
+			report
+				.timestamp_to_block_number
+				.try_insert(timestamp, frame_system::Pallet::<T>::block_number())
+				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
+			report
+				.value_by_timestamp
+				.try_insert(timestamp, value.clone())
+				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
+			report
+				.reporter_by_timestamp
+				.try_insert(timestamp, reporter.clone())
+				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
+			<Reports<T>>::insert(query_id, report);
+
+			// todo: Disperse Time Based Reward
+			// uint256 _reward = ((block.timestamp - timeOfLastNewValue) * timeBasedReward) / 300; //.5 TRB per 5 minutes
+			// uint256 _totalTimeBasedRewardsBalance =
+			// 	token.balanceOf(address(this)) -
+			// 		(totalStakeAmount + stakingRewardsBalance + toWithdraw);
+			// if (_totalTimeBasedRewardsBalance > 0 && _reward > 0) {
+			// 	if (_totalTimeBasedRewardsBalance < _reward) {
+			// 		token.transfer(msg.sender, _totalTimeBasedRewardsBalance);
+			// 	} else {
+			// 		token.transfer(msg.sender, _reward);
+			// 	}
+			// }
+
+			// Update last oracle value and number of values submitted by a reporter
+			<TimeOfLastNewValue<T>>::set(Some(timestamp));
+			staker.reports_submitted += 1;
+			staker.reports_submitted_by_query_id.try_insert(
+				query_id,
+				staker
+					.reports_submitted_by_query_id
+					.get(&query_id)
+					.copied()
+					.unwrap_or_default()
+					.saturating_add(1),
+			);
+			<StakerDetails<T>>::insert(&reporter, staker);
 			Self::deposit_event(Event::NewReport {
 				query_id,
 				time: timestamp,
@@ -620,10 +747,10 @@ pub mod pallet {
 			timestamp: TimestampOf<T>,
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
-			ensure!(<StakerDetails<T>>::contains_key(&dispute_initiator), <Error<T>>::NotStaking);
+			ensure!(<StakerDetails<T>>::contains_key(&dispute_initiator), Error::<T>::NotStaking);
 			ensure!(
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
-				<Error<T>>::NoValueExists
+				Error::<T>::NoValueExists
 			);
 
 			let dispute = DisputeOf::<T> {
@@ -865,10 +992,85 @@ impl<T: Config> Pallet<T> {
 		todo!()
 	}
 
+	/// Read current onetime tip by query identifier.
+	/// # Arguments
+	/// * `query_id` - Identifier of reported data.
+	/// # Returns
+	/// Amount of tip.
+	pub fn get_current_tip(query_id: QueryIdOf<T>) -> AmountOf<T> {
+		// todo: optimise
+		// if no tips, return 0
+		if <Tips<T>>::get(query_id).map_or(0, |t| t.len()) == 0 {
+			return AmountOf::<T>::default()
+		}
+		let timestamp_retrieved =
+			Self::_get_current_value(query_id).map_or(TimestampOf::<T>::default(), |v| v.1);
+		match <Tips<T>>::get(query_id) {
+			Some(tips) => {
+				let x = tips.clone();
+				match tips.last() {
+					Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
+					_ => AmountOf::<T>::default(),
+				}
+			},
+			_ => AmountOf::<T>::default(),
+		}
+	}
+
+	/// Allows the user to get the latest value for the query identifier specified.
+	/// # Arguments
+	/// * `query_id` - Identifier to look up the value for
+	/// # Returns
+	/// The value retrieved, along with its timestamp, if found.
+	fn _get_current_value(query_id: QueryIdOf<T>) -> Option<(ValueOf<T>, TimestampOf<T>)> {
+		let mut count = Self::get_new_value_count_by_query_id(query_id);
+		if count == 0 {
+			return None
+		}
+		//loop handles for dispute (value = None if disputed)
+		while count > 0 {
+			count -= 1;
+			let value =
+				Self::get_timestamp_by_query_id_and_index(query_id, count).and_then(|timestamp| {
+					Self::retrieve_data(query_id, timestamp)
+						.and_then(|value| Some((value, timestamp)))
+				});
+			if value.is_some() {
+				return value
+			}
+		}
+		None
+	}
+
 	pub fn get_current_value(query_id: QueryIdOf<T>) -> Option<ValueOf<T>> {
 		// todo: implement properly
 		<Reports<T>>::get(query_id)
 			.and_then(|r| r.value_by_timestamp.last_key_value().and_then(|kv| Some(kv.1.clone())))
+	}
+
+	fn get_data_before(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
+		todo!()
+	}
+
+	fn get_index_for_data_before(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<usize> {
+		todo!()
+	}
+
+	pub fn get_query_data(query_id: QueryIdOf<T>) -> Option<QueryDataOf<T>> {
+		<QueryData<T>>::get(query_id)
+	}
+
+	pub fn get_reporter_by_timestamp(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<AccountIdOf<T>> {
+		todo!()
 	}
 
 	pub fn get_reporting_lock() -> TimestampOf<T> {
@@ -884,11 +1086,102 @@ impl<T: Config> Pallet<T> {
 		<StakerDetails<T>>::get(staker)
 	}
 
+	pub fn get_timestamp_by_query_id_and_index(
+		query_id: QueryIdOf<T>,
+		index: usize,
+	) -> Option<TimestampOf<T>> {
+		<Reports<T>>::get(query_id).and_then(|report| report.timestamps.get(index).copied())
+	}
+
 	pub fn get_total_stake_amount() -> AmountOf<T> {
 		<TotalStakeAmount<T>>::get()
 	}
 
 	pub fn get_total_stakers() -> u128 {
 		<TotalStakers<T>>::get()
+	}
+
+	pub fn get_new_value_count_by_query_id(query_id: QueryIdOf<T>) -> usize {
+		<Reports<T>>::get(query_id).map_or(usize::default(), |r| r.timestamps.len())
+	}
+
+	pub fn is_in_dispute(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> bool {
+		todo!()
+	}
+
+	pub fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<ValueOf<T>> {
+		<Reports<T>>::get(query_id)
+			.and_then(|report| report.value_by_timestamp.get(&timestamp).cloned())
+	}
+}
+
+impl<T: Config> UsingTellor<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, ValueOf<T>>
+	for Pallet<T>
+{
+	fn get_data_after(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
+		Self::get_index_for_data_after(query_id, timestamp)
+			.and_then(|index| Self::get_timestamp_by_query_id_and_index(query_id, index))
+			.and_then(|timestamp_retrieved| {
+				Self::retrieve_data(query_id, timestamp_retrieved)
+					.map(|value| (value, timestamp_retrieved))
+			})
+	}
+
+	fn get_data_before(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
+		Self::get_data_before(query_id, timestamp)
+	}
+
+	fn get_index_for_data_after(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<usize> {
+		todo!()
+	}
+
+	fn get_index_for_data_before(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<usize> {
+		Self::get_index_for_data_before(query_id, timestamp)
+	}
+
+	fn get_multiple_values_before(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+		max_age: TimestampOf<T>,
+	) -> Vec<(ValueOf<T>, TimestampOf<T>)> {
+		todo!()
+	}
+
+	fn get_new_value_count_by_query_id(query_id: QueryIdOf<T>) -> usize {
+		Self::get_new_value_count_by_query_id(query_id)
+	}
+
+	fn get_reporter_by_timestamp(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<AccountIdOf<T>> {
+		Self::get_reporter_by_timestamp(query_id, timestamp)
+	}
+
+	fn get_timestamp_by_query_id_and_index(
+		query_id: QueryIdOf<T>,
+		index: usize,
+	) -> Option<TimestampOf<T>> {
+		Self::get_timestamp_by_query_id_and_index(query_id, index)
+	}
+
+	fn is_in_dispute(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> bool {
+		Self::is_in_dispute(query_id, timestamp)
+	}
+
+	fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<ValueOf<T>> {
+		Self::retrieve_data(query_id, timestamp)
 	}
 }
