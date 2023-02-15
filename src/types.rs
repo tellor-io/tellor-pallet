@@ -101,6 +101,21 @@ pub(crate) mod oracle {
 		pub(crate) is_disputed: BoundedBTreeMap<Timestamp, bool, MaxTimestamps>,
 	}
 
+	impl<AccountId, BlockNumber, Timestamp: Ord, Value, MaxTimestamps: Get<u32>>
+		Report<AccountId, BlockNumber, Timestamp, Value, MaxTimestamps>
+	{
+		pub(crate) fn new() -> Self {
+			Report {
+				timestamps: BoundedVec::default(),
+				timestamp_index: BoundedBTreeMap::default(),
+				timestamp_to_block_number: BoundedBTreeMap::default(),
+				value_by_timestamp: BoundedBTreeMap::default(),
+				reporter_by_timestamp: BoundedBTreeMap::default(),
+				is_disputed: BoundedBTreeMap::default(),
+			}
+		}
+	}
+
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxQueries))]
 	pub struct StakeInfo<Amount, MaxQueries: Get<u32>, QueryId, Timestamp> {
