@@ -1,7 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::traits::Len;
+use frame_support::{
+	ensure,
+	traits::{Len, Time},
+};
 pub use pallet::*;
+use sp_core::Get;
+use sp_runtime::Saturating;
 use traits::UsingTellor;
 use types::*;
 pub use types::{
@@ -29,6 +34,7 @@ pub mod pallet {
 		contracts::{governance, registry},
 		types::*,
 		xcm::{self, ethereum_xcm},
+		*,
 	};
 	use crate::{types::oracle::Report, Tip};
 	use ::xcm::latest::prelude::*;
@@ -40,16 +46,13 @@ pub mod pallet {
 		},
 		traits::{
 			fungible::{Inspect, Transfer},
-			PalletInfoAccess, Time,
+			PalletInfoAccess,
 		},
 		PalletId,
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
-	use sp_runtime::{
-		traits::{AccountIdConversion, SaturatedConversion},
-		Saturating,
-	};
+	use sp_runtime::traits::{AccountIdConversion, CheckedDiv, SaturatedConversion};
 	use sp_std::{fmt::Debug, prelude::*, result};
 
 	#[pallet::pallet]
@@ -77,6 +80,10 @@ pub mod pallet {
 			+ TypeInfo
 			+ Into<U256>;
 
+		/// The claim buffer time.
+		#[pallet::constant]
+		type ClaimBuffer: Get<<Self::Time as Time>::Moment>;
+
 		/// The identifier used for disputes.
 		type DisputeId: Parameter
 			+ Member
@@ -90,7 +97,7 @@ pub mod pallet {
 
 		/// Percentage, 1000 is 100%, 50 is 5%, etc
 		#[pallet::constant]
-		type Fee: Get<u8>;
+		type Fee: Get<u16>;
 
 		/// The location of the governance controller contract.
 		#[pallet::constant]
@@ -330,10 +337,15 @@ pub mod pallet {
 	#[pallet::error]
 	pub enum Error<T> {
 		// AutoPay
+		/// Claim buffer time has not passed.
+		ClaimBufferNotPassed,
+		FeeCalculationError,
 		/// Feed must not be set up already.
 		FeedAlreadyExists,
 		/// Tip must be greater than zero.
 		InvalidAmount,
+		/// Claimer must be the reporter.
+		InvalidClaimer,
 		/// Query identifier must be a hash of bytes data.
 		InvalidQueryId,
 		/// The maximum number of feeds have been funded,
@@ -342,6 +354,14 @@ pub mod pallet {
 		MaxTipsReached,
 		/// No tips submitted for this query identifier.
 		NoTipsSubmitted,
+		/// Timestamp not eligible for tip.
+		TimestampIneligibleForTip,
+		/// Tip already claimed.
+		TipAlreadyClaimed,
+		/// Tip earned by previous submission.
+		TipAlreadyEarned,
+		/// Value disputed.
+		ValueDisputed,
 
 		// Oracle
 		/// Balance must be greater than stake amount.
@@ -354,6 +374,7 @@ pub mod pallet {
 		MaxTimestampsReached,
 		/// Still in reporter time lock, please wait!
 		ReporterTimeLocked,
+		ReportingLockCalculationError,
 		/// Timestamp already reported.
 		TimestampAlreadyReported,
 
@@ -438,8 +459,47 @@ pub mod pallet {
 				Error::<T>::NoTipsSubmitted
 			);
 
-			let cumulative_reward = AmountOf::<T>::default();
-			for _timestamp in timestamps {}
+			let mut cumulative_reward = AmountOf::<T>::default();
+			for timestamp in timestamps {
+				cumulative_reward += Self::get_onetime_tip_amount(query_id, timestamp, &reporter)?;
+			}
+			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
+				.checked_div(&1000u16.into())
+				.ok_or(Error::<T>::FeeCalculationError)?;
+			T::Token::transfer(
+				&reporter,
+				&T::PalletId::get().into_account_truncating(),
+				cumulative_reward - fee,
+				true,
+			)?;
+			Self::add_staking_rewards(fee);
+			if Self::get_current_tip(query_id) == <AmountOf<T>>::default() {
+				// todo: replace with if let once guards stable
+				match <QueryIdsWithFundingIndex<T>>::get(query_id) {
+					Some(index) if index != 0 => {
+						let idx: usize = index as usize - 1;
+						// Replace unfunded feed in array with last element
+						<QueryIdsWithFunding<T>>::mutate(|maybe| match maybe {
+							None => {
+								todo!()
+							},
+							Some(query_ids_with_funding) => {
+								// todo: safe indexing
+								query_ids_with_funding[idx] =
+									query_ids_with_funding[query_ids_with_funding.len() - 1];
+								let query_id_last_funded = query_ids_with_funding[idx];
+								<QueryIdsWithFundingIndex<T>>::set(
+									query_id_last_funded,
+									Some((idx + 1).saturated_into()),
+								);
+								<QueryIdsWithFundingIndex<T>>::remove(query_id);
+								query_ids_with_funding.pop();
+							},
+						});
+					},
+					_ => {},
+				}
+			}
 			Self::deposit_event(Event::OneTimeTipClaimed {
 				query_id,
 				amount: cumulative_reward,
@@ -495,9 +555,9 @@ pub mod pallet {
 			_query_id: QueryIdOf<T>,
 			_reward: AmountOf<T>,
 			_start_time: TimestampOf<T>,
-			_interval: u8,
-			_window: u8,
-			_price_threshold: AmountOf<T>,
+			_interval: u32,
+			_window: u32,
+			_price_threshold: u16,
 			_reward_increase_per_second: AmountOf<T>,
 			_query_data: QueryDataOf<T>,
 			_amount: Option<AmountOf<T>>,
@@ -654,13 +714,19 @@ pub mod pallet {
 			// Require reporter to abide by given reporting lock
 			let timestamp = T::Time::now();
 			ensure!(
-				// todo: refactor and handle divide by zero
+				// todo: refactor
 				(timestamp - staker.reporter_last_timestamp)
 					.saturated_into::<u128>()
 					.saturating_mul(1000) >
-					(T::ReportingLock::get().saturated_into::<u128>().saturating_mul(1000)) /
-						(staker.staked_balance / <StakeAmount<T>>::get())
-							.saturated_into::<u128>(),
+					(T::ReportingLock::get().saturated_into::<u128>().saturating_mul(1000))
+						.checked_div(
+							staker
+								.staked_balance
+								.checked_div(&<StakeAmount<T>>::get())
+								.ok_or(Error::<T>::ReportingLockCalculationError)?
+								.saturated_into::<u128>()
+						)
+						.ok_or(Error::<T>::ReportingLockCalculationError)?,
 				Error::<T>::ReporterTimeLocked
 			);
 			ensure!(
@@ -992,6 +1058,10 @@ impl<T: Config> Pallet<T> {
 		todo!()
 	}
 
+	fn add_staking_rewards(amount: AmountOf<T>) {
+		// todo: allocate to sub-account, separate from xcm fees
+	}
+
 	/// Read current onetime tip by query identifier.
 	/// # Arguments
 	/// * `query_id` - Identifier of reported data.
@@ -1052,14 +1122,193 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
 	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
-		todo!()
+		Self::get_index_for_data_before(query_id, timestamp)
+			.and_then(|index| Self::get_timestamp_by_query_id_and_index(query_id, index))
+			.and_then(|timestamp_retrieved| {
+				Self::retrieve_data(query_id, timestamp_retrieved)
+					.and_then(|value| Some((value, timestamp_retrieved)))
+			})
 	}
 
 	fn get_index_for_data_before(
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
 	) -> Option<usize> {
-		todo!()
+		let count = Self::get_new_value_count_by_query_id(query_id);
+		if count > 0 {
+			let mut middle;
+			let mut start = 0;
+			let mut end = count - 1;
+			let mut time;
+			// Checking Boundaries to short-circuit the algorithm
+			time = Self::get_timestamp_by_query_id_and_index(query_id, start)?;
+			if time >= timestamp {
+				return None
+			}
+			time = Self::get_timestamp_by_query_id_and_index(query_id, end)?;
+			if time < timestamp {
+				while Self::is_in_dispute(query_id, time) && end > 0 {
+					end -= 1;
+					time = Self::get_timestamp_by_query_id_and_index(query_id, end)?;
+				}
+				if end == 0 && Self::is_in_dispute(query_id, time) {
+					return None
+				}
+				return Some(end)
+			}
+			// Since the value is within our boundaries, do a binary search
+			loop {
+				middle = (end - start) / 2 + 1 + start;
+				time = Self::get_timestamp_by_query_id_and_index(query_id, middle)?;
+				if time < timestamp {
+					//get immediate next value
+					let next_time =
+						Self::get_timestamp_by_query_id_and_index(query_id, middle + 1)?;
+					if next_time >= timestamp {
+						if !Self::is_in_dispute(query_id, time) {
+							// _time is correct
+							return Some(middle)
+						} else {
+							// iterate backwards until we find a non-disputed value
+							while Self::is_in_dispute(query_id, time) && middle > 0 {
+								middle -= 1;
+								time = Self::get_timestamp_by_query_id_and_index(query_id, middle)?;
+							}
+							if middle == 0 && Self::is_in_dispute(query_id, time) {
+								return None
+							}
+							// _time is correct
+							return Some(middle)
+						}
+					} else {
+						//look from middle + 1(next value) to end
+						start = middle + 1;
+					}
+				} else {
+					let mut previous_time =
+						Self::get_timestamp_by_query_id_and_index(query_id, middle - 1)?;
+					if previous_time < timestamp {
+						if !Self::is_in_dispute(query_id, previous_time) {
+							// _prevTime is correct
+							return Some(middle - 1)
+						} else {
+							// iterate backwards until we find a non-disputed value
+							middle -= 1;
+							while Self::is_in_dispute(query_id, previous_time) && middle > 0 {
+								middle -= 1;
+								previous_time =
+									Self::get_timestamp_by_query_id_and_index(query_id, middle)?;
+							}
+							if middle == 0 && Self::is_in_dispute(query_id, previous_time) {
+								return None
+							}
+							// _prevtime is correct
+							return Some(middle)
+						}
+					} else {
+						//look from start to middle -1(prev value)
+						end = middle - 1;
+					}
+				}
+			}
+		}
+		return None
+	}
+
+	/// Determines tip eligibility for a given oracle submission.
+	/// # Arguments
+	/// * `query_id` - Identifier of reported data.
+	/// * `timestamp` - Timestamp of one time tip.
+	/// # Returns
+	/// Amount of tip.
+	fn get_onetime_tip_amount(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+		claimer: &AccountIdOf<T>,
+	) -> Result<AmountOf<T>, Error<T>> {
+		ensure!(
+			T::Time::now().saturating_sub(timestamp) > T::ClaimBuffer::get(),
+			Error::<T>::ClaimBufferNotPassed
+		);
+		ensure!(!Self::is_in_dispute(query_id, timestamp), Error::<T>::ValueDisputed);
+		ensure!(
+			Self::get_reporter_by_timestamp(query_id, timestamp)
+				.map_or(false, |reporter| claimer == &reporter),
+			Error::<T>::InvalidClaimer
+		);
+		<Tips<T>>::try_mutate(query_id, |maybe_tips| {
+			match maybe_tips {
+				None => Err(Error::<T>::NoTipsSubmitted),
+				Some(tips) => {
+					let mut min = 0;
+					let mut max = tips.len();
+					let mut mid = 0;
+					while max - min > 1 {
+						mid = (max.saturating_add(min)).saturating_div(2);
+						if tips.get(mid).map_or(<TimestampOf<T>>::default(), |t| t.timestamp) >
+							timestamp
+						{
+							max = mid;
+						} else {
+							min = mid;
+						}
+					}
+
+					let (_, timestamp_before) =
+						Self::get_data_before(query_id, timestamp).unwrap_or_default();
+					let min_tip = &mut tips[min]; // todo: convert to tips::get(min)
+					ensure!(timestamp_before < min_tip.timestamp, Error::<T>::TipAlreadyEarned);
+					ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
+					ensure!(
+						min_tip.amount > <AmountOf<T>>::default(),
+						Error::<T>::TipAlreadyClaimed
+					);
+
+					// todo: add test to ensure storage updated accordingly
+					let mut tip_amount = min_tip.amount;
+					min_tip.amount = <AmountOf<T>>::default();
+					let min_backup = min;
+
+					// check whether eligible for previous tips in array due to disputes
+					let index_now = Self::get_index_for_data_before(
+						query_id,
+						timestamp.saturating_add(1u32.into()),
+					);
+					let index_before = Self::get_index_for_data_before(
+						query_id,
+						timestamp_before.saturating_add(1u32.into()),
+					);
+					if index_now
+						.unwrap_or_default()
+						.saturating_sub(index_before.unwrap_or_default()) >
+						1 || index_before.is_none()
+					{
+						if index_before.is_none() {
+							tip_amount = tips[min_backup].cumulative_tips;
+						} else {
+							max = min;
+							min = 0;
+							let mut mid;
+							while max.saturating_sub(min) > 1 {
+								mid = (max.saturating_add(min)).saturating_div(2);
+								if tips[mid].timestamp > timestamp_before {
+									max = mid;
+								} else {
+									min = mid;
+								}
+							}
+							min = min.saturating_add(1);
+							if min < min_backup {
+								tip_amount = tips[min_backup].cumulative_tips -
+									tips[min].cumulative_tips + tips[min].amount;
+							}
+						}
+					}
+
+					Ok(tip_amount)
+				},
+			}
+		})
 	}
 
 	pub fn get_query_data(query_id: QueryIdOf<T>) -> Option<QueryDataOf<T>> {
@@ -1070,11 +1319,11 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
 	) -> Option<AccountIdOf<T>> {
-		todo!()
+		<Reports<T>>::get(query_id)
+			.and_then(|report| report.reporter_by_timestamp.get(&timestamp).cloned())
 	}
 
 	pub fn get_reporting_lock() -> TimestampOf<T> {
-		use sp_core::Get;
 		T::ReportingLock::get()
 	}
 
@@ -1106,7 +1355,8 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn is_in_dispute(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> bool {
-		todo!()
+		<Reports<T>>::get(query_id)
+			.map_or(false, |report| report.is_disputed.contains_key(&timestamp))
 	}
 
 	pub fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<ValueOf<T>> {

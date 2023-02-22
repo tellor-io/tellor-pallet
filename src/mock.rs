@@ -88,16 +88,19 @@ parameter_types! {
 	pub TellorStaking: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
 }
 
+const TWELVE_HOURS_IN_MILLISECONDS: u64 = 43_200_000;
+
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = u64;
 	type DisputeId = u128;
+	type ClaimBuffer = ConstU64<TWELVE_HOURS_IN_MILLISECONDS>;
 	type Fee = ();
 	type Governance = TellorGovernance;
 	type Hash = H256;
 	type Hasher = Keccak256;
-	type MaxClaimTimestamps = ();
+	type MaxClaimTimestamps = ConstU32<10>;
 	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ConstU32<10>;
 	type MaxQueriesPerReporter = ();
@@ -146,11 +149,14 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 pub(crate) fn next_block() {
+	next_block_with_timestamp(Timestamp::get() + 1)
+}
+
+pub(crate) fn next_block_with_timestamp(timestamp: u64) {
 	let block = System::block_number();
-	let time = Timestamp::get();
 
 	Timestamp::on_finalize(block);
 	System::set_block_number(block + 1);
 
-	assert_ok!(Timestamp::set(RuntimeOrigin::none(), time + 1));
+	assert_ok!(Timestamp::set(RuntimeOrigin::none(), timestamp));
 }

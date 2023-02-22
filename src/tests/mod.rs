@@ -39,7 +39,7 @@ fn reports_stake_deposited() {
 #[test]
 fn begins_dispute() {
 	new_test_ext().execute_with(|| {
-		register(STAKE_AMOUNT);
+		register_parachain(STAKE_AMOUNT);
 
 		let reporter = 1;
 		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
@@ -83,7 +83,7 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address
 }
 
 const STAKE_AMOUNT: AmountOf<Test> = 100;
-fn register(stake_amount: AmountOf<Test>) {
+fn register_parachain(stake_amount: AmountOf<Test>) {
 	assert_ok!(Tellor::register(RuntimeOrigin::root(), stake_amount, 1000, 1000));
 }
 
