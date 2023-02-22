@@ -7,6 +7,7 @@ use frame_support::{
 pub use pallet::*;
 use sp_core::Get;
 use sp_runtime::Saturating;
+use sp_std::vec::Vec;
 use traits::UsingTellor;
 use types::*;
 pub use types::{
@@ -370,6 +371,8 @@ pub mod pallet {
 		InvalidNonce,
 		/// Value must be submitted.
 		InvalidValue,
+		/// The maximum number of queries has been reached.
+		MaxQueriesReached,
 		/// The maximum number of timestamps has been reached,
 		MaxTimestampsReached,
 		/// Still in reporter time lock, please wait!
@@ -746,7 +749,8 @@ pub mod pallet {
 			let mut report = report.unwrap_or(Report::new());
 			report
 				.timestamp_index
-				.try_insert(timestamp, report.timestamps.len().saturated_into::<u32>());
+				.try_insert(timestamp, report.timestamps.len().saturated_into::<u32>())
+				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
 			report
 				.timestamps
 				.try_push(timestamp)
@@ -781,15 +785,18 @@ pub mod pallet {
 			// Update last oracle value and number of values submitted by a reporter
 			<TimeOfLastNewValue<T>>::set(Some(timestamp));
 			staker.reports_submitted += 1;
-			staker.reports_submitted_by_query_id.try_insert(
-				query_id,
-				staker
-					.reports_submitted_by_query_id
-					.get(&query_id)
-					.copied()
-					.unwrap_or_default()
-					.saturating_add(1),
-			);
+			staker
+				.reports_submitted_by_query_id
+				.try_insert(
+					query_id,
+					staker
+						.reports_submitted_by_query_id
+						.get(&query_id)
+						.copied()
+						.unwrap_or_default()
+						.saturating_add(1),
+				)
+				.map_err(|_| Error::<T>::MaxQueriesReached)?;
 			<StakerDetails<T>>::insert(&reporter, staker);
 			Self::deposit_event(Event::NewReport {
 				query_id,
@@ -1076,12 +1083,9 @@ impl<T: Config> Pallet<T> {
 		let timestamp_retrieved =
 			Self::_get_current_value(query_id).map_or(TimestampOf::<T>::default(), |v| v.1);
 		match <Tips<T>>::get(query_id) {
-			Some(tips) => {
-				let x = tips.clone();
-				match tips.last() {
-					Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
-					_ => AmountOf::<T>::default(),
-				}
+			Some(tips) => match tips.last() {
+				Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
+				_ => AmountOf::<T>::default(),
 			},
 			_ => AmountOf::<T>::default(),
 		}
@@ -1242,7 +1246,7 @@ impl<T: Config> Pallet<T> {
 				Some(tips) => {
 					let mut min = 0;
 					let mut max = tips.len();
-					let mut mid = 0;
+					let mut mid;
 					while max - min > 1 {
 						mid = (max.saturating_add(min)).saturating_div(2);
 						if tips.get(mid).map_or(<TimestampOf<T>>::default(), |t| t.timestamp) >

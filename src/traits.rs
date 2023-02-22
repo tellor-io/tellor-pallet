@@ -1,3 +1,4 @@
+use sp_std::vec::Vec;
 /// This traits helps pallets read data from Tellor
 pub trait UsingTellor<AccountId, QueryId, Timestamp, Value> {
 	/// Retrieves the next value for the query identifer after the specified timestamp.
