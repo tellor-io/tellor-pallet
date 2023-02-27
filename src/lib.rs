@@ -184,7 +184,7 @@ pub mod pallet {
 
 		type Token: Inspect<Self::AccountId, Balance = Self::Amount> + Transfer<Self::AccountId>;
 
-		type Xcm: SendXcm;
+		type Xcm: traits::Xcm;
 	}
 
 	// AutoPay
@@ -1015,12 +1015,8 @@ pub mod pallet {
 			destination: impl Into<MultiLocation>,
 			mut message: Xcm<()>,
 		) -> Result<(), Error<T>> {
-			// Descend origin to signify pallet call
-			message
-				.0
-				.insert(0, DescendOrigin(X1(PalletInstance(Pallet::<T>::index() as u8))));
-
-			T::Xcm::send_xcm(destination, message).map_err(|e| match e {
+			let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
+			<T::Xcm as traits::Xcm>::send_xcm(interior, destination, message).map_err(|e| match e {
 				SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
 				_ => Error::<T>::SendFailure,
 			})

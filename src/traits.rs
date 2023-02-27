@@ -1,4 +1,15 @@
 use sp_std::vec::Vec;
+use xcm::prelude::*;
+
+// Simple trait to avoid taking a hard dependency on pallet-xcm.
+pub trait Xcm {
+	fn send_xcm(
+		interior: impl Into<Junctions>,
+		dest: impl Into<MultiLocation>,
+		message: xcm::v2::Xcm<()>,
+	) -> Result<(), SendError>;
+}
+
 /// This traits helps pallets read data from Tellor
 pub trait UsingTellor<AccountId, QueryId, Timestamp, Value> {
 	/// Retrieves the next value for the query identifer after the specified timestamp.
