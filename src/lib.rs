@@ -25,7 +25,7 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 mod contracts;
-mod traits;
+pub mod traits;
 mod types;
 pub mod xcm;
 
