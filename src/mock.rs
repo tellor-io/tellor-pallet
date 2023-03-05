@@ -103,7 +103,7 @@ impl tellor::Config for Test {
 	type MaxClaimTimestamps = ConstU32<10>;
 	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ConstU32<10>;
-	type MaxQueriesPerReporter = ();
+	type MaxQueriesPerReporter = ConstU32<10>;
 	type MaxQueryDataLength = ConstU32<1000>;
 	type MaxTimestamps = ConstU32<10>;
 	type MaxTipsPerQuery = ConstU32<10>;
@@ -131,6 +131,20 @@ impl SendXcm for TestSendXcm {
 	fn send_xcm(dest: impl Into<MultiLocation>, msg: Xcm<()>) -> SendResult {
 		SENT_XCM.with(|q| q.borrow_mut().push((dest.into(), msg)));
 		Ok(())
+	}
+}
+impl tellor::traits::Xcm for TestSendXcm {
+	fn send_xcm(
+		interior: impl Into<Junctions>,
+		dest: impl Into<MultiLocation>,
+		mut message: Xcm<()>,
+	) -> Result<(), SendError> {
+		let interior = interior.into();
+		let dest = dest.into();
+		if interior != Junctions::Here {
+			message.0.insert(0, DescendOrigin(interior))
+		};
+		<Self as SendXcm>::send_xcm(dest, message)
 	}
 }
 
