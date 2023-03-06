@@ -6,7 +6,9 @@ pub(crate) mod governance;
 pub(crate) mod registry;
 pub(crate) mod staking;
 
-struct Call<'a> {
+pub(crate) type ABI<'a> = Call<'a>;
+
+pub(crate) struct Call<'a> {
 	function: Vec<u8>,
 	parameters: Vec<Parameter<'a>>,
 }
@@ -14,6 +16,10 @@ struct Call<'a> {
 impl<'a> Call<'a> {
 	fn new(function: &[u8; 4]) -> Self {
 		Call { function: function.to_vec(), parameters: Vec::new() }
+	}
+
+	pub(crate) fn default() -> Self {
+		Call { function: Vec::new(), parameters: Vec::new() }
 	}
 
 	fn address(mut self, address: Address) -> Self {
@@ -28,21 +34,21 @@ impl<'a> Call<'a> {
 		self
 	}
 
-	fn fixed_bytes(mut self, bytes: &[u8]) -> Self {
+	pub(crate) fn fixed_bytes(mut self, bytes: &[u8]) -> Self {
 		let mut encoded = [0u8; 32];
 		encoded.copy_from_slice(bytes);
 		self.parameters.push(Parameter::Static(encoded));
 		self
 	}
 
-	fn uint(mut self, value: impl Into<U256>) -> Self {
+	pub(crate) fn uint(mut self, value: impl Into<U256>) -> Self {
 		let mut encoded = [0u8; 32];
 		value.into().to_big_endian(&mut encoded);
 		self.parameters.push(Parameter::Static(encoded));
 		self
 	}
 
-	fn encode(mut self) -> Vec<u8> {
+	pub(crate) fn encode(mut self) -> Vec<u8> {
 		let mut buffer = [0u8; 32];
 
 		// Add head parts: https://docs.soliditylang.org/en/latest/abi-spec.html#function-selector-and-argument-encoding

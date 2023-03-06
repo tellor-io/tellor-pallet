@@ -1,12 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use codec::Encode;
 use frame_support::{
+	dispatch::{DispatchError, DispatchResult},
 	ensure,
-	traits::{Len, Time},
+	traits::{fungible::Transfer, Len, Time},
 };
 pub use pallet::*;
 use sp_core::Get;
-use sp_runtime::Saturating;
+use sp_runtime::{
+	traits::{AccountIdConversion, CheckedDiv, Convert},
+	SaturatedConversion, Saturating,
+};
 use sp_std::vec::Vec;
 use traits::UsingTellor;
 use types::*;
@@ -53,7 +58,7 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
-	use sp_runtime::traits::{AccountIdConversion, CheckedDiv, SaturatedConversion};
+	use sp_runtime::traits::{AccountIdConversion, SaturatedConversion};
 	use sp_std::{fmt::Debug, prelude::*, result};
 
 	#[pallet::pallet]
@@ -79,11 +84,16 @@ pub mod pallet {
 			+ MaybeSerializeDeserialize
 			+ MaxEncodedLen
 			+ TypeInfo
-			+ Into<U256>;
+			+ Into<U256>
+			+ From<<Self::Time as Time>::Moment>;
 
 		/// The claim buffer time.
 		#[pallet::constant]
 		type ClaimBuffer: Get<<Self::Time as Time>::Moment>;
+
+		/// The claim period.
+		#[pallet::constant]
+		type ClaimPeriod: Get<<Self::Time as Time>::Moment>;
 
 		/// The identifier used for disputes.
 		type DisputeId: Parameter
@@ -143,6 +153,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
 
+		/// The maximum number of reward claims.
+		#[pallet::constant]
+		type MaxRewardClaims: Get<u32>;
+
 		/// The maximum number of timestamps per data feed.
 		#[pallet::constant]
 		type MaxTimestamps: Get<u32>;
@@ -184,6 +198,9 @@ pub mod pallet {
 
 		type Token: Inspect<Self::AccountId, Balance = Self::Amount> + Transfer<Self::AccountId>;
 
+		/// Conversion from submitted value to an amount.
+		type ValueConverter: Convert<ValueOf<Self>, Option<Self::Amount>>;
+
 		type Xcm: traits::Xcm;
 	}
 
@@ -202,11 +219,11 @@ pub mod pallet {
 		QueryIdOf<T>,
 		Blake2_128Concat,
 		FeedIdOf<T>,
-		FeedDetailsOf<T>,
+		FeedOf<T>,
 	>;
 	#[pallet::storage]
 	pub type FeedsWithFunding<T> =
-		StorageValue<_, BoundedVec<FeedIdOf<T>, <T as Config>::MaxFundedFeeds>>;
+		StorageValue<_, BoundedVec<FeedIdOf<T>, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
 	pub type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedIdOf<T>, QueryIdOf<T>>;
 	#[pallet::storage]
@@ -340,27 +357,48 @@ pub mod pallet {
 		// AutoPay
 		/// Claim buffer time has not passed.
 		ClaimBufferNotPassed,
+		/// Timestamp too old to claim tip.
+		ClaimPeriodExpired,
 		FeeCalculationError,
 		/// Feed must not be set up already.
 		FeedAlreadyExists,
-		/// Tip must be greater than zero.
+		/// No funds available for this feed or insufficient balance for all submitted timestamps.
+		InsufficientFeedBalance,
+		IntervalCalculationError,
+		/// Amount must be greater than zero.
 		InvalidAmount,
 		/// Claimer must be the reporter.
 		InvalidClaimer,
+		/// Feed not set up.
+		InvalidFeed,
+		/// Interval must be greater than zero.
+		InvalidInterval,
+		/// Reward must be greater than zero.
+		InvalidReward,
 		/// Query identifier must be a hash of bytes data.
 		InvalidQueryId,
-		/// The maximum number of feeds have been funded,
+		/// No value exists at timestamp.
+		InvalidTimestamp,
+		/// Window must be less than interval length.
+		InvalidWindow,
+		/// The maximum number of feeds have been funded.
 		MaxFeedsFunded,
+		/// The maximum number of reward claims has been reached,
+		MaxRewardClaimsReached,
 		/// The maximum number of tips has been reached,
 		MaxTipsReached,
 		/// No tips submitted for this query identifier.
 		NoTipsSubmitted,
+		PriceChangeCalculationError,
+		/// Price threshold not met.
+		PriceThresholdNotMet,
 		/// Timestamp not eligible for tip.
 		TimestampIneligibleForTip,
 		/// Tip already claimed.
 		TipAlreadyClaimed,
 		/// Tip earned by previous submission.
 		TipAlreadyEarned,
+		ValueConversionError,
 		/// Value disputed.
 		ValueDisputed,
 
@@ -464,7 +502,8 @@ pub mod pallet {
 
 			let mut cumulative_reward = AmountOf::<T>::default();
 			for timestamp in timestamps {
-				cumulative_reward += Self::get_onetime_tip_amount(query_id, timestamp, &reporter)?;
+				cumulative_reward = cumulative_reward
+					.saturating_add(Self::get_onetime_tip_amount(query_id, timestamp, &reporter)?);
 			}
 			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
 				.checked_div(&1000u16.into())
@@ -475,7 +514,7 @@ pub mod pallet {
 				cumulative_reward - fee,
 				true,
 			)?;
-			Self::add_staking_rewards(fee);
+			Self::add_staking_rewards(fee)?;
 			if Self::get_current_tip(query_id) == <AmountOf<T>>::default() {
 				// todo: replace with if let once guards stable
 				match <QueryIdsWithFundingIndex<T>>::get(query_id) {
@@ -518,11 +557,87 @@ pub mod pallet {
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(2)]
 		pub fn claim_tip(
-			_origin: OriginFor<T>,
-			_feed_id: FeedIdOf<T>,
-			_query_id: QueryIdOf<T>,
-			_timestamps: BoundedVec<TimestampOf<T>, T::MaxClaimTimestamps>,
+			origin: OriginFor<T>,
+			feed_id: FeedIdOf<T>,
+			query_id: QueryIdOf<T>,
+			timestamps: BoundedVec<TimestampOf<T>, T::MaxClaimTimestamps>,
 		) -> DispatchResult {
+			let reporter = ensure_signed(origin)?;
+
+			let mut feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
+			let balance = feed.details.balance;
+			ensure!(balance > AmountOf::<T>::default(), Error::<T>::InsufficientFeedBalance);
+
+			let mut cumulative_reward = AmountOf::<T>::default();
+			for timestamp in &timestamps {
+				ensure!(
+					T::Time::now().saturating_sub(*timestamp) > T::ClaimBuffer::get(),
+					Error::<T>::ClaimBufferNotPassed
+				);
+				ensure!(
+					Some(&reporter) ==
+						Self::get_reporter_by_timestamp(query_id, *timestamp).as_ref(),
+					Error::<T>::InvalidClaimer
+				);
+				cumulative_reward = cumulative_reward
+					.saturating_add(Self::get_reward_amount(feed_id, query_id, *timestamp)?);
+
+				if cumulative_reward >= balance {
+					ensure!(
+						Some(timestamp) == timestamps.last(),
+						Error::<T>::InsufficientFeedBalance
+					);
+					cumulative_reward = balance;
+					// Adjust currently funded feeds
+					<FeedsWithFunding<T>>::mutate(|feeds_with_funding| {
+						if feeds_with_funding.len() > 1 {
+							let index = feed.details.feeds_with_funding_index - 1;
+							// Replace unfunded feed in array with last element
+							feeds_with_funding[index as usize] =
+								feeds_with_funding[feeds_with_funding.len() - 1];
+							let feed_id_last_funded = feeds_with_funding[index as usize];
+							match <QueryIdFromDataFeedId<T>>::get(feed_id_last_funded) {
+								None => todo!(),
+								Some(query_id_last_funded) => {
+									<DataFeeds<T>>::mutate(
+										query_id_last_funded,
+										feed_id_last_funded,
+										|f| {
+											if let Some(f) = f {
+												f.details.feeds_with_funding_index = index + 1
+											}
+										},
+									);
+								},
+							}
+						}
+						feeds_with_funding.pop();
+					});
+					feed.details.feeds_with_funding_index = 0;
+				}
+				feed.reward_claimed
+					.try_insert(*timestamp, true)
+					.map_err(|_| Error::<T>::MaxRewardClaimsReached)?;
+			}
+
+			feed.details.balance -= cumulative_reward;
+			<DataFeeds<T>>::set(query_id, feed_id, Some(feed));
+			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
+				.checked_div(&1000u16.into())
+				.ok_or(Error::<T>::FeeCalculationError)?;
+			T::Token::transfer(
+				&T::PalletId::get().into_account_truncating(),
+				&reporter,
+				cumulative_reward - fee,
+				true,
+			)?;
+			Self::add_staking_rewards(fee)?;
+			Self::deposit_event(Event::TipClaimed {
+				feed_id,
+				query_id,
+				amount: cumulative_reward,
+				reporter,
+			});
 			Ok(())
 		}
 
@@ -533,12 +648,13 @@ pub mod pallet {
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(3)]
 		pub fn fund_feed(
-			_origin: OriginFor<T>,
-			_feed_id: FeedIdOf<T>,
-			_query_id: QueryIdOf<T>,
-			_amount: AmountOf<T>,
+			origin: OriginFor<T>,
+			feed_id: FeedIdOf<T>,
+			query_id: QueryIdOf<T>,
+			amount: AmountOf<T>,
 		) -> DispatchResult {
-			Ok(())
+			let feed_funder = ensure_signed(origin)?;
+			Self::_fund_feed(feed_funder, feed_id, query_id, amount)
 		}
 
 		/// Initializes data feed parameters.
@@ -554,17 +670,77 @@ pub mod pallet {
 		/// - `amount`: Optional initial amount to fund it with.
 		#[pallet::call_index(4)]
 		pub fn setup_data_feed(
-			_origin: OriginFor<T>,
-			_query_id: QueryIdOf<T>,
-			_reward: AmountOf<T>,
-			_start_time: TimestampOf<T>,
-			_interval: u32,
-			_window: u32,
-			_price_threshold: u16,
-			_reward_increase_per_second: AmountOf<T>,
-			_query_data: QueryDataOf<T>,
-			_amount: Option<AmountOf<T>>,
+			origin: OriginFor<T>,
+			query_id: QueryIdOf<T>,
+			reward: AmountOf<T>,
+			start_time: TimestampOf<T>,
+			interval: TimestampOf<T>,
+			window: TimestampOf<T>,
+			price_threshold: u16,
+			reward_increase_per_second: AmountOf<T>,
+			query_data: QueryDataOf<T>,
+			amount: AmountOf<T>,
 		) -> DispatchResult {
+			let feed_creator = ensure_signed(origin)?;
+			ensure!(
+				query_id == HasherOf::<T>::hash(&query_data.as_ref()),
+				Error::<T>::InvalidQueryId
+			);
+			let feed_id = HasherOf::<T>::hash(
+				&contracts::ABI::default()
+					.fixed_bytes(query_id.as_ref())
+					.uint(reward)
+					.uint(start_time.saturated_into::<u128>())
+					.uint(interval.saturated_into::<u128>())
+					.uint(window.saturated_into::<u128>())
+					.uint(price_threshold as u128)
+					.uint(reward_increase_per_second.into())
+					.encode(),
+			);
+			let feed = <DataFeeds<T>>::get(query_id, feed_id);
+			ensure!(feed.is_none(), Error::<T>::FeedAlreadyExists);
+			ensure!(reward > <AmountOf<T>>::default(), Error::<T>::InvalidReward);
+			ensure!(interval > <TimestampOf<T>>::default(), Error::<T>::InvalidInterval);
+			ensure!(window < interval, Error::<T>::InvalidWindow);
+
+			let feed = FeedDetailsOf::<T> {
+				reward,
+				balance: <AmountOf<T>>::default(),
+				start_time,
+				interval,
+				window,
+				price_threshold,
+				reward_increase_per_second,
+				feeds_with_funding_index: 0,
+			};
+			<CurrentFeeds<T>>::try_mutate(query_id, |maybe| -> Result<(), DispatchError> {
+				Ok(match maybe {
+					None => {
+						let mut feeds = BoundedVec::default();
+						feeds.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
+						*maybe = Some(feeds);
+					},
+					Some(feeds) => {
+						feeds.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
+					},
+				})
+			})?;
+			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
+			Self::store_data(query_id, &query_data);
+			<DataFeeds<T>>::insert(
+				query_id,
+				feed_id,
+				FeedOf::<T> { details: feed, reward_claimed: BoundedBTreeMap::default() },
+			);
+			Self::deposit_event(Event::NewDataFeed {
+				query_id,
+				feed_id,
+				query_data,
+				feed_creator: feed_creator.clone(),
+			});
+			if amount > <AmountOf<T>>::default() {
+				Self::_fund_feed(feed_creator, feed_id, query_id, amount)?;
+			}
 			Ok(())
 		}
 
@@ -632,19 +808,19 @@ pub mod pallet {
 				Self::get_current_tip(query_id) > <AmountOf<T>>::default()
 			{
 				let mut len: u32 = 0;
-				<QueryIdsWithFunding<T>>::try_mutate(|maybe| match maybe {
-					Some(query_ids) => {
-						query_ids.try_push(query_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-						len = query_ids.len() as u32;
-						Ok::<(), Error<T>>(())
-					},
-					None => {
-						*maybe = Some(
-							BoundedVec::try_from(vec![query_id])
-								.map_err(|_| Error::<T>::MaxFeedsFunded)?,
-						);
-						Ok(())
-					},
+				<QueryIdsWithFunding<T>>::try_mutate(|maybe| -> Result<(), DispatchError> {
+					Ok(match maybe {
+						Some(query_ids) => {
+							query_ids.try_push(query_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
+							len = query_ids.len() as u32;
+						},
+						None => {
+							*maybe = Some(
+								BoundedVec::try_from(vec![query_id])
+									.map_err(|_| Error::<T>::MaxFeedsFunded)?,
+							);
+						},
+					})
 				})?;
 				<QueryIdsWithFundingIndex<T>>::set(query_id, Some(len));
 			}
@@ -717,11 +893,11 @@ pub mod pallet {
 			// Require reporter to abide by given reporting lock
 			let timestamp = T::Time::now();
 			ensure!(
-				// todo: refactor
-				(timestamp - staker.reporter_last_timestamp)
+				// todo: refactor to remove saturated_into()
+				(timestamp.saturating_sub(staker.reporter_last_timestamp))
 					.saturated_into::<u128>()
-					.saturating_mul(1000) >
-					(T::ReportingLock::get().saturated_into::<u128>().saturating_mul(1000))
+					.saturating_mul(1_000) >
+					(T::ReportingLock::get().saturated_into::<u128>().saturating_mul(1_000))
 						.checked_div(
 							staker
 								.staked_balance
@@ -741,7 +917,7 @@ pub mod pallet {
 			ensure!(
 				report
 					.as_ref()
-					.map_or(true, |r| r.reporter_by_timestamp.contains_key(&timestamp)),
+					.map_or(true, |r| !r.reporter_by_timestamp.contains_key(&timestamp)),
 				Error::<T>::TimestampAlreadyReported
 			);
 
@@ -784,7 +960,7 @@ pub mod pallet {
 
 			// Update last oracle value and number of values submitted by a reporter
 			<TimeOfLastNewValue<T>>::set(Some(timestamp));
-			staker.reports_submitted += 1;
+			staker.reports_submitted = staker.reports_submitted.saturating_add(1);
 			staker
 				.reports_submitted_by_query_id
 				.try_insert(
@@ -1013,7 +1189,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		fn send_xcm(
 			destination: impl Into<MultiLocation>,
-			mut message: Xcm<()>,
+			message: Xcm<()>,
 		) -> Result<(), Error<T>> {
 			let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
 			<T::Xcm as traits::Xcm>::send_xcm(interior, destination, message).map_err(|e| match e {
@@ -1061,8 +1237,56 @@ impl<T: Config> Pallet<T> {
 		todo!()
 	}
 
-	fn add_staking_rewards(amount: AmountOf<T>) {
-		// todo: allocate to sub-account, separate from xcm fees
+	fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
+		let pallet_id = T::PalletId::get();
+		let source = pallet_id.into_account_truncating();
+		let dest = pallet_id.into_sub_account_truncating(b"staking");
+		T::Token::transfer(&source, &dest, amount, true)?;
+		Ok(())
+	}
+
+	fn _fund_feed(
+		feed_funder: AccountIdOf<T>,
+		feed_id: FeedIdOf<T>,
+		query_id: QueryIdOf<T>,
+		amount: AmountOf<T>,
+	) -> DispatchResult {
+		let Some(mut feed) = <DataFeeds<T>>::get(query_id, feed_id) else {
+			return Err(Error::<T>::InvalidFeed.into());
+		};
+
+		ensure!(amount > <AmountOf<T>>::default(), Error::<T>::InvalidAmount);
+		feed.details.balance = feed.details.balance.saturating_add(amount);
+		T::Token::transfer(
+			&feed_funder,
+			&T::PalletId::get().into_account_truncating(),
+			amount,
+			true,
+		)?;
+		// Add to array of feeds with funding
+		if feed.details.feeds_with_funding_index == 0 &&
+			feed.details.balance > <AmountOf<T>>::default()
+		{
+			let index = <FeedsWithFunding<T>>::try_mutate(
+				|feeds_with_funding| -> Result<usize, DispatchError> {
+					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
+					Ok(feeds_with_funding.len())
+				},
+			)?;
+			feed.details.feeds_with_funding_index = index.saturated_into::<u32>();
+		}
+		let feed_details = feed.details.clone();
+		<DataFeeds<T>>::insert(query_id, feed_id, feed);
+		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_add(amount));
+		Self::deposit_event(Event::DataFeedFunded {
+			feed_id,
+			query_id,
+			amount,
+			feed_funder,
+			feed_details,
+		});
+
+		Ok(())
 	}
 
 	/// Read current onetime tip by query identifier.
@@ -1128,6 +1352,12 @@ impl<T: Config> Pallet<T> {
 				Self::retrieve_data(query_id, timestamp_retrieved)
 					.and_then(|value| Some((value, timestamp_retrieved)))
 			})
+	}
+
+	pub fn get_data_feed(feed_id: FeedIdOf<T>) -> Option<FeedDetailsOf<T>> {
+		<QueryIdFromDataFeedId<T>>::get(feed_id)
+			.and_then(|query_id| <DataFeeds<T>>::get(query_id, feed_id))
+			.map(|f| f.details)
 	}
 
 	fn get_index_for_data_before(
@@ -1325,6 +1555,81 @@ impl<T: Config> Pallet<T> {
 
 	pub fn get_reporting_lock() -> TimestampOf<T> {
 		T::ReportingLock::get()
+	}
+
+	fn get_reward_amount(
+		feed_id: FeedIdOf<T>,
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Result<AmountOf<T>, Error<T>> {
+		ensure!(
+			T::Time::now().saturating_sub(timestamp) < T::ClaimPeriod::get(),
+			Error::<T>::ClaimPeriodExpired
+		);
+
+		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
+		ensure!(!feed.reward_claimed.get(&timestamp).unwrap_or(&false), Error::TipAlreadyClaimed);
+		let n = (timestamp.saturating_sub(feed.details.start_time))
+			.checked_div(&feed.details.interval)
+			.ok_or(Error::<T>::IntervalCalculationError)?; // finds closest interval n to timestamp
+		let c = feed.details.start_time + feed.details.interval * n; // finds start timestamp c of interval n
+		let value_retrieved = Self::retrieve_data(query_id, timestamp);
+		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
+		let (value_retrieved_before, timestamp_before) =
+			Self::get_data_before(query_id, timestamp).unwrap_or_default();
+		let mut price_change = 0; // price change from last value to current value
+		if feed.details.price_threshold != 0 {
+			let v1 = T::ValueConverter::convert(
+				value_retrieved.expect("value retrieved checked above; qed"),
+			)
+			.ok_or(Error::<T>::ValueConversionError)?;
+			let v2 = T::ValueConverter::convert(value_retrieved_before)
+				.ok_or(Error::<T>::ValueConversionError)?;
+			if v2 == <AmountOf<T>>::default() {
+				price_change = 10_000;
+			} else if v1 >= v2 {
+				price_change = (<AmountOf<T>>::from(10_000u16)
+					.saturating_mul(v1.saturating_sub(v2)))
+				.checked_div(&v2)
+				.ok_or(Error::<T>::PriceChangeCalculationError)?
+				.saturated_into();
+			} else {
+				price_change = (<AmountOf<T>>::from(10_000u16)
+					.saturating_mul(v2.saturating_sub(v1)))
+				.checked_div(&v2)
+				.ok_or(Error::<T>::PriceChangeCalculationError)?
+				.saturated_into();
+			}
+		}
+		let mut reward_amount = feed.details.reward;
+		let time_diff = timestamp.saturating_sub(c); // time difference between report timestamp and start of interval
+
+		// ensure either report is first within a valid window, or price change threshold is met
+		if time_diff < feed.details.window && timestamp_before < c {
+			// add time based rewards if applicable
+			reward_amount = reward_amount.saturating_add(
+				feed.details.reward_increase_per_second.saturating_mul(time_diff.into()),
+			);
+		} else {
+			ensure!(price_change > feed.details.price_threshold, Error::<T>::PriceThresholdNotMet);
+		}
+
+		if feed.details.balance < reward_amount {
+			reward_amount = feed.details.balance;
+		}
+		Ok(reward_amount)
+
+		// if (_feed.details.priceThreshold != 0) {
+		// 	uint256 _v1 = _bytesToUint(_valueRetrieved);
+		// 	uint256 _v2 = _bytesToUint(_valueRetrievedBefore);
+		// 	if (_v2 == 0) {
+		// 		_priceChange = 10000;
+		// 	} else if (_v1 >= _v2) {
+		// 		_priceChange = (10000 * (_v1 - _v2)) / _v2;
+		// 	} else {
+		// 		_priceChange = (10000 * (_v2 - _v1)) / _v2;
+		// 	}
+		// }
 	}
 
 	pub fn get_stake_amount() -> AmountOf<T> {

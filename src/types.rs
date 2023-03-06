@@ -11,7 +11,9 @@ pub(crate) type DisputeIdOf<T> = <T as Config>::DisputeId;
 pub(crate) type DisputeOf<T> =
 	governance::Dispute<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, ValueOf<T>>;
 pub(crate) type FeedIdOf<T> = <T as Config>::Hash;
-pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AccountIdOf<T>, TimestampOf<T>>;
+pub(crate) type FeedOf<T> =
+	autopay::Feed<AmountOf<T>, TimestampOf<T>, <T as Config>::MaxRewardClaims>;
+pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>, TimestampOf<T>>;
 pub(crate) type HashOf<T> = <T as Config>::Hash;
 pub(crate) type HasherOf<T> = <T as Config>::Hasher;
 pub(crate) type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
@@ -43,30 +45,31 @@ pub mod autopay {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct Feed<Amount, Timestamp, MaxRewards: Get<u32>> {
-		details: FeedDetails<Amount, Timestamp>,
+	#[scale_info(skip_type_params(MaxRewardClaims))]
+	pub struct Feed<Amount, Timestamp, MaxRewardClaims: Get<u32>> {
+		pub(crate) details: FeedDetails<Amount, Timestamp>,
 		/// Tracks which tips were already paid out.
-		reward_claimed: BoundedBTreeMap<Timestamp, bool, MaxRewards>,
+		pub(crate) reward_claimed: BoundedBTreeMap<Timestamp, bool, MaxRewardClaims>,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub struct FeedDetails<Amount, Timestamp> {
 		/// Amount paid for each eligible data submission.
-		reward: Amount,
+		pub(crate) reward: Amount,
 		/// Account remaining balance.
-		balance: Amount,
+		pub(crate) balance: Amount,
 		/// Time of first payment window.
-		start_time: Timestamp,
+		pub(crate) start_time: Timestamp,
 		/// Time between pay periods.
-		interval: u8,
+		pub(crate) interval: Timestamp,
 		/// Amount of time data can be submitted per interval.
-		window: u8,
+		pub(crate) window: Timestamp,
 		/// Change in price necessitating an update 100 = 1%.
-		price_threshold: u16,
+		pub(crate) price_threshold: u16,
 		/// Amount reward increases per second within the window (0 for flat rewards).
-		reward_increase_per_second: Amount,
+		pub(crate) reward_increase_per_second: Amount,
 		/// Index plus one of data feed identifier in FeedsWithFunding storage (0 if not included).
-		feeds_with_funding_index: u32,
+		pub(crate) feeds_with_funding_index: u32,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]

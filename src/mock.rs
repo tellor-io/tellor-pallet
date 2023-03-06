@@ -7,10 +7,10 @@ use frame_support::{
 	PalletId,
 };
 use frame_system as system;
-use sp_core::{ConstU32, H256};
+use sp_core::{bounded::BoundedVec, ConstU32, H256};
 use sp_runtime::{
 	testing::Header,
-	traits::{BlakeTwo256, IdentityLookup, Keccak256},
+	traits::{BlakeTwo256, Convert, IdentityLookup, Keccak256},
 };
 use sp_std::cell::RefCell;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -18,6 +18,8 @@ use xcm::latest::prelude::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
+
+pub(crate) const UNIT: u64 = 1_000_000_000_000;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -43,7 +45,7 @@ impl system::Config for Test {
 	type BlockNumber = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	type AccountId = u64;
+	type AccountId = u128; // u64 is not enough to hold bytes used to generate bounty account
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
 	type RuntimeEvent = RuntimeEvent;
@@ -82,41 +84,53 @@ impl pallet_timestamp::Config for Test {
 const PARA_ID: u32 = 2000;
 
 parameter_types! {
-	pub const TellotPalletId: PalletId = PalletId(*b"py/tellr");
+	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
 	pub TellorRegistry: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
 	pub TellorGovernance: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
 	pub TellorStaking: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
 }
 
-const TWELVE_HOURS_IN_MILLISECONDS: u64 = 43_200_000;
+pub(crate) const HOUR_IN_MILLISECONDS: u64 = 3_600_000;
+const WEEK_IN_MILLISECONDS: u64 = HOUR_IN_MILLISECONDS * 168;
 
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = u64;
 	type DisputeId = u128;
-	type ClaimBuffer = ConstU64<TWELVE_HOURS_IN_MILLISECONDS>;
-	type Fee = ();
+	type ClaimBuffer = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
+	type ClaimPeriod = ConstU64<{ 4 * WEEK_IN_MILLISECONDS }>;
+	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type Hash = H256;
 	type Hasher = Keccak256;
 	type MaxClaimTimestamps = ConstU32<10>;
-	type MaxFeedsPerQuery = ();
+	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;
 	type MaxQueriesPerReporter = ConstU32<10>;
 	type MaxQueryDataLength = ConstU32<1000>;
+	type MaxRewardClaims = ConstU32<10>;
 	type MaxTimestamps = ConstU32<10>;
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<32>;
 	type MaxVotes = ();
-	type PalletId = TellotPalletId;
+	type PalletId = TellorPalletId;
 	type ParachainId = ();
 	type Registry = TellorRegistry;
 	type ReportingLock = ();
 	type Staking = TellorStaking;
 	type Time = Timestamp;
 	type Token = Balances;
+	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
+}
+
+pub struct ValueConverter;
+impl Convert<BoundedVec<u8, ConstU32<32>>, Option<u64>> for ValueConverter {
+	fn convert(a: BoundedVec<u8, ConstU32<32>>) -> Option<u64> {
+		use codec::Decode;
+		u64::decode(&mut a.as_ref()).ok()
+	}
 }
 
 thread_local! {

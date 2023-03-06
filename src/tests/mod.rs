@@ -82,7 +82,7 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address
 	));
 }
 
-const STAKE_AMOUNT: AmountOf<Test> = 100;
+const STAKE_AMOUNT: AmountOf<Test> = 100 * UNIT;
 fn register_parachain(stake_amount: AmountOf<Test>) {
 	assert_ok!(Tellor::register(RuntimeOrigin::root(), stake_amount, 1000, 1000));
 }
@@ -97,6 +97,10 @@ fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 	])
 }
 
+fn token(amount: impl Into<f64>) -> AmountOf<Test> {
+	(amount.into() * UNIT as f64) as u64
+}
+
 fn uint_value(value: impl Into<Uint>) -> ValueOf<Test> {
 	ethabi::encode(&[Token::Uint(value.into())]).try_into().unwrap()
 }
@@ -107,4 +111,9 @@ fn encodes_spot_price() {
 		"0xa6f013ee236804827b77696d350e9f0ac3e879328f2a3021d473a0b778ad78ac",
 		to_hex(&keccak_256(&spot_price("btc", "usd")), false)
 	)
+}
+
+#[test]
+fn converts_token() {
+	assert_eq!(token(2.97), 2_970_000_000_000)
 }
