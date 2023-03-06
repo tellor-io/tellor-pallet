@@ -228,7 +228,7 @@ pub mod pallet {
 	pub type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedIdOf<T>, QueryIdOf<T>>;
 	#[pallet::storage]
 	pub type QueryIdsWithFunding<T> =
-		StorageValue<_, BoundedVec<QueryIdOf<T>, <T as Config>::MaxFundedFeeds>>;
+		StorageValue<_, BoundedVec<QueryIdOf<T>, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
 	pub type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, u32>;
 	#[pallet::storage]
@@ -502,8 +502,9 @@ pub mod pallet {
 
 			let mut cumulative_reward = AmountOf::<T>::default();
 			for timestamp in timestamps {
-				cumulative_reward = cumulative_reward
-					.saturating_add(Self::get_onetime_tip_amount(query_id, timestamp, &reporter)?);
+				cumulative_reward.saturating_accrue(Self::get_onetime_tip_amount(
+					query_id, timestamp, &reporter,
+				)?);
 			}
 			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
 				.checked_div(&1000u16.into())
@@ -521,22 +522,17 @@ pub mod pallet {
 					Some(index) if index != 0 => {
 						let idx: usize = index as usize - 1;
 						// Replace unfunded feed in array with last element
-						<QueryIdsWithFunding<T>>::mutate(|maybe| match maybe {
-							None => {
-								todo!()
-							},
-							Some(query_ids_with_funding) => {
-								// todo: safe indexing
-								query_ids_with_funding[idx] =
-									query_ids_with_funding[query_ids_with_funding.len() - 1];
-								let query_id_last_funded = query_ids_with_funding[idx];
-								<QueryIdsWithFundingIndex<T>>::set(
-									query_id_last_funded,
-									Some((idx + 1).saturated_into()),
-								);
-								<QueryIdsWithFundingIndex<T>>::remove(query_id);
-								query_ids_with_funding.pop();
-							},
+						<QueryIdsWithFunding<T>>::mutate(|query_ids_with_funding| {
+							// todo: safe indexing
+							query_ids_with_funding[idx] =
+								query_ids_with_funding[query_ids_with_funding.len() - 1];
+							let query_id_last_funded = query_ids_with_funding[idx];
+							<QueryIdsWithFundingIndex<T>>::set(
+								query_id_last_funded,
+								Some((idx + 1).saturated_into()),
+							);
+							<QueryIdsWithFundingIndex<T>>::remove(query_id);
+							query_ids_with_funding.pop();
 						});
 					},
 					_ => {},
@@ -579,8 +575,8 @@ pub mod pallet {
 						Self::get_reporter_by_timestamp(query_id, *timestamp).as_ref(),
 					Error::<T>::InvalidClaimer
 				);
-				cumulative_reward = cumulative_reward
-					.saturating_add(Self::get_reward_amount(feed_id, query_id, *timestamp)?);
+				cumulative_reward
+					.saturating_accrue(Self::_get_reward_amount(feed_id, query_id, *timestamp)?);
 
 				if cumulative_reward >= balance {
 					ensure!(
@@ -807,21 +803,12 @@ pub mod pallet {
 			if <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default() == 0 &&
 				Self::get_current_tip(query_id) > <AmountOf<T>>::default()
 			{
-				let mut len: u32 = 0;
-				<QueryIdsWithFunding<T>>::try_mutate(|maybe| -> Result<(), DispatchError> {
-					Ok(match maybe {
-						Some(query_ids) => {
-							query_ids.try_push(query_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-							len = query_ids.len() as u32;
-						},
-						None => {
-							*maybe = Some(
-								BoundedVec::try_from(vec![query_id])
-									.map_err(|_| Error::<T>::MaxFeedsFunded)?,
-							);
-						},
-					})
-				})?;
+				let len = <QueryIdsWithFunding<T>>::try_mutate(
+					|query_ids| -> Result<u32, DispatchError> {
+						query_ids.try_push(query_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
+						Ok(query_ids.len() as u32)
+					},
+				)?;
 				<QueryIdsWithFundingIndex<T>>::set(query_id, Some(len));
 			}
 			T::Token::transfer(
@@ -1289,6 +1276,15 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
+	/// Read current data feeds.
+	/// # Arguments
+	/// * `query_id` - Identifier of reported data.
+	/// # Returns
+	/// Feed identifiers for query identifier.
+	pub fn get_current_feeds(query_id: QueryIdOf<T>) -> Vec<FeedIdOf<T>> {
+		<CurrentFeeds<T>>::get(query_id).map_or_else(|| Vec::default(), |f| f.to_vec())
+	}
+
 	/// Read current onetime tip by query identifier.
 	/// # Arguments
 	/// * `query_id` - Identifier of reported data.
@@ -1354,10 +1350,63 @@ impl<T: Config> Pallet<T> {
 			})
 	}
 
+	/// Read a specific data feed.
+	/// # Arguments
+	/// * `query_id` - Unique feed identifier of parameters.
+	/// # Returns
+	/// Details of the specified feed.
 	pub fn get_data_feed(feed_id: FeedIdOf<T>) -> Option<FeedDetailsOf<T>> {
 		<QueryIdFromDataFeedId<T>>::get(feed_id)
 			.and_then(|query_id| <DataFeeds<T>>::get(query_id, feed_id))
 			.map(|f| f.details)
+	}
+
+	/// Read currently funded feed details.
+	/// # Arguments
+	/// * `query_id` - Unique feed identifier of parameters.
+	/// # Returns
+	/// Details of the specified feed.
+	pub fn get_funded_feed_details(
+		feed_id: FeedIdOf<T>,
+	) -> Vec<(FeedDetailsOf<T>, QueryDataOf<T>)> {
+		Self::get_funded_feeds()
+			.into_iter()
+			.filter_map(|feed_id| {
+				Self::get_data_feed(feed_id).and_then(|feed_detail| {
+					Self::get_query_id_from_feed_id(feed_id).and_then(|query_id| {
+						Self::get_query_data(query_id)
+							.and_then(|query_data| Some((feed_detail, query_data)))
+					})
+				})
+			})
+			.collect()
+	}
+
+	/// Read currently funded feeds.
+	/// # Returns
+	/// The currently funded feeds
+	pub fn get_funded_feeds() -> Vec<FeedIdOf<T>> {
+		<FeedsWithFunding<T>>::get().to_vec()
+	}
+
+	/// Read query identifiers with current one-time tips.
+	/// # Returns
+	/// Query identifiers with current one-time tips.
+	pub fn get_funded_query_ids() -> Vec<QueryIdOf<T>> {
+		<QueryIdsWithFunding<T>>::get().to_vec()
+	}
+
+	/// Read currently funded single tips with query data.
+	/// # Returns
+	/// The current single tips.
+	pub fn get_funded_single_tips_info() -> Vec<(QueryDataOf<T>, AmountOf<T>)> {
+		Self::get_funded_query_ids()
+			.into_iter()
+			.filter_map(|query_id| {
+				Self::get_query_data(query_id)
+					.and_then(|query_data| Some((query_data, Self::get_current_tip(query_id))))
+			})
+			.collect()
 	}
 
 	fn get_index_for_data_before(
@@ -1541,8 +1590,48 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
+	/// Read the number of past tips for a query identifier.
+	/// # Arguments
+	/// * `query_id` - Identifier of reported data.
+	/// # Returns
+	/// The number of past tips.
+	pub fn get_past_tip_count(query_id: QueryIdOf<T>) -> u32 {
+		<Tips<T>>::get(query_id).map_or(0, |t| t.len() as u32)
+	}
+
+	/// Read the past tips for a query identifier.
+	/// # Arguments
+	/// * `query_id` - Identifier of reported data.
+	/// # Returns
+	/// All past tips.
+	pub fn get_past_tips(query_id: QueryIdOf<T>) -> Vec<Tip<AmountOf<T>, TimestampOf<T>>> {
+		<Tips<T>>::get(query_id).map_or_else(|| Vec::default(), |t| t.to_vec())
+	}
+
+	/// Read a past tip for a query identifier and index.
+	/// # Arguments
+	/// * `query_id` - Identifier of reported data.
+	/// * `index` - The index of the tip.
+	/// # Returns
+	/// The past tip, if found.
+	pub fn get_past_tip_by_index(
+		query_id: QueryIdOf<T>,
+		index: u32,
+	) -> Option<Tip<AmountOf<T>, TimestampOf<T>>> {
+		<Tips<T>>::get(query_id).and_then(|t| t.get(index as usize).cloned())
+	}
+
 	pub fn get_query_data(query_id: QueryIdOf<T>) -> Option<QueryDataOf<T>> {
 		<QueryData<T>>::get(query_id)
+	}
+
+	/// Look up a query identifier from a data feed identifier.
+	/// # Arguments
+	/// * `feed_id` - Data feed unique identifier.
+	/// # Returns
+	/// Corresponding query identifier, if found.
+	pub fn get_query_id_from_feed_id(feed_id: FeedIdOf<T>) -> Option<QueryIdOf<T>> {
+		<QueryIdFromDataFeedId<T>>::get(feed_id)
 	}
 
 	pub fn get_reporter_by_timestamp(
@@ -1557,7 +1646,7 @@ impl<T: Config> Pallet<T> {
 		T::ReportingLock::get()
 	}
 
-	fn get_reward_amount(
+	fn _get_reward_amount(
 		feed_id: FeedIdOf<T>,
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
@@ -1618,18 +1707,77 @@ impl<T: Config> Pallet<T> {
 			reward_amount = feed.details.balance;
 		}
 		Ok(reward_amount)
+	}
 
-		// if (_feed.details.priceThreshold != 0) {
-		// 	uint256 _v1 = _bytesToUint(_valueRetrieved);
-		// 	uint256 _v2 = _bytesToUint(_valueRetrievedBefore);
-		// 	if (_v2 == 0) {
-		// 		_priceChange = 10000;
-		// 	} else if (_v1 >= _v2) {
-		// 		_priceChange = (10000 * (_v1 - _v2)) / _v2;
-		// 	} else {
-		// 		_priceChange = (10000 * (_v2 - _v1)) / _v2;
-		// 	}
-		// }
+	/// Read potential reward for a set of oracle submissions.
+	/// # Arguments
+	/// * `feed_id` - Data feed unique identifier.
+	/// * `query_id` - Identifier of reported data.
+	/// * `timestamps` - Timestamps of oracle submissions.
+	/// # Returns
+	/// Potential reward for a set of oracle submissions.
+	pub fn get_reward_amount(
+		feed_id: FeedIdOf<T>,
+		query_id: QueryIdOf<T>,
+		timestamps: Vec<TimestampOf<T>>,
+	) -> AmountOf<T> {
+		// todo: use boundedvec for timestamps
+
+		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return <AmountOf<T>>::default()};
+		let mut cumulative_reward = <AmountOf<T>>::default();
+		for timestamp in timestamps {
+			cumulative_reward.saturating_accrue(
+				Self::_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
+			)
+		}
+		if cumulative_reward > feed.details.balance {
+			cumulative_reward = feed.details.balance;
+		}
+		cumulative_reward.saturating_reduce(
+			(cumulative_reward.saturating_mul(T::Fee::get().into())) / 1000u16.into(),
+		);
+		cumulative_reward
+	}
+
+	/// Read whether a reward has been claimed.
+	/// # Arguments
+	/// * `feed_id` - Data feed unique identifier.
+	/// * `query_id` - Identifier of reported data.
+	/// * `timestamp` - Timestamp of reported data.
+	/// # Returns
+	/// Whether a reward has been claimed, if timestamp exists.
+	pub fn get_reward_claimed_status(
+		feed_id: FeedIdOf<T>,
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<bool> {
+		<DataFeeds<T>>::get(query_id, feed_id)
+			.and_then(|f| f.reward_claimed.get(&timestamp).copied())
+	}
+
+	/// Read whether rewards have been claimed.
+	/// # Arguments
+	/// * `feed_id` - Data feed unique identifier.
+	/// * `query_id` - Identifier of reported data.
+	/// * `timestamps` - Timestamps of oracle submissions.
+	/// # Returns
+	/// Whether rewards have been claimed.
+	pub fn get_reward_claim_status_list(
+		feed_id: FeedIdOf<T>,
+		query_id: QueryIdOf<T>,
+		timestamps: Vec<TimestampOf<T>>,
+	) -> Vec<Option<bool>> {
+		// todo: use boundedvec for timestamps
+		<DataFeeds<T>>::get(query_id, feed_id).map_or_else(
+			|| Vec::default(),
+			|feed| {
+				let x = timestamps
+					.into_iter()
+					.map(|timestamp| feed.reward_claimed.get(&timestamp).copied())
+					.collect();
+				x
+			},
+		)
 	}
 
 	pub fn get_stake_amount() -> AmountOf<T> {
@@ -1645,6 +1793,15 @@ impl<T: Config> Pallet<T> {
 		index: usize,
 	) -> Option<TimestampOf<T>> {
 		<Reports<T>>::get(query_id).and_then(|report| report.timestamps.get(index).copied())
+	}
+
+	/// Read the total amount of tips paid by a user.
+	/// # Arguments
+	/// * `user` - Address of user to query.
+	/// # Returns
+	/// Total amount of tips paid by a user.
+	pub fn get_tips_by_address(user: AccountIdOf<T>) -> AmountOf<T> {
+		<UserTipsTotal<T>>::get(user)
 	}
 
 	pub fn get_total_stake_amount() -> AmountOf<T> {

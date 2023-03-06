@@ -2,18 +2,18 @@ use codec::{Decode, Encode};
 use sp_std::vec::Vec;
 use tellor::FeedDetails;
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Debug, Decode, Eq, PartialEq)]
 pub struct FeedDetailsWithQueryData<Amount, Timestamp> {
 	/// Feed details for feed identifier with funding.
-	details: FeedDetails<Amount, Timestamp>,
+	pub details: FeedDetails<Amount, Timestamp>,
 	/// Query data for requested data
-	query_data: Vec<u8>,
+	pub query_data: Vec<u8>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Debug, Decode, Eq, PartialEq)]
 pub struct SingleTipWithQueryData<Amount> {
 	/// Query data with single tip for requested data.
-	query_data: Vec<u8>,
+	pub query_data: Vec<u8>,
 	/// Reward amount for request.
-	tip: Amount,
+	pub tip: Amount,
 }

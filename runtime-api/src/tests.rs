@@ -1,4 +1,7 @@
-use crate::TellorOracle;
+use crate::{
+	autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData},
+	TellorAutoPay, TellorOracle,
+};
 use codec::Encode;
 use frame_support::{
 	parameter_types,
@@ -14,6 +17,8 @@ use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
+use tellor::{FeedDetails, Tip};
+use xcm::latest::prelude::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -23,6 +28,7 @@ type Amount = u64;
 type BlockNumber = u64;
 type QueryId = H256;
 type Moment = u64;
+type FeedId = H256;
 type StakeInfo =
 	tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter, QueryId, Moment>;
 type Value = BoundedVec<u8, ConstU32<100>>;
@@ -83,11 +89,17 @@ impl pallet_timestamp::Config for Test {
 	type MinimumPeriod = ConstU64<1>;
 	type WeightInfo = ();
 }
+
+parameter_types! {
+	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
+}
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = Amount;
 	type DisputeId = u128;
+	type ClaimBuffer = ();
+	type ClaimPeriod = ();
 	type Fee = ();
 	type Governance = ();
 	type Hash = H256;
@@ -97,21 +109,30 @@ impl tellor::Config for Test {
 	type MaxFundedFeeds = ();
 	type MaxQueriesPerReporter = ConstU32<100>;
 	type MaxQueryDataLength = ();
+	type MaxRewardClaims = ();
 	type MaxTimestamps = ();
 	type MaxTipsPerQuery = ();
 	type MaxValueLength = ConstU32<100>;
 	type MaxVotes = ();
-	type PalletId = TellotPalletId;
+	type PalletId = TellorPalletId;
 	type ParachainId = ();
 	type Registry = ();
 	type ReportingLock = ConstU64<42>;
 	type Staking = ();
 	type Time = Timestamp;
 	type Token = Balances;
-	type Xcm = ();
+	type ValueConverter = ();
+	type Xcm = TestSendXcm;
 }
-parameter_types! {
-	pub const TellotPalletId: PalletId = PalletId(*b"py/tellr");
+pub struct TestSendXcm;
+impl tellor::traits::Xcm for TestSendXcm {
+	fn send_xcm(
+		_interior: impl Into<Junctions>,
+		_dest: impl Into<MultiLocation>,
+		_message: Xcm<()>,
+	) -> Result<(), SendError> {
+		todo!()
+	}
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
@@ -119,6 +140,77 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 mock_impl_runtime_apis! {
+	impl crate::TellorAutoPay<Block, AccountId, Amount, FeedId, QueryId, Moment> for Test {
+		fn get_current_feeds(query_id: QueryId) -> Vec<FeedId>{
+			tellor::Pallet::<Test>::get_current_feeds(query_id)
+		}
+
+		fn get_current_tip(query_id: QueryId) -> Amount {
+			tellor::Pallet::<Test>::get_current_tip(query_id)
+		}
+
+		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount, Moment>> {
+			tellor::Pallet::<Test>::get_data_feed(feed_id)
+		}
+
+		fn get_funded_feed_details(feed_id: FeedId) -> Vec<FeedDetailsWithQueryData<Amount, Moment>> {
+			tellor::Pallet::<Test>::get_funded_feed_details(feed_id).into_iter()
+			.map(|(details, query_data)| FeedDetailsWithQueryData {
+				details: details,
+				query_data: query_data.to_vec()})
+			.collect()
+		}
+
+		fn get_funded_feeds() -> Vec<FeedId> {
+			tellor::Pallet::<Test>::get_funded_feeds()
+		}
+
+		fn get_funded_query_ids() -> Vec<QueryId>{
+			tellor::Pallet::<Test>::get_funded_query_ids()
+		}
+
+		fn get_funded_single_tips_info() -> Vec<SingleTipWithQueryData<Amount>> {
+			tellor::Pallet::<Test>::get_funded_single_tips_info().into_iter()
+			.map(|( query_data, tip)| SingleTipWithQueryData {
+				query_data: query_data.to_vec(),
+				tip
+			})
+			.collect()
+		}
+
+		fn get_past_tip_count(query_id: QueryId) -> u32 {
+			tellor::Pallet::<Test>::get_past_tip_count(query_id)
+		}
+
+		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount, Moment>> {
+			tellor::Pallet::<Test>::get_past_tips(query_id)
+		}
+
+		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount, Moment>>{
+			tellor::Pallet::<Test>::get_past_tip_by_index(query_id, index)
+		}
+
+		fn get_query_id_from_feed_id(feed_id: FeedId) -> Option<QueryId>{
+			tellor::Pallet::<Test>::get_query_id_from_feed_id(feed_id)
+		}
+
+		fn get_reward_amount(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Moment>) -> Amount{
+			tellor::Pallet::<Test>::get_reward_amount(feed_id, query_id, timestamps)
+		}
+
+		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Moment) -> Option<bool>{
+			tellor::Pallet::<Test>::get_reward_claimed_status(feed_id, query_id, timestamp)
+		}
+
+		fn get_reward_claim_status_list(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Moment>) -> Vec<Option<bool>>{
+			tellor::Pallet::<Test>::get_reward_claim_status_list(feed_id, query_id, timestamps)
+		}
+
+		fn get_tips_by_address(user: AccountId) -> Amount {
+			tellor::Pallet::<Test>::get_tips_by_address(user)
+		}
+	}
+
 	impl crate::TellorOracle<Block, AccountId, Amount, BlockNumber, QueryId, StakeInfo, Moment, Value> for Test {
 		fn get_block_number_by_timestamp(query_id: QueryId, timestamp: Moment) -> Option<BlockNumber> {
 			tellor::Pallet::<Test>::get_block_number_by_timestamp(query_id, timestamp)
@@ -152,58 +244,202 @@ mock_impl_runtime_apis! {
 
 const BLOCKID: BlockId<Block> = BlockId::Number(0);
 
-#[test]
-#[should_panic]
-fn gets_block_number_by_timestamp() {
-	new_test_ext().execute_with(|| {
-		assert_eq!(
-			Test.get_block_number_by_timestamp(&BLOCKID, QueryId::random(), Moment::default())
+mod autopay {
+	use super::*;
+
+	#[test]
+	fn get_current_feeds() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_current_feeds(&BLOCKID, QueryId::random()).unwrap(),
+				Vec::default()
+			);
+		});
+	}
+
+	#[test]
+	fn get_current_tip() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_current_tip(&BLOCKID, QueryId::random()).unwrap(), 0);
+		});
+	}
+
+	#[test]
+	fn get_data_feed() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_data_feed(&BLOCKID, FeedId::random()).unwrap(), None);
+		});
+	}
+
+	#[test]
+	fn get_funded_feed_details() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_funded_feed_details(&BLOCKID, FeedId::random()).unwrap(),
+				Vec::default()
+			);
+		});
+	}
+
+	#[test]
+	fn get_funded_feeds() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_funded_feeds(&BLOCKID).unwrap(), Vec::default());
+		});
+	}
+
+	#[test]
+	fn get_funded_query_ids() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_funded_query_ids(&BLOCKID).unwrap(), Vec::default());
+		});
+	}
+
+	#[test]
+	fn get_funded_single_tips_info() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_funded_single_tips_info(&BLOCKID).unwrap(), Vec::default());
+		});
+	}
+
+	#[test]
+	fn get_past_tip_count() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_past_tip_count(&BLOCKID, QueryId::random()).unwrap(), 0);
+		});
+	}
+
+	#[test]
+	fn get_past_tips() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_past_tips(&BLOCKID, QueryId::random()).unwrap(), Vec::default());
+		});
+	}
+
+	#[test]
+	fn get_past_tip_by_index() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_past_tip_by_index(&BLOCKID, QueryId::random(), 0).unwrap(), None);
+		});
+	}
+
+	#[test]
+	fn get_query_id_from_feed_id() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_query_id_from_feed_id(&BLOCKID, FeedId::random()).unwrap(), None);
+		});
+	}
+
+	#[test]
+	fn get_reward_amount() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_reward_amount(&BLOCKID, FeedId::random(), QueryId::random(), vec![])
+					.unwrap(),
+				0
+			);
+		});
+	}
+
+	#[test]
+	fn get_reward_claimed_status() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_reward_claimed_status(
+					&BLOCKID,
+					FeedId::random(),
+					QueryId::random(),
+					Timestamp::get()
+				)
 				.unwrap(),
-			None
-		);
-	});
+				None
+			);
+		});
+	}
+
+	#[test]
+	fn get_reward_claim_status_list() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_reward_claim_status_list(
+					&BLOCKID,
+					FeedId::random(),
+					QueryId::random(),
+					vec![]
+				)
+				.unwrap(),
+				Vec::default()
+			);
+		});
+	}
+
+	#[test]
+	fn get_tips_by_address() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_tips_by_address(&BLOCKID, AccountId::default()).unwrap(),
+				Amount::default()
+			);
+		});
+	}
 }
 
-#[test]
-fn gets_current_value() {
-	new_test_ext().execute_with(|| {
-		assert_eq!(Test.get_current_value(&BLOCKID, QueryId::random()).unwrap(), None);
-	});
-}
+mod oracle {
+	use super::*;
 
-#[test]
-fn gets_reporting_lock() {
-	new_test_ext().execute_with(|| {
-		assert_eq!(Test.get_reporting_lock(&BLOCKID).unwrap(), 42);
-	});
-}
+	#[test]
+	#[should_panic]
+	fn get_block_number_by_timestamp() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_block_number_by_timestamp(&BLOCKID, QueryId::random(), Moment::default())
+					.unwrap(),
+				None
+			);
+		});
+	}
 
-#[test]
-fn gets_stake_amount() {
-	new_test_ext().execute_with(|| {
-		assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), 0);
-	});
-}
+	#[test]
+	fn get_current_value() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_current_value(&BLOCKID, QueryId::random()).unwrap(), None);
+		});
+	}
 
-#[test]
-fn gets_staker_info() {
-	new_test_ext().execute_with(|| {
-		assert!(Test.get_staker_info(&BLOCKID, 0).unwrap().is_none());
-	});
-}
+	#[test]
+	fn get_reporting_lock() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_reporting_lock(&BLOCKID).unwrap(), 42);
+		});
+	}
 
-#[test]
-fn gets_total_stake_amount() {
-	new_test_ext().execute_with(|| {
-		assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), 0);
-	});
-}
+	#[test]
+	fn get_stake_amount() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), 0);
+		});
+	}
 
-#[test]
-fn gets_total_stakers() {
-	new_test_ext().execute_with(|| {
-		assert_eq!(Test.get_total_stakers(&BLOCKID).unwrap(), 0);
-	});
+	#[test]
+	fn get_staker_info() {
+		new_test_ext().execute_with(|| {
+			assert!(Test.get_staker_info(&BLOCKID, 0).unwrap().is_none());
+		});
+	}
+
+	#[test]
+	fn get_total_stake_amount() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), 0);
+		});
+	}
+
+	#[test]
+	fn get_total_stakers() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_total_stakers(&BLOCKID).unwrap(), 0);
+		});
+	}
 }
 
 #[test]
