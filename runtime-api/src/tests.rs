@@ -220,8 +220,36 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_current_value(query_id)
 		}
 
+		fn get_data_before(query_id: QueryId, timestamp: Moment) -> Option<(Value, Moment)>{
+			tellor::Pallet::<Test>::get_data_before(query_id, timestamp)
+		}
+
+		fn get_new_value_count_by_query_id(query_id: QueryId) -> u32 {
+			tellor::Pallet::<Test>::get_new_value_count_by_query_id(query_id) as u32
+		}
+
+		fn get_report_details(query_id: QueryId, timestamp: Moment) -> Option<(AccountId, bool)>{
+			tellor::Pallet::<Test>::get_report_details(query_id, timestamp)
+		}
+
+		fn get_reporter_by_timestamp(query_id: QueryId, timestamp: Moment) -> Option<AccountId>{
+			tellor::Pallet::<Test>::get_reporter_by_timestamp(query_id, timestamp)
+		}
+
+		fn get_reporter_last_timestamp(reporter: AccountId) -> Option<Moment>{
+			tellor::Pallet::<Test>::get_reporter_last_timestamp(reporter)
+		}
+
 		fn get_reporting_lock() -> Moment {
 			tellor::Pallet::<Test>::get_reporting_lock()
+		}
+
+		fn get_reports_submitted_by_address(reporter: AccountId) -> u128 {
+			tellor::Pallet::<Test>::get_reports_submitted_by_address(reporter)
+		}
+
+		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u128 {
+			tellor::Pallet::<Test>::get_reports_submitted_by_address_and_query_id(reporter, query_id)
 		}
 
 		fn get_stake_amount() -> Amount {
@@ -232,12 +260,36 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_staker_info(staker)
 		}
 
+		fn get_time_of_last_new_value() -> Option<Moment> {
+			tellor::Pallet::<Test>::get_time_of_last_new_value()
+		}
+
+		fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Moment>{
+			tellor::Pallet::<Test>::get_timestamp_by_query_id_and_index(query_id, index as usize)
+		}
+
+		fn get_index_for_data_before(query_id: QueryId, timestamp: Moment) -> Option<u32> {
+			tellor::Pallet::<Test>::get_index_for_data_before(query_id, timestamp).map(|index| index as u32)
+		}
+
+		fn get_timestamp_index_by_timestamp(query_id: QueryId, timestamp: Moment) -> Option<u32> {
+			tellor::Pallet::<Test>::get_timestamp_index_by_timestamp(query_id, timestamp)
+		}
+
 		fn get_total_stake_amount() -> Amount {
 			tellor::Pallet::<Test>::get_total_stake_amount()
 		}
 
 		fn get_total_stakers() -> u128 {
 			tellor::Pallet::<Test>::get_total_stakers()
+		}
+
+		fn is_in_dispute(query_id: QueryId, timestamp: Moment) -> bool{
+			tellor::Pallet::<Test>::is_in_dispute(query_id, timestamp)
+		}
+
+		fn retrieve_data(query_id: QueryId, timestamp: Moment) -> Option<Value>{
+			tellor::Pallet::<Test>::retrieve_data(query_id, timestamp)
 		}
 	}
 }
@@ -407,9 +459,85 @@ mod oracle {
 	}
 
 	#[test]
+	fn get_data_before() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_data_before(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
+				None
+			);
+		});
+	}
+
+	#[test]
+	fn get_new_value_count_by_query_id() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_new_value_count_by_query_id(&BLOCKID, QueryId::random()).unwrap(),
+				0
+			);
+		});
+	}
+
+	#[test]
+	fn get_report_details() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_report_details(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
+				None
+			);
+		});
+	}
+
+	#[test]
+	fn get_reporter_by_timestamp() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_reporter_by_timestamp(&BLOCKID, QueryId::random(), Moment::default())
+					.unwrap(),
+				None
+			);
+		});
+	}
+
+	#[test]
+	fn get_reporter_last_timestamp() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_reporter_last_timestamp(&BLOCKID, AccountId::default()).unwrap(),
+				None
+			);
+		});
+	}
+
+	#[test]
 	fn get_reporting_lock() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(Test.get_reporting_lock(&BLOCKID).unwrap(), 42);
+		});
+	}
+
+	#[test]
+	fn get_reports_submitted_by_address() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_reports_submitted_by_address(&BLOCKID, AccountId::default()).unwrap(),
+				0
+			);
+		});
+	}
+
+	#[test]
+	fn get_reports_submitted_by_address_and_query_id() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_reports_submitted_by_address_and_query_id(
+					&BLOCKID,
+					AccountId::default(),
+					QueryId::random()
+				)
+				.unwrap(),
+				0
+			);
 		});
 	}
 
@@ -428,6 +556,44 @@ mod oracle {
 	}
 
 	#[test]
+	fn get_time_of_last_new_value() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_time_of_last_new_value(&BLOCKID).unwrap(), None);
+		});
+	}
+
+	#[test]
+	fn get_timestamp_by_query_id_and_index() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_timestamp_by_query_id_and_index(&BLOCKID, QueryId::random(), 0)
+					.unwrap(),
+				None
+			);
+		});
+	}
+
+	#[test]
+	fn get_index_for_data_before() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_index_for_data_before(&BLOCKID, QueryId::random(), 0).unwrap(),
+				None
+			);
+		});
+	}
+
+	#[test]
+	fn get_timestamp_index_by_timestamp() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_timestamp_index_by_timestamp(&BLOCKID, QueryId::random(), 0).unwrap(),
+				None
+			);
+		});
+	}
+
+	#[test]
 	fn get_total_stake_amount() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), 0);
@@ -438,6 +604,26 @@ mod oracle {
 	fn get_total_stakers() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(Test.get_total_stakers(&BLOCKID).unwrap(), 0);
+		});
+	}
+
+	#[test]
+	fn is_in_dispute() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.is_in_dispute(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
+				false
+			);
+		});
+	}
+
+	#[test]
+	fn retrieve_data() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.retrieve_data(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
+				None
+			);
 		});
 	}
 }

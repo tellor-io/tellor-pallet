@@ -189,7 +189,7 @@ sp_api::decl_runtime_apis! {
 		/// * `reporter` - The identifier of the reporter.
 		/// # Returns
 		/// The number of values submitted by the given reporter.
-		fn get_reports_submitted_by_address(reporter: AccountId) -> u32;
+		fn get_reports_submitted_by_address(reporter: AccountId) -> u128;
 
 		/// Returns the number of values submitted to a specific query identifier by a specific reporter.
 		/// # Arguments
@@ -197,7 +197,7 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of the specific data feed.
 		/// # Returns
 		/// The number of values submitted by the given reporter to the given query identifier.
-		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u32;
+		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u128;
 
 		/// Returns the amount required to report oracle values.
 		/// # Returns
@@ -214,7 +214,7 @@ sp_api::decl_runtime_apis! {
 		/// Returns the timestamp for the last value of any identifier from the oracle.
 		/// # Returns
 		/// The timestamp of the last oracle value.
-		fn get_time_of_last_new_value() -> Timestamp;
+		fn get_time_of_last_new_value() -> Option<Timestamp>;
 
 		/// Gets the timestamp for the value based on their index.
 		/// # Arguments
@@ -238,7 +238,7 @@ sp_api::decl_runtime_apis! {
 		/// * `timestamp` - The timestamp to find within the available timestamps.
 		/// # Returns
 		/// The index of the reporter timestamp within the available timestamps for specific query identifier.
-		fn get_timestamp_index_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> u32;
+		fn get_timestamp_index_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<u32>;
 
 		/// Returns the total amount staked for reporting.
 		/// # Returns

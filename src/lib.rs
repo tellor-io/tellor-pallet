@@ -1338,7 +1338,13 @@ impl<T: Config> Pallet<T> {
 			.and_then(|r| r.value_by_timestamp.last_key_value().and_then(|kv| Some(kv.1.clone())))
 	}
 
-	fn get_data_before(
+	/// Retrieves the latest value for the query identifier before the specified timestamp.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up the value for.
+	/// * `timestamp` - The timestamp before which to search for the latest value.
+	/// # Returns
+	/// The value retrieved and its timestamp, if found.
+	pub fn get_data_before(
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
 	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
@@ -1409,7 +1415,13 @@ impl<T: Config> Pallet<T> {
 			.collect()
 	}
 
-	fn get_index_for_data_before(
+	/// Retrieves latest index of data before the specified timestamp for the query identifier.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up the index for.
+	/// * `timestamp` - The timestamp before which to search for the latest index.
+	/// # Returns
+	/// Whether the index was found along with the latest index found before the supplied timestamp.
+	pub fn get_index_for_data_before(
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
 	) -> Option<usize> {
@@ -1634,6 +1646,32 @@ impl<T: Config> Pallet<T> {
 		<QueryIdFromDataFeedId<T>>::get(feed_id)
 	}
 
+	/// Returns reporter and whether a value was disputed for a given query identifier and timestamp.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up.
+	/// * `timestamp` - The timestamp of the value to look up.
+	/// # Returns
+	/// The reporter who submitted the value and whether the value was disputed, provided a value exists.
+	pub fn get_report_details(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<(AccountIdOf<T>, bool)> {
+		<Reports<T>>::get(query_id).and_then(|report| {
+			report.reporter_by_timestamp.get(&timestamp).and_then(|reporter| {
+				Some((
+					reporter.clone(),
+					report.is_disputed.get(&timestamp).cloned().unwrap_or_default(),
+				))
+			})
+		})
+	}
+
+	/// Returns the reporter who submitted a value for a query identifier at a specific time.
+	/// # Arguments
+	/// * `query_id` - The identifier of the specific data feed.
+	/// * `timestamp` - The timestamp to find a corresponding reporter for.
+	/// # Returns
+	/// Identifier of the reporter who reported the value for the query identifier at the given timestamp.
 	pub fn get_reporter_by_timestamp(
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
@@ -1642,8 +1680,46 @@ impl<T: Config> Pallet<T> {
 			.and_then(|report| report.reporter_by_timestamp.get(&timestamp).cloned())
 	}
 
+	/// Returns the timestamp of the reporter's last submission.
+	/// # Arguments
+	/// * `reporter` - The identifier of the reporter.
+	/// # Returns
+	/// The timestamp of the reporter's last submission, if one exists.
+	pub fn get_reporter_last_timestamp(reporter: AccountIdOf<T>) -> Option<TimestampOf<T>> {
+		<StakerDetails<T>>::get(reporter).map(|stake_info| stake_info.reporter_last_timestamp)
+	}
+
+	/// Returns the reporting lock time, the amount of time a reporter must wait to submit again.
+	/// # Returns
+	/// The reporting lock time.
 	pub fn get_reporting_lock() -> TimestampOf<T> {
 		T::ReportingLock::get()
+	}
+
+	/// Returns the number of values submitted by a specific reporter.
+	/// # Arguments
+	/// * `reporter` - The identifier of the reporter.
+	/// # Returns
+	/// The number of values submitted by the given reporter.
+	pub fn get_reports_submitted_by_address(reporter: AccountIdOf<T>) -> u128 {
+		<StakerDetails<T>>::get(reporter)
+			.map(|stake_info| stake_info.reports_submitted)
+			.unwrap_or_default()
+	}
+
+	/// Returns the number of values submitted to a specific query identifier by a specific reporter.
+	/// # Arguments
+	/// * `reporter` - The identifier of the reporter.
+	/// * `query_id` - Identifier of the specific data feed.
+	/// # Returns
+	/// The number of values submitted by the given reporter to the given query identifier.
+	pub fn get_reports_submitted_by_address_and_query_id(
+		reporter: AccountIdOf<T>,
+		query_id: QueryIdOf<T>,
+	) -> u128 {
+		<StakerDetails<T>>::get(reporter)
+			.and_then(|stake_info| stake_info.reports_submitted_by_query_id.get(&query_id).copied())
+			.unwrap_or_default()
 	}
 
 	fn _get_reward_amount(
@@ -1780,19 +1856,54 @@ impl<T: Config> Pallet<T> {
 		)
 	}
 
+	/// Returns the amount required to report oracle values.
+	/// # Returns
+	/// The stake amount.
 	pub fn get_stake_amount() -> AmountOf<T> {
 		<StakeAmount<T>>::get()
 	}
 
+	/// Returns all information about a staker.
+	/// # Arguments
+	/// * `staker` - The identifier of the staker inquiring about.
+	/// # Returns
+	/// All information about a staker, if found.
 	pub fn get_staker_info(staker: AccountIdOf<T>) -> Option<StakeInfoOf<T>> {
 		<StakerDetails<T>>::get(staker)
 	}
 
+	/// Returns the timestamp for the last value of any identifier from the oracle.
+	/// # Returns
+	/// The timestamp of the last oracle value.
+	pub fn get_time_of_last_new_value() -> Option<TimestampOf<T>> {
+		<TimeOfLastNewValue<T>>::get()
+	}
+
+	/// Gets the timestamp for the value based on their index.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up.
+	/// * `index` - The value index to look up.
+	/// # Returns
+	/// A timestamp if found.
 	pub fn get_timestamp_by_query_id_and_index(
 		query_id: QueryIdOf<T>,
 		index: usize,
 	) -> Option<TimestampOf<T>> {
 		<Reports<T>>::get(query_id).and_then(|report| report.timestamps.get(index).copied())
+	}
+
+	/// Returns the index of a reporter timestamp in the timestamp array for a specific query identifier.
+	/// # Arguments
+	/// * `query_id` - Unique identifier of the data feed.
+	/// * `timestamp` - The timestamp to find within the available timestamps.
+	/// # Returns
+	/// The index of the reporter timestamp within the available timestamps for specific query identifier.
+	pub fn get_timestamp_index_by_timestamp(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<u32> {
+		<Reports<T>>::get(query_id)
+			.and_then(|report| report.timestamp_index.get(&timestamp).copied())
 	}
 
 	/// Read the total amount of tips paid by a user.
@@ -1804,23 +1915,46 @@ impl<T: Config> Pallet<T> {
 		<UserTipsTotal<T>>::get(user)
 	}
 
+	/// Returns the total amount staked for reporting.
+	/// # Returns
+	/// The total amount of token staked.
 	pub fn get_total_stake_amount() -> AmountOf<T> {
 		<TotalStakeAmount<T>>::get()
 	}
 
+	/// Returns the total number of current stakers.
+	/// # Returns
+	/// The total number of current stakers.
 	pub fn get_total_stakers() -> u128 {
 		<TotalStakers<T>>::get()
 	}
 
+	/// Counts the number of values that have been submitted for the query identifier.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up.
+	/// # Returns
+	/// Count of the number of values received for the query identifier.
 	pub fn get_new_value_count_by_query_id(query_id: QueryIdOf<T>) -> usize {
 		<Reports<T>>::get(query_id).map_or(usize::default(), |r| r.timestamps.len())
 	}
 
+	/// Returns whether a given value is disputed.
+	/// # Arguments
+	/// * `query_id` - Unique identifier of the data feed.
+	/// * `timestamp` - Timestamp of the value.
+	/// # Returns
+	/// Whether the value is disputed.
 	pub fn is_in_dispute(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> bool {
 		<Reports<T>>::get(query_id)
 			.map_or(false, |report| report.is_disputed.contains_key(&timestamp))
 	}
 
+	/// Retrieve value from the oracle based on timestamp.
+	/// # Arguments
+	/// * `query_id` - Identifier being requested.
+	/// * `timestamp` - Timestamp to retrieve data/value from.
+	/// # Returns
+	/// Value for timestamp submitted, if found.
 	pub fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<ValueOf<T>> {
 		<Reports<T>>::get(query_id)
 			.and_then(|report| report.value_by_timestamp.get(&timestamp).cloned())
