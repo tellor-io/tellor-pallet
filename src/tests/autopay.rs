@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::{FeedIdOf, QueryDataOf, QueryIdOf, TimestampOf};
+use crate::types::{FeedDetailsOf, FeedIdOf, QueryDataOf, QueryIdOf, TimestampOf, TipOf};
 use frame_support::{
 	assert_noop, assert_ok,
 	traits::{fungible::Inspect, Currency},
@@ -167,26 +167,6 @@ fn claim_tip() {
 			token(0.03)
 		);
 		assert_eq!(Balances::balance(&pallet_id.into_account_truncating()), token(997));
-
-		// // Require Checks
-		// // Advancing time 12 hours to satisfy hardcoded buffer time.
-		// await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, array));//bufferTime not passed
-		// await h.advanceTime(43200);
-		// // Expect throw cause of bad timestamp values.
-		// await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, badArray));
-		// // Testing Events emitted and claiming tips for later checks.
-		// await h.expectThrow(autopay.connect(accounts[2]).claimTip(bytesId, ETH_QUERY_ID, array));//not reporter
-		// await expect(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, array)).to.emit(autopay, "TipClaimed").withArgs(bytesId, ETH_QUERY_ID, (h.toWei("3")), accounts[1].address);
-		// let payerAfter = await autopay.getDataFeed(bytesId);
-		// expect(payerBefore.balance).to.not.equal(payerAfter.balance);
-		// expect(payerAfter.balance).to.equal(h.toWei("997"));
-		// // Updating Balance Checks
-		// // 1% of each tip being shaved for Tellor ~= .01 token/tip claimed
-		// // That's why tellor balance is .03 lower than originally expected.
-		// expect(await tellor.balanceOf(accounts[1].address)).to.equal(h.toWei("2.97"));
-		// // Checking if owner (Tellor) account was updated by fee amount (0.03)
-		// expect(await tellor.balanceOf(await tellor.address)).to.equal(h.toWei("0.03"));
-		// expect(await tellor.balanceOf(autopay.address)).to.equal(h.toWei("997"));
 	});
 }
 
@@ -491,9 +471,54 @@ fn setup_data_feed() {
 }
 
 #[test]
-#[ignore]
 fn get_reward_claimed_status() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let feed_creator = 10;
+	let mut feed_id = H256::zero();
+	let mut timestamp = 0;
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		register_parachain(STAKE_AMOUNT);
+		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+		timestamp = Timestamp::get();
+		Balances::make_free_balance_be(&feed_creator, token(3));
+		feed_id = create_feed(
+			feed_creator,
+			query_id,
+			token(1),
+			timestamp,
+			3600,
+			600,
+			0,
+			0,
+			query_data.clone(),
+			token(2),
+		);
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id,
+			uint_value(3500),
+			0,
+			query_data.clone(),
+		));
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L190
+	ext.execute_with(|| {
+		assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap(), false);
+		next_block_with_timestamp(Timestamp::get() + 86_400 * 1_000);
+		assert_ok!(Tellor::claim_tip(
+			RuntimeOrigin::signed(reporter),
+			feed_id,
+			query_id,
+			bounded_vec![timestamp]
+		));
+		assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap(), true);
+	});
 }
 
 #[test]
@@ -678,51 +703,658 @@ fn claim_onetime_tip() {
 }
 
 #[test]
-#[ignore]
 fn get_data_feed() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let feed_creator = 10;
+	let mut feed_id = H256::zero();
+	let mut timestamp = 0;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		timestamp = Timestamp::get();
+		Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+		feed_id = create_feed(
+			feed_creator,
+			query_id,
+			token(1),
+			timestamp,
+			3600,
+			600,
+			0,
+			0,
+			query_data.clone(),
+			token(1_000),
+		);
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L252
+	ext.execute_with(|| {
+		assert_eq!(
+			Tellor::get_data_feed(feed_id).unwrap(),
+			FeedDetailsOf::<Test> {
+				reward: token(1),
+				balance: token(1_000),
+				start_time: timestamp,
+				interval: 3600,
+				window: 600,
+				price_threshold: 0,
+				reward_increase_per_second: 0,
+				feeds_with_funding_index: 1,
+			}
+		);
+	});
 }
 
 #[test]
-#[ignore]
 fn get_current_tip() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let tipper = 10;
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L262
+	new_test_ext().execute_with(|| {
+		assert_eq!(Tellor::get_current_tip(query_id), 0, "tip amount should be zero");
+		assert_noop!(
+			Tellor::tip(RuntimeOrigin::signed(tipper), query_id, token(100), query_data.clone()),
+			pallet_balances::Error::<Test>::InsufficientBalance
+		);
+		Balances::make_free_balance_be(&tipper, token(100) + 1);
+		assert_ok!(Tellor::tip(RuntimeOrigin::signed(tipper), query_id, token(100), query_data));
+		assert_eq!(Tellor::get_current_tip(query_id), token(100), "tip should be correct");
+	});
 }
 
 #[test]
-#[ignore]
 fn get_past_tips() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let tipper = 10;
+	let reporter = 10;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		register_parachain(STAKE_AMOUNT);
+		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L271
+	ext.execute_with(|| {
+		assert_eq!(Tellor::get_past_tips(query_id), vec![], "should be no tips");
+
+		Balances::make_free_balance_be(&tipper, token(800) + 1);
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(100),
+			query_data.clone()
+		));
+		let timestamp_1 = Timestamp::get();
+		next_block();
+
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id,
+			uint_value(3550),
+			0,
+			query_data.clone(),
+		));
+		next_block();
+
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(200),
+			query_data.clone()
+		));
+		let timestamp_2 = Timestamp::get();
+		next_block();
+
+		assert_eq!(
+			Tellor::get_past_tips(query_id),
+			vec![
+				TipOf::<Test> {
+					amount: token(100),
+					timestamp: timestamp_1,
+					cumulative_tips: token(100)
+				},
+				TipOf::<Test> {
+					amount: token(200),
+					timestamp: timestamp_2,
+					cumulative_tips: token(300)
+				}
+			],
+			"past tips should be correct"
+		);
+
+		let timestamp_3 = Timestamp::get();
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(300),
+			query_data.clone()
+		));
+
+		assert_eq!(
+			Tellor::get_past_tips(query_id),
+			vec![
+				TipOf::<Test> {
+					amount: token(100),
+					timestamp: timestamp_1,
+					cumulative_tips: token(100)
+				},
+				TipOf::<Test> {
+					amount: token(500),
+					timestamp: timestamp_3,
+					cumulative_tips: token(600)
+				}
+			],
+			"past tips should be correct"
+		);
+	});
 }
 
 #[test]
-#[ignore]
 fn get_past_tip_by_index() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let tipper = 10;
+	let reporter = 10;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		register_parachain(STAKE_AMOUNT);
+		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L297
+	ext.execute_with(|| {
+		Balances::make_free_balance_be(&tipper, token(800) + 1);
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(100),
+			query_data.clone()
+		));
+		let timestamp_1 = Timestamp::get();
+		next_block();
+
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id,
+			uint_value(3550),
+			0,
+			query_data.clone(),
+		));
+		next_block();
+
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(200),
+			query_data.clone()
+		));
+		let timestamp_2 = Timestamp::get();
+		next_block();
+
+		assert_eq!(
+			Tellor::get_past_tip_by_index(query_id, 0).unwrap(),
+			TipOf::<Test> {
+				amount: token(100),
+				timestamp: timestamp_1,
+				cumulative_tips: token(100),
+			},
+			"past tip should be correct"
+		);
+		assert_eq!(
+			Tellor::get_past_tip_by_index(query_id, 1).unwrap(),
+			TipOf::<Test> {
+				amount: token(200),
+				timestamp: timestamp_2,
+				cumulative_tips: token(300),
+			},
+			"past tip should be correct"
+		);
+
+		let timestamp_3 = Timestamp::get();
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(300),
+			query_data.clone()
+		));
+
+		assert_eq!(
+			Tellor::get_past_tip_by_index(query_id, 0).unwrap(),
+			TipOf::<Test> {
+				amount: token(100),
+				timestamp: timestamp_1,
+				cumulative_tips: token(100),
+			},
+			"past tip should be correct"
+		);
+		assert_eq!(
+			Tellor::get_past_tip_by_index(query_id, 1).unwrap(),
+			TipOf::<Test> {
+				amount: token(500),
+				timestamp: timestamp_3,
+				cumulative_tips: token(600),
+			},
+			"past tip should be correct"
+		);
+	});
 }
 
 #[test]
-#[ignore]
 fn get_past_tip_count() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let tipper = 10;
+	let reporter = 10;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		register_parachain(STAKE_AMOUNT);
+		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L322
+	ext.execute_with(|| {
+		assert_eq!(Tellor::get_past_tip_count(query_id), 0, "past tip count should be correct");
+		Balances::make_free_balance_be(&tipper, token(300) + 1);
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(100),
+			query_data.clone()
+		));
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id,
+			uint_value(3550),
+			0,
+			query_data.clone(),
+		));
+		next_block();
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(100),
+			query_data.clone()
+		));
+		assert_eq!(Tellor::get_past_tip_count(query_id), 2, "past tip count should be correct");
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id,
+			token(100),
+			query_data.clone()
+		));
+		assert_eq!(Tellor::get_past_tip_count(query_id), 2, "past tip count should be correct");
+	});
 }
 
 #[test]
-#[ignore]
 fn get_funded_feeds() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let feed_creator = 10;
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		register_parachain(STAKE_AMOUNT);
+		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+		Balances::make_free_balance_be(&feed_creator, token(3) + 1);
+		create_feed(
+			feed_creator,
+			query_id,
+			token(1),
+			Timestamp::get(),
+			3600,
+			600,
+			0,
+			0,
+			query_data,
+			token(1),
+		);
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L338
+	ext.execute_with(|| {
+		// Check one existing funded feed
+		let feeds = Tellor::get_funded_feeds();
+		assert_eq!(feeds.len(), 1, "should be one funded feed from previous test");
+		let feed_1 = feeds[0];
+		assert_eq!(
+			Tellor::get_query_id_from_feed_id(feed_1).unwrap(),
+			query_id,
+			"incorrect query ID"
+		);
+
+		// Check adding two funded feeds
+		let query_data_2: QueryDataOf<Test> = spot_price("ksm", "usd").try_into().unwrap();
+		let query_id_2: H256 = keccak_256(query_data_2.as_ref()).into();
+		let feed_2 = create_feed(
+			feed_creator,
+			query_id_2,
+			token(1),
+			Timestamp::get(),
+			600,
+			400,
+			0,
+			0,
+			query_data_2.clone(),
+			token(1),
+		);
+		let query_data_3: QueryDataOf<Test> = spot_price("glmr", "usd").try_into().unwrap();
+		let query_id_3: H256 = keccak_256(query_data_3.as_ref()).into();
+		let feed_3 = create_feed(
+			feed_creator,
+			query_id_3,
+			token(1),
+			Timestamp::get(),
+			600,
+			400,
+			0,
+			0,
+			query_data_3,
+			token(1),
+		);
+		assert_eq!(
+			Tellor::get_funded_feeds(),
+			vec![feed_1, feed_2, feed_3],
+			"should be three funded feeds"
+		);
+
+		next_block();
+
+		// Check remove funded feed
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id_2,
+			uint_value(3500),
+			0,
+			query_data_2,
+		));
+		let timestamp = Timestamp::get();
+		next_block_with_timestamp(timestamp + (43_200 * 1_000) + 1);
+		// Check feed details
+		for (index, feed) in vec![feed_1, feed_2, feed_3]
+			.iter()
+			.map(|feed| Tellor::get_data_feed(*feed).unwrap())
+			.enumerate()
+		{
+			let item = index as u32 + 1;
+			assert_eq!(
+				feed.feeds_with_funding_index, item,
+				"queryId {0} feedsWithFundingIndex should be {0}",
+				item
+			)
+		}
+		assert_ok!(Tellor::claim_tip(
+			RuntimeOrigin::signed(reporter),
+			feed_2,
+			query_id_2,
+			bounded_vec![timestamp]
+		));
+		assert_eq!(Tellor::get_funded_feeds(), vec![feed_1, feed_3], "incorrect funded feeds");
+		for (index, (feed, expected)) in vec![(feed_1, 1), (feed_2, 0), (feed_3, 2)]
+			.iter()
+			.map(|(feed, expected)| (Tellor::get_data_feed(*feed).unwrap(), *expected))
+			.enumerate()
+		{
+			assert_eq!(
+				feed.feeds_with_funding_index,
+				expected,
+				"queryId {} feedsWithFundingIndex should be {}",
+				index + 1,
+				expected
+			)
+		}
+	});
 }
 
 #[test]
-#[ignore]
 fn get_query_id_from_feed_id() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let feed_creator = 10;
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L386
+	new_test_ext().execute_with(|| {
+		let feed_id = create_feed(
+			feed_creator,
+			query_id,
+			token(1),
+			Timestamp::get(),
+			600,
+			400,
+			0,
+			0,
+			query_data,
+			0,
+		);
+		assert_eq!(Tellor::get_query_id_from_feed_id(feed_id).unwrap(), query_id);
+	});
 }
 
 #[test]
-#[ignore]
 fn get_funded_query_ids() {
-	todo!()
+	let query_data_1: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id_1: H256 = keccak_256(query_data_1.as_ref()).into();
+	let query_data_2: QueryDataOf<Test> = spot_price("ksm", "usd").try_into().unwrap();
+	let query_id_2: H256 = keccak_256(query_data_2.as_ref()).into();
+	let query_data_3: QueryDataOf<Test> = spot_price("glmr", "usd").try_into().unwrap();
+	let query_id_3: H256 = keccak_256(query_data_3.as_ref()).into();
+	let query_data_4: QueryDataOf<Test> = spot_price("dev", "usd").try_into().unwrap();
+	let query_id_4: H256 = keccak_256(query_data_4.as_ref()).into();
+	let tipper = 10;
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		register_parachain(STAKE_AMOUNT);
+		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L403
+	ext.execute_with(|| {
+		Balances::make_free_balance_be(&tipper, token(1_000) + 1);
+		assert_eq!(Tellor::get_funded_query_ids(), vec![]);
+		// Tip queryId 1
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id_1,
+			token(1),
+			query_data_1.clone()
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
+		// Tip queryId 1 again
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id_1,
+			token(1),
+			query_data_1.clone()
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
+		// Tip queryId 2
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id_2,
+			token(1),
+			query_data_2.clone()
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1, query_id_2]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
+		// Tip queryId 2 again
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id_2,
+			token(1),
+			query_data_2.clone()
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1, query_id_2]);
+		// Tip queryId 3
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id_3,
+			token(1),
+			query_data_3.clone()
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1, query_id_2, query_id_3]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
+		// Tip queryId 4
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id_4,
+			token(1),
+			query_data_4.clone()
+		));
+		assert_eq!(
+			Tellor::get_funded_query_ids(),
+			vec![query_id_1, query_id_2, query_id_3, query_id_4]
+		);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 4);
+
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id_1,
+			uint_value(3550),
+			0,
+			query_data_1.clone(),
+		));
+		let timestamp_1 = Timestamp::get();
+		next_block();
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id_2,
+			uint_value(3550),
+			0,
+			query_data_2.clone(),
+		));
+		let timestamp_2 = Timestamp::get();
+		next_block();
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id_3,
+			uint_value(3550),
+			0,
+			query_data_3.clone(),
+		));
+		let timestamp_3 = Timestamp::get();
+		next_block();
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id_4,
+			uint_value(3550),
+			0,
+			query_data_4.clone(),
+		));
+		let timestamp_4 = Timestamp::get();
+
+		next_block_with_timestamp(timestamp_4 + (3_600 * 12 * 1_000) + 1);
+
+		assert_ok!(Tellor::claim_onetime_tip(
+			RuntimeOrigin::signed(reporter),
+			query_id_1,
+			bounded_vec![timestamp_1]
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2, query_id_3]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+
+		// Tip queryId 2
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id_2,
+			token(1),
+			query_data_2.clone()
+		));
+
+		assert_ok!(Tellor::claim_onetime_tip(
+			RuntimeOrigin::signed(reporter),
+			query_id_2,
+			bounded_vec![timestamp_2]
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2, query_id_3]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+
+		assert_ok!(Tellor::claim_onetime_tip(
+			RuntimeOrigin::signed(reporter),
+			query_id_3,
+			bounded_vec![timestamp_3]
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+
+		assert_ok!(Tellor::claim_onetime_tip(
+			RuntimeOrigin::signed(reporter),
+			query_id_4,
+			bounded_vec![timestamp_4]
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_2]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 1);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_4), None);
+
+		assert_ok!(Tellor::submit_value(
+			RuntimeOrigin::signed(reporter),
+			query_id_2,
+			uint_value(3550),
+			1,
+			query_data_2.clone(),
+		));
+		let timestamp_2 = Timestamp::get();
+
+		next_block_with_timestamp(timestamp_2 + (3_600 * 12 * 1_000) + 1);
+
+		assert_ok!(Tellor::claim_onetime_tip(
+			RuntimeOrigin::signed(reporter),
+			query_id_2,
+			bounded_vec![timestamp_2]
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_4), None);
+
+		// Tip queryId 4
+		assert_ok!(Tellor::tip(
+			RuntimeOrigin::signed(tipper),
+			query_id_4,
+			token(1),
+			query_data_4.clone()
+		));
+		assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4]);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_2), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
+		assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+	});
 }
 
 #[test]

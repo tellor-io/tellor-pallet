@@ -17,23 +17,23 @@ License: Unlicense
 | :white_check_mark: `setup_data_feed`   |   :white_check_mark:   |                                                                |
 | :white_check_mark: `tip`               |   :white_check_mark:   |                                                                |
 
-| Runtime API                                       |    Functional Test     | Notes |
-|---------------------------------------------------|:----------------------:|-------|
-| :white_check_mark: `get_current_feeds`            | :white_square_button:  |       |
-| :white_check_mark: `get_current_tip`              | :white_square_button:  |       |
-| :white_check_mark: `get_data_feed`                | :white_square_button:  |       |
-| :white_check_mark: `get_funded_feed_details `     | :white_square_button:  |       |
-| :white_check_mark: `get_funded_feeds`             | :white_square_button:  |       |
-| :white_check_mark: `get_funded_query_ids`         | :white_square_button:  |       |
-| :white_check_mark: `get_funded_single_tips_info`  | :white_square_button:  |       |
-| :white_check_mark: `get_past_tip_count`           | :white_square_button:  |       |
-| :white_check_mark: `get_past_tips`                | :white_square_button:  |       |
-| :white_check_mark: `get_past_tip_by_index`        | :white_square_button:  |       |
-| :white_check_mark: `get_query_id_from_feed_id`    | :white_square_button:  |       |
-| :white_check_mark: `get_reward_amount`            | :white_square_button:  |       |
-| :white_check_mark: `get_reward_claimed_status`    | :white_square_button:  |       |
-| :white_check_mark: `get_reward_claim_status_list` | :white_square_button:  |       |
-| :white_check_mark: `get_tips_by_address`          | :white_square_button:  |       |
+| Runtime API                                       |    Functional Test    | Notes |
+|---------------------------------------------------|:---------------------:|-------|
+| :white_check_mark: `get_current_feeds`            | :white_square_button: |       |
+| :white_check_mark: `get_current_tip`              |  :white_check_mark:   |       |
+| :white_check_mark: `get_data_feed`                |  :white_check_mark:   |       |
+| :white_check_mark: `get_funded_feed_details `     | :white_square_button: |       |
+| :white_check_mark: `get_funded_feeds`             |  :white_check_mark:   |       |
+| :white_check_mark: `get_funded_query_ids`         |  :white_check_mark:   |       |
+| :white_check_mark: `get_funded_single_tips_info`  | :white_square_button: |       |
+| :white_check_mark: `get_past_tip_count`           |  :white_check_mark:   |       |
+| :white_check_mark: `get_past_tips`                |  :white_check_mark:   |       |
+| :white_check_mark: `get_past_tip_by_index`        |  :white_check_mark:   |       |
+| :white_check_mark: `get_query_id_from_feed_id`    |   :white_check_mark   |       |
+| :white_check_mark: `get_reward_amount`            | :white_square_button: |       |
+| :white_check_mark: `get_reward_claimed_status`    |  :white_check_mark:   |       |
+| :white_check_mark: `get_reward_claim_status_list` | :white_square_button: |       |
+| :white_check_mark: `get_tips_by_address`          | :white_square_button: |       |
 
 
 ### Oracle (Tellor Flex)

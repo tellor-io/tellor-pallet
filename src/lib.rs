@@ -230,6 +230,7 @@ pub mod pallet {
 	pub type QueryIdsWithFunding<T> =
 		StorageValue<_, BoundedVec<QueryIdOf<T>, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
+	#[pallet::getter(fn query_ids_with_funding_index)]
 	pub type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, u32>;
 	#[pallet::storage]
 	#[pallet::getter(fn tips)]
@@ -510,10 +511,10 @@ pub mod pallet {
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
 			T::Token::transfer(
-				&reporter,
 				&T::PalletId::get().into_account_truncating(),
+				&reporter,
 				cumulative_reward - fee,
-				true,
+				false,
 			)?;
 			Self::add_staking_rewards(fee)?;
 			if Self::get_current_tip(query_id) == <AmountOf<T>>::default() {
@@ -625,7 +626,7 @@ pub mod pallet {
 				&T::PalletId::get().into_account_truncating(),
 				&reporter,
 				cumulative_reward - fee,
-				true,
+				false,
 			)?;
 			Self::add_staking_rewards(fee)?;
 			Self::deposit_event(Event::TipClaimed {
@@ -1227,9 +1228,12 @@ impl<T: Config> Pallet<T> {
 
 	fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
 		let pallet_id = T::PalletId::get();
-		let source = pallet_id.into_account_truncating();
-		let dest = pallet_id.into_sub_account_truncating(b"staking");
-		T::Token::transfer(&source, &dest, amount, true)?;
+		T::Token::transfer(
+			&pallet_id.into_account_truncating(),
+			&pallet_id.into_sub_account_truncating(b"staking"),
+			amount,
+			false,
+		)?;
 		Ok(())
 	}
 
@@ -1824,7 +1828,7 @@ impl<T: Config> Pallet<T> {
 		timestamp: TimestampOf<T>,
 	) -> Option<bool> {
 		<DataFeeds<T>>::get(query_id, feed_id)
-			.and_then(|f| f.reward_claimed.get(&timestamp).copied())
+			.map(|f| f.reward_claimed.get(&timestamp).copied().unwrap_or_default())
 	}
 
 	/// Read whether rewards have been claimed.
