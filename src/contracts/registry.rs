@@ -18,6 +18,7 @@ mod tests {
 	use super::super::tests::*;
 	use ethabi::{Function, ParamType, Token};
 
+	#[allow(deprecated)]
 	fn register() -> Function {
 		// register(uint32,uint8,uint256)
 		ethabi::Function {

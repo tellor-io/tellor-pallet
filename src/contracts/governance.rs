@@ -28,6 +28,7 @@ mod tests {
 	use ethabi::{Function, ParamType, Token};
 	use sp_core::keccak_256;
 
+	#[allow(deprecated)]
 	fn begin_parachain_dispute() -> Function {
 		// beginParachainDispute(uint32,bytes32,uint256,uint256,bytes,address,address)
 		ethabi::Function {

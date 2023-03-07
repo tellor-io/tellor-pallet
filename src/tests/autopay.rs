@@ -208,7 +208,6 @@ fn fund_feed() {
 	let mut ext = new_test_ext();
 	// Prerequisites
 	ext.execute_with(|| {
-		let timestamp = Timestamp::get();
 		feed_id = create_feed(
 			feed_creator,
 			query_id,
@@ -621,7 +620,7 @@ fn claim_onetime_tip() {
 
 	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L229
 	ext.execute_with(|| {
-		let start_balance = Balances::balance(&reporter);
+		let _start_balance = Balances::balance(&reporter);
 		assert_ok!(Tellor::submit_value(
 			RuntimeOrigin::signed(another_reporter),
 			query_id,

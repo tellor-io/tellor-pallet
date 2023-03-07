@@ -14,7 +14,7 @@ pub(crate) type FeedIdOf<T> = <T as Config>::Hash;
 pub(crate) type FeedOf<T> =
 	autopay::Feed<AmountOf<T>, TimestampOf<T>, <T as Config>::MaxRewardClaims>;
 pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>, TimestampOf<T>>;
-pub(crate) type HashOf<T> = <T as Config>::Hash;
+pub(crate) type _HashOf<T> = <T as Config>::Hash;
 pub(crate) type HasherOf<T> = <T as Config>::Hasher;
 pub(crate) type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
 pub(crate) type Nonce = u128;
@@ -38,7 +38,7 @@ pub(crate) type Timestamp = U256;
 pub(crate) type TimestampOf<T> = <<T as Config>::Time as Time>::Moment;
 pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>, TimestampOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
-pub(crate) type VoteIdOf<T> = <T as Config>::Hash;
+pub(crate) type _VoteIdOf<T> = <T as Config>::Hash;
 
 pub mod autopay {
 
@@ -181,7 +181,7 @@ mod governance {
 	}
 
 	/// The status of a potential vote.
-	enum VoteResult {
+	enum _VoteResult {
 		Failed,
 		Passed,
 		Invalid,

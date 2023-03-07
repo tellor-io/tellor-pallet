@@ -6,7 +6,7 @@ pub(crate) mod governance;
 pub(crate) mod registry;
 pub(crate) mod staking;
 
-pub(crate) type ABI<'a> = Call<'a>;
+pub(crate) type Abi<'a> = Call<'a>;
 
 pub(crate) struct Call<'a> {
 	function: Vec<u8>,
@@ -77,7 +77,7 @@ impl<'a> Call<'a> {
 
 						// Add data, padding to 32 bytes
 						self.function.extend(parameter.iter());
-						self.function.extend(vec![0; ((parameter.len() + 31) / 32) as usize + 1]);
+						self.function.extend(vec![0; ((parameter.len() + 31) / 32) + 1]);
 					},
 				}
 			}

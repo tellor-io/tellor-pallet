@@ -14,6 +14,7 @@ mod tests {
 	use super::{super::tests::*, Address};
 	use ethabi::{Function, ParamType, Token};
 
+	#[allow(deprecated)]
 	fn confirm_parachain_staking_withdraw_request() -> Function {
 		// confirmParachainStakingWithdrawRequest(uint32,address,uint256)
 		ethabi::Function {
