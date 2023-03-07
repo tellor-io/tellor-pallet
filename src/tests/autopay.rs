@@ -11,15 +11,15 @@ use sp_runtime::traits::{AccountIdConversion, BadOrigin};
 fn claim_tip() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
-
 	let reporter = 1;
 	let another_reporter = 2;
 	let feed_creator = 10;
 	let mut feed_id = H256::zero();
 	let mut timestamps = BoundedVec::default();
 	let mut bad_timestamps = BoundedVec::default();
-
 	let mut ext = new_test_ext();
+
+	// Prerequisites
 	ext.execute_with(|| {
 		register_parachain(STAKE_AMOUNT);
 		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
@@ -204,8 +204,8 @@ fn fund_feed() {
 	let feed_funder = 2;
 	let mut feed_id = H256::zero();
 	let amount = token(1_000_000);
-
 	let mut ext = new_test_ext();
+
 	// Prerequisites
 	ext.execute_with(|| {
 		feed_id = create_feed(
@@ -280,8 +280,8 @@ fn setup_data_feed() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let feed_creator = 1;
-
 	let mut ext = new_test_ext();
+
 	// Prerequisites
 	ext.execute_with(|| {
 		let timestamp = Timestamp::get();
@@ -498,18 +498,21 @@ fn get_reward_claimed_status() {
 
 #[test]
 fn tip() {
-	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L199
-	new_test_ext().execute_with(|| {
+	let reporter = 2;
+	let tipper = 1;
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let amount = token(100);
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
 		register_parachain(STAKE_AMOUNT);
-
-		let reporter = 2;
 		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+	});
 
-		let tipper = 1;
-		let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
-		let amount = token(100);
-
+	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L199
+	ext.execute_with(|| {
 		assert_noop!(
 			Tellor::tip(RuntimeOrigin::root(), H256::random(), amount, query_data.clone()),
 			BadOrigin
@@ -610,8 +613,9 @@ fn claim_onetime_tip() {
 	let tipper = 1;
 	let reporter = 2;
 	let another_reporter = 4;
-
 	let mut ext = new_test_ext();
+
+	// Prerequisites
 	ext.execute_with(|| {
 		register_parachain(STAKE_AMOUNT);
 		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
