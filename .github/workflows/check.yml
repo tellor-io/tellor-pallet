@@ -40,7 +40,7 @@ jobs:
           toolchain: ${{ env.NIGHTLY }}
           override: true
           target: wasm32-unknown-unknown
-          components: rustfmt
+          components: rustfmt, clippy
 
       # Fail fast: check formatting first as it doesn't require compilation
       - name: Check formatting
@@ -62,3 +62,10 @@ jobs:
       - name: Check Build
         run: |
           cargo check --release --target wasm32-unknown-unknown --no-default-features
+
+      # Run clippy checks (using same arguments as above to re-use built dependencies)
+      - name: Annotate commit with clippy warnings
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --release
