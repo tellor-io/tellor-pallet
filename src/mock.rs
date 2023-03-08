@@ -1,5 +1,5 @@
 use crate as tellor;
-use crate::types::Address;
+use crate::types::{Address, MomentOf};
 use ::xcm::latest::MultiLocation;
 use frame_support::{
 	assert_ok, parameter_types,
@@ -115,10 +115,11 @@ impl tellor::Config for Test {
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<32>;
 	type MaxVotes = ();
+	type MaxVoteRounds = ConstU32<10>;
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
 	type Registry = TellorRegistry;
-	type ReportingLock = ();
+	type ReportingLock = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type Staking = TellorStaking;
 	type Time = Timestamp;
 	type Token = Balances;
@@ -171,21 +172,41 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 		System::set_block_number(1);
 		assert_ok!(Timestamp::set(
 			RuntimeOrigin::none(),
-			SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+			SystemTime::now()
+				.duration_since(UNIX_EPOCH)
+				.expect("Current time is always after unix epoch; qed")
+				.as_millis() as u64
 		));
 	});
 	ext
 }
 
 pub(crate) fn next_block() {
-	next_block_with_timestamp(Timestamp::get() + 1)
+	next_block_advance_time(0)
 }
 
-pub(crate) fn next_block_with_timestamp(timestamp: u64) {
+pub(crate) fn next_block_advance_time(time_advance: MomentOf<Test>) {
 	let block = System::block_number();
 
 	Timestamp::on_finalize(block);
 	System::set_block_number(block + 1);
 
-	assert_ok!(Timestamp::set(RuntimeOrigin::none(), timestamp));
+	assert_ok!(Timestamp::set(RuntimeOrigin::none(), Timestamp::get() + 1 + time_advance));
+}
+
+/// Starts a new block, executing the supplied closure thereafter.
+pub(crate) fn with_block<R>(execute: impl FnOnce() -> R) -> (MomentOf<Test>, R) {
+	next_block();
+	let result = execute();
+	(Timestamp::get(), result)
+}
+
+/// Starts a new block after some time, executing the supplied closure thereafter.
+pub(crate) fn with_block_after<R>(
+	time: MomentOf<Test>,
+	execute: impl FnOnce() -> R,
+) -> (MomentOf<Test>, R) {
+	next_block_advance_time(time);
+	let result = execute();
+	(Timestamp::get(), result)
 }

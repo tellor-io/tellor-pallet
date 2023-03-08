@@ -64,11 +64,8 @@ fn begins_dispute() {
 			.contains(&DescendOrigin(X1(PalletInstance(Tellor::index() as u8)))));
 		// todo: check remaining instructions
 
-		// // Read pallet storage and assert an expected result.
-		// assert_eq!(TemplateModule::something(), Some(42));
-
 		System::assert_last_event(
-			Event::NewDispute { dispute_id: 0, query_id, timestamp, reporter }.into(),
+			Event::NewDispute { dispute_id: 1, query_id, timestamp, reporter }.into(),
 		);
 	});
 }

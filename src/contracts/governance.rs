@@ -2,7 +2,7 @@ use super::*;
 
 pub(crate) fn begin_parachain_dispute(
 	para_id: ParaId,
-	query_id: &[u8; 32],
+	query_id: &[u8],
 	timestamp: impl Into<U256>,
 	dispute_id: impl Into<U256>,
 	value: &[u8],
