@@ -108,7 +108,7 @@ impl<T: Config> Pallet<T> {
 		}
 		//loop handles for dispute (value = None if disputed)
 		while count > 0 {
-			count -= 1;
+			count.saturating_dec();
 			let value =
 				Self::get_timestamp_by_query_id_and_index(query_id, count).and_then(|timestamp| {
 					Self::retrieve_data(query_id, timestamp).map(|value| (value, timestamp))
@@ -224,7 +224,7 @@ impl<T: Config> Pallet<T> {
 		if count > 0 {
 			let mut middle;
 			let mut start = 0;
-			let mut end = count - 1;
+			let mut end = count.saturating_sub(1);
 			let mut time;
 			// Checking Boundaries to short-circuit the algorithm
 			time = Self::get_timestamp_by_query_id_and_index(query_id, start)?;
@@ -234,7 +234,7 @@ impl<T: Config> Pallet<T> {
 			time = Self::get_timestamp_by_query_id_and_index(query_id, end)?;
 			if time < timestamp {
 				while Self::is_in_dispute(query_id, time) && end > 0 {
-					end -= 1;
+					end.saturating_dec();
 					time = Self::get_timestamp_by_query_id_and_index(query_id, end)?;
 				}
 				if end == 0 && Self::is_in_dispute(query_id, time) {
@@ -244,6 +244,7 @@ impl<T: Config> Pallet<T> {
 			}
 			// Since the value is within our boundaries, do a binary search
 			loop {
+				// todo: safe math
 				middle = (end - start) / 2 + 1 + start;
 				time = Self::get_timestamp_by_query_id_and_index(query_id, middle)?;
 				if time < timestamp {
@@ -257,7 +258,7 @@ impl<T: Config> Pallet<T> {
 						} else {
 							// iterate backwards until we find a non-disputed value
 							while Self::is_in_dispute(query_id, time) && middle > 0 {
-								middle -= 1;
+								middle.saturating_dec();
 								time = Self::get_timestamp_by_query_id_and_index(query_id, middle)?;
 							}
 							if middle == 0 && Self::is_in_dispute(query_id, time) {
@@ -271,6 +272,7 @@ impl<T: Config> Pallet<T> {
 						start = middle + 1;
 					}
 				} else {
+					// todo: safe math
 					let mut previous_time =
 						Self::get_timestamp_by_query_id_and_index(query_id, middle - 1)?;
 					if previous_time < timestamp {
@@ -279,9 +281,9 @@ impl<T: Config> Pallet<T> {
 							Some(middle - 1)
 						} else {
 							// iterate backwards until we find a non-disputed value
-							middle -= 1;
+							middle.saturating_dec();
 							while Self::is_in_dispute(query_id, previous_time) && middle > 0 {
-								middle -= 1;
+								middle.saturating_dec();
 								previous_time =
 									Self::get_timestamp_by_query_id_and_index(query_id, middle)?;
 							}
@@ -293,6 +295,7 @@ impl<T: Config> Pallet<T> {
 						}
 					} else {
 						//look from start to middle -1(prev value)
+						// todo: safe math
 						end = middle - 1;
 					}
 				}
@@ -329,7 +332,7 @@ impl<T: Config> Pallet<T> {
 					let mut min = 0;
 					let mut max = tips.len();
 					let mut mid;
-					while max - min > 1 {
+					while max.saturating_sub(min) > 1 {
 						mid = (max.saturating_add(min)).saturating_div(2);
 						if tips.get(mid).map_or(<TimestampOf<T>>::default(), |t| t.timestamp) >
 							timestamp
@@ -393,8 +396,11 @@ impl<T: Config> Pallet<T> {
 								let min_backup_tip =
 									tips.get(min_backup).ok_or(Error::<T>::InvalidIndex)?;
 								let min_tip = tips.get(min).ok_or(Error::<T>::InvalidIndex)?;
-								tip_amount = min_backup_tip.cumulative_tips -
-									min_tip.cumulative_tips + min_tip.amount;
+								// todo: safe math
+								tip_amount = min_backup_tip
+									.cumulative_tips
+									.saturating_sub(min_tip.cumulative_tips)
+									.saturating_add(min_tip.amount);
 							}
 						}
 					}
@@ -537,7 +543,7 @@ impl<T: Config> Pallet<T> {
 		let n = (timestamp.saturating_sub(feed.details.start_time))
 			.checked_div(&feed.details.interval)
 			.ok_or(Error::<T>::IntervalCalculationError)?; // finds closest interval n to timestamp
-		let c = feed.details.start_time + feed.details.interval * n; // finds start timestamp c of interval n
+		let c = feed.details.start_time.saturating_add(feed.details.interval.saturating_mul(n)); // finds start timestamp c of interval n
 		let value_retrieved = Self::retrieve_data(query_id, timestamp);
 		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
 		let (value_retrieved_before, timestamp_before) =

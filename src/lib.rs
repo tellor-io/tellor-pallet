@@ -543,6 +543,7 @@ pub mod pallet {
 			T::Token::transfer(
 				&T::PalletId::get().into_account_truncating(),
 				&reporter,
+				// todo: safe math
 				cumulative_reward - fee,
 				false,
 			)?;
@@ -551,13 +552,14 @@ pub mod pallet {
 				// todo: replace with if let once guards stable
 				match <QueryIdsWithFundingIndex<T>>::get(query_id) {
 					Some(index) if index != 0 => {
+						// todo: safe math
 						let idx: usize = index as usize - 1;
 						// Replace unfunded feed in array with last element
 						<QueryIdsWithFunding<T>>::try_mutate(
 							|query_ids_with_funding| -> DispatchResult {
 								// todo: safe math
 								let qid = *query_ids_with_funding
-									.get(query_ids_with_funding.len() - 1)
+									.last()
 									.ok_or(Error::<T>::InvalidIndex)?;
 								query_ids_with_funding
 									.get_mut(idx)
@@ -568,6 +570,7 @@ pub mod pallet {
 									.ok_or(Error::<T>::InvalidIndex)?;
 								<QueryIdsWithFundingIndex<T>>::set(
 									query_id_last_funded,
+									// todo: safe math
 									Some((idx + 1).saturated_into()),
 								);
 								<QueryIdsWithFundingIndex<T>>::remove(query_id);
@@ -628,11 +631,10 @@ pub mod pallet {
 					// Adjust currently funded feeds
 					<FeedsWithFunding<T>>::try_mutate(|feeds_with_funding| -> DispatchResult {
 						if feeds_with_funding.len() > 1 {
+							// todo: safe math
 							let index = feed.details.feeds_with_funding_index - 1;
 							// Replace unfunded feed in array with last element
-							let fid = *feeds_with_funding
-								.get(feeds_with_funding.len() - 1)
-								.ok_or(Error::<T>::InvalidIndex)?;
+							let fid = *feeds_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
 							feeds_with_funding
 								.get_mut(index as usize)
 								.map(|i| *i = fid)
@@ -648,6 +650,7 @@ pub mod pallet {
 										feed_id_last_funded,
 										|f| {
 											if let Some(f) = f {
+												// todo: safe math
 												f.details.feeds_with_funding_index = index + 1
 											}
 										},
@@ -665,7 +668,7 @@ pub mod pallet {
 					.map_err(|_| Error::<T>::MaxRewardClaimsReached)?;
 			}
 
-			feed.details.balance -= cumulative_reward;
+			feed.details.balance.saturating_reduce(cumulative_reward);
 			<DataFeeds<T>>::set(query_id, feed_id, Some(feed));
 			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
 				.checked_div(&1000u16.into())
@@ -673,6 +676,7 @@ pub mod pallet {
 			T::Token::transfer(
 				&T::PalletId::get().into_account_truncating(),
 				&reporter,
+				// todo: safe math
 				cumulative_reward - fee,
 				false,
 			)?;

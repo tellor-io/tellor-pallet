@@ -49,7 +49,6 @@ pub(crate) type VoteOf<T> = governance::Vote<
 >;
 
 pub mod autopay {
-
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
