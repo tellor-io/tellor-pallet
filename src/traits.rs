@@ -12,7 +12,7 @@ pub trait Xcm {
 
 /// This traits helps pallets read data from Tellor
 pub trait UsingTellor<AccountId, QueryId, Timestamp, Value> {
-	/// Retrieves the next value for the query identifer after the specified timestamp.
+	/// Retrieves the next value for the query identifier after the specified timestamp.
 	/// # Arguments
 	/// * `query_id` - The query identifier to look up the value for.
 	/// * `timestamp` - The timestamp after which to search for next value.

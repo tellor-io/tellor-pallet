@@ -38,7 +38,15 @@ pub(crate) type Timestamp = U256;
 pub(crate) type TimestampOf<T> = <<T as Config>::Time as Time>::Moment;
 pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>, TimestampOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
-pub(crate) type _VoteIdOf<T> = <T as Config>::Hash;
+pub(crate) type VoteIdOf<T> = <T as Config>::Hash;
+pub(crate) type VoteOf<T> = governance::Vote<
+	AccountIdOf<T>,
+	AmountOf<T>,
+	BlockNumberOf<T>,
+	TimestampOf<T>,
+	VoteIdOf<T>,
+	<T as Config>::MaxVotes,
+>;
 
 pub mod autopay {
 
@@ -151,7 +159,7 @@ mod governance {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub(crate) struct Dispute<AccountId, QueryId, Timestamp, Value> {
+	pub struct Dispute<AccountId, QueryId, Timestamp, Value> {
 		/// Query identifier of disputed value
 		pub(crate) query_id: QueryId,
 		/// Timestamp of disputed value.
@@ -159,25 +167,26 @@ mod governance {
 		/// Disputed value.
 		pub(crate) value: Value,
 		/// Reporter who submitted the disputed value.
-		pub(crate) dispute_reporter: AccountId,
+		pub(crate) disputed_reporter: AccountId,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	struct Vote<AccountId, Amount, BlockNumber, Timestamp, VoteId, MaxVotes: Get<u32>> {
+	#[scale_info(skip_type_params(MaxVotes))]
+	pub struct Vote<AccountId, Amount, BlockNumber, Timestamp, VoteId, MaxVotes: Get<u32>> {
 		/// Identifier of the vote.
-		identifier: VoteId,
+		pub(crate) identifier: VoteId,
 		/// The round of voting on a given dispute or proposal.
-		vote_round: u8,
+		pub(crate) vote_round: u8,
 		/// Timestamp of when vote was initiated.
-		start_date: Timestamp,
+		pub(crate) start_date: Timestamp,
 		/// Block number of when vote was initiated.
-		block_number: BlockNumber,
+		pub(crate) block_number: BlockNumber,
 		/// Fee paid to initiate the vote round.
-		fee: Amount,
+		pub(crate) fee: Amount,
 		/// Address which initiated dispute/proposal.
-		initiator: AccountId,
+		pub(crate) initiator: AccountId,
 		/// Mapping of accounts to whether they voted or not.
-		voted: BoundedBTreeMap<AccountId, bool, MaxVotes>,
+		pub(crate) voted: BoundedBTreeMap<AccountId, bool, MaxVotes>,
 	}
 
 	/// The status of a potential vote.

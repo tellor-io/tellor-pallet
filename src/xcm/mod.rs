@@ -1,12 +1,29 @@
+use super::{traits, Config, Error, Pallet};
 use crate::types::ParaId;
 use ::xcm::latest::{prelude::*, MultiLocation};
 use core::marker::PhantomData;
-use frame_support::{log, traits::OriginTrait};
+use frame_support::{
+	log,
+	traits::{OriginTrait, PalletInfoAccess},
+};
 use sp_core::Get;
 use sp_std::{fmt::Debug, vec, vec::Vec};
 use xcm_executor::traits::{Convert, ConvertOrigin};
 
 pub(crate) mod ethereum_xcm;
+
+impl<T: Config> Pallet<T> {
+	pub(super) fn send_xcm(
+		destination: impl Into<MultiLocation>,
+		message: Xcm<()>,
+	) -> Result<(), Error<T>> {
+		let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
+		<T::Xcm as traits::Xcm>::send_xcm(interior, destination, message).map_err(|e| match e {
+			SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
+			_ => Error::<T>::SendFailure,
+		})
+	}
+}
 
 pub struct LocationToPalletAccount<Location, Account, AccountId>(
 	PhantomData<(Location, Account, AccountId)>,
