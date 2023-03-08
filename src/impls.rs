@@ -342,7 +342,7 @@ impl<T: Config> Pallet<T> {
 
 					let (_, timestamp_before) =
 						Self::get_data_before(query_id, timestamp).unwrap_or_default();
-					let min_tip = &mut tips[min]; // todo: convert to tips::get(min)
+					let min_tip = &mut tips.get_mut(min).ok_or(Error::<T>::InvalidIndex)?;
 					ensure!(timestamp_before < min_tip.timestamp, Error::<T>::TipAlreadyEarned);
 					ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
 					ensure!(
@@ -370,14 +370,19 @@ impl<T: Config> Pallet<T> {
 						1 || index_before.is_none()
 					{
 						if index_before.is_none() {
-							tip_amount = tips[min_backup].cumulative_tips;
+							tip_amount = tips
+								.get(min_backup)
+								.ok_or(Error::<T>::InvalidIndex)?
+								.cumulative_tips;
 						} else {
 							max = min;
 							min = 0;
 							let mut mid;
 							while max.saturating_sub(min) > 1 {
 								mid = (max.saturating_add(min)).saturating_div(2);
-								if tips[mid].timestamp > timestamp_before {
+								if tips.get(mid).ok_or(Error::<T>::InvalidIndex)?.timestamp >
+									timestamp_before
+								{
 									max = mid;
 								} else {
 									min = mid;
@@ -385,8 +390,11 @@ impl<T: Config> Pallet<T> {
 							}
 							min.saturating_inc();
 							if min < min_backup {
-								tip_amount = tips[min_backup].cumulative_tips -
-									tips[min].cumulative_tips + tips[min].amount;
+								let min_backup_tip =
+									tips.get(min_backup).ok_or(Error::<T>::InvalidIndex)?;
+								let min_tip = tips.get(min).ok_or(Error::<T>::InvalidIndex)?;
+								tip_amount = min_backup_tip.cumulative_tips -
+									min_tip.cumulative_tips + min_tip.amount;
 							}
 						}
 					}

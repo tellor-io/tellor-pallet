@@ -392,6 +392,7 @@ pub mod pallet {
 		InvalidClaimer,
 		/// Feed not set up.
 		InvalidFeed,
+		InvalidIndex,
 		/// Interval must be greater than zero.
 		InvalidInterval,
 		/// Reward must be greater than zero.
@@ -552,18 +553,28 @@ pub mod pallet {
 					Some(index) if index != 0 => {
 						let idx: usize = index as usize - 1;
 						// Replace unfunded feed in array with last element
-						<QueryIdsWithFunding<T>>::mutate(|query_ids_with_funding| {
-							// todo: safe indexing
-							query_ids_with_funding[idx] =
-								query_ids_with_funding[query_ids_with_funding.len() - 1];
-							let query_id_last_funded = query_ids_with_funding[idx];
-							<QueryIdsWithFundingIndex<T>>::set(
-								query_id_last_funded,
-								Some((idx + 1).saturated_into()),
-							);
-							<QueryIdsWithFundingIndex<T>>::remove(query_id);
-							query_ids_with_funding.pop();
-						});
+						<QueryIdsWithFunding<T>>::try_mutate(
+							|query_ids_with_funding| -> DispatchResult {
+								// todo: safe math
+								let qid = *query_ids_with_funding
+									.get(query_ids_with_funding.len() - 1)
+									.ok_or(Error::<T>::InvalidIndex)?;
+								query_ids_with_funding
+									.get_mut(idx)
+									.map(|i| *i = qid)
+									.ok_or(Error::<T>::InvalidIndex)?;
+								let query_id_last_funded = query_ids_with_funding
+									.get(idx)
+									.ok_or(Error::<T>::InvalidIndex)?;
+								<QueryIdsWithFundingIndex<T>>::set(
+									query_id_last_funded,
+									Some((idx + 1).saturated_into()),
+								);
+								<QueryIdsWithFundingIndex<T>>::remove(query_id);
+								query_ids_with_funding.pop();
+								Ok(())
+							},
+						)?;
 					},
 					_ => {},
 				}
@@ -615,13 +626,20 @@ pub mod pallet {
 					);
 					cumulative_reward = balance;
 					// Adjust currently funded feeds
-					<FeedsWithFunding<T>>::mutate(|feeds_with_funding| {
+					<FeedsWithFunding<T>>::try_mutate(|feeds_with_funding| -> DispatchResult {
 						if feeds_with_funding.len() > 1 {
 							let index = feed.details.feeds_with_funding_index - 1;
 							// Replace unfunded feed in array with last element
-							feeds_with_funding[index as usize] =
-								feeds_with_funding[feeds_with_funding.len() - 1];
-							let feed_id_last_funded = feeds_with_funding[index as usize];
+							let fid = *feeds_with_funding
+								.get(feeds_with_funding.len() - 1)
+								.ok_or(Error::<T>::InvalidIndex)?;
+							feeds_with_funding
+								.get_mut(index as usize)
+								.map(|i| *i = fid)
+								.ok_or(Error::<T>::InvalidIndex)?;
+							let feed_id_last_funded = feeds_with_funding
+								.get(index as usize)
+								.ok_or(Error::<T>::InvalidIndex)?;
 							match <QueryIdFromDataFeedId<T>>::get(feed_id_last_funded) {
 								None => todo!(),
 								Some(query_id_last_funded) => {
@@ -638,7 +656,8 @@ pub mod pallet {
 							}
 						}
 						feeds_with_funding.pop();
-					});
+						Ok(())
+					})?;
 					feed.details.feeds_with_funding_index = 0;
 				}
 				feed.reward_claimed
@@ -739,7 +758,7 @@ pub mod pallet {
 				reward_increase_per_second,
 				feeds_with_funding_index: 0,
 			};
-			<CurrentFeeds<T>>::try_mutate(query_id, |maybe| -> Result<(), DispatchError> {
+			<CurrentFeeds<T>>::try_mutate(query_id, |maybe| -> DispatchResult {
 				match maybe {
 					None => {
 						let mut feeds = BoundedVec::default();
