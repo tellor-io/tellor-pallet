@@ -16,6 +16,7 @@ use sp_std::cell::RefCell;
 use std::time::{SystemTime, UNIX_EPOCH};
 use xcm::latest::prelude::*;
 
+type Balance = u64;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -64,7 +65,7 @@ impl system::Config for Test {
 }
 
 impl pallet_balances::Config for Test {
-	type Balance = u64;
+	type Balance = Balance;
 	type DustRemoval = ();
 	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ConstU64<1>;
@@ -100,7 +101,7 @@ impl tellor::Config for Test {
 	type Amount = u64;
 	type ClaimBuffer = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type ClaimPeriod = ConstU64<{ 4 * WEEK_IN_MILLISECONDS }>;
-	type DisputeId = u128;
+	type DisputeId = u32;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type Hash = H256;
@@ -113,11 +114,12 @@ impl tellor::Config for Test {
 	type MaxRewardClaims = ConstU32<10>;
 	type MaxTimestamps = ConstU32<10>;
 	type MaxTipsPerQuery = ConstU32<10>;
-	type MaxValueLength = ConstU32<32>;
+	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so ValueConverter needs to handle conversion to price for threshold checks
 	type MaxVotes = ();
 	type MaxVoteRounds = ConstU32<10>;
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
+	type Price = u128;
 	type Registry = TellorRegistry;
 	type ReportingLock = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type Staking = TellorStaking;
@@ -128,10 +130,13 @@ impl tellor::Config for Test {
 }
 
 pub struct ValueConverter;
-impl Convert<BoundedVec<u8, ConstU32<32>>, Option<u64>> for ValueConverter {
-	fn convert(a: BoundedVec<u8, ConstU32<32>>) -> Option<u64> {
-		use codec::Decode;
-		u64::decode(&mut a.as_ref()).ok()
+impl Convert<BoundedVec<u8, ConstU32<128>>, Option<u128>> for ValueConverter {
+	fn convert(a: BoundedVec<u8, ConstU32<128>>) -> Option<u128> {
+		// Should be more advanced depending on chain config
+		match a[16..].try_into() {
+			Ok(v) => Some(u128::from_be_bytes(v)),
+			Err(_) => None,
+		}
 	}
 }
 

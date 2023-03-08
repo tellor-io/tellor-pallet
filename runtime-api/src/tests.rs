@@ -28,11 +28,12 @@ type Amount = u64;
 type BlockNumber = u64;
 type DisputeId = u128;
 type QueryId = H256;
+type MaxValueLength = ConstU32<4>;
 type Moment = u64;
 type FeedId = H256;
 type StakeInfo =
 	tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter, QueryId, Moment>;
-type Value = BoundedVec<u8, ConstU32<100>>;
+type Value = BoundedVec<u8, MaxValueLength>;
 
 // Configure a mock runtime to test implementation of the runtime-api
 frame_support::construct_runtime!(
@@ -98,9 +99,9 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = Amount;
-	type DisputeId = DisputeId;
 	type ClaimBuffer = ();
 	type ClaimPeriod = ();
+	type DisputeId = DisputeId;
 	type Fee = ();
 	type Governance = ();
 	type Hash = H256;
@@ -113,11 +114,12 @@ impl tellor::Config for Test {
 	type MaxRewardClaims = ();
 	type MaxTimestamps = ();
 	type MaxTipsPerQuery = ();
-	type MaxValueLength = ConstU32<100>;
-	type MaxVoteRounds = ();
+	type MaxValueLength = MaxValueLength;
 	type MaxVotes = ();
+	type MaxVoteRounds = ();
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
+	type Price = u32;
 	type Registry = ();
 	type ReportingLock = ConstU64<42>;
 	type Staking = ();

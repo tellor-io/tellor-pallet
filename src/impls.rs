@@ -536,26 +536,21 @@ impl<T: Config> Pallet<T> {
 			Self::get_data_before(query_id, timestamp).unwrap_or_default();
 		let mut price_change = 0; // price change from last value to current value
 		if feed.details.price_threshold != 0 {
-			let v1 = T::ValueConverter::convert(
-				value_retrieved.expect("value retrieved checked above; qed"),
-			)
-			.ok_or(Error::<T>::ValueConversionError)?;
-			let v2 = T::ValueConverter::convert(value_retrieved_before)
-				.ok_or(Error::<T>::ValueConversionError)?;
-			if v2 == <AmountOf<T>>::default() {
+			let v1 =
+				Self::bytes_to_price(value_retrieved.expect("value retrieved checked above; qed"))?;
+			let v2 = Self::bytes_to_price(value_retrieved_before)?;
+			if v2 == T::Price::default() {
 				price_change = 10_000;
 			} else if v1 >= v2 {
-				price_change = (<AmountOf<T>>::from(10_000u16)
-					.saturating_mul(v1.saturating_sub(v2)))
-				.checked_div(&v2)
-				.ok_or(Error::<T>::PriceChangeCalculationError)?
-				.saturated_into();
+				price_change = (T::Price::from(10_000u16).saturating_mul(v1.saturating_sub(v2)))
+					.checked_div(&v2)
+					.ok_or(Error::<T>::PriceChangeCalculationError)?
+					.saturated_into();
 			} else {
-				price_change = (<AmountOf<T>>::from(10_000u16)
-					.saturating_mul(v2.saturating_sub(v1)))
-				.checked_div(&v2)
-				.ok_or(Error::<T>::PriceChangeCalculationError)?
-				.saturated_into();
+				price_change = (T::Price::from(10_000u16).saturating_mul(v2.saturating_sub(v1)))
+					.checked_div(&v2)
+					.ok_or(Error::<T>::PriceChangeCalculationError)?
+					.saturated_into();
 			}
 		}
 		let mut reward_amount = feed.details.reward;
@@ -786,28 +781,30 @@ impl<T: Config> Pallet<T> {
 		QueryData::<T>::insert(query_id, query_data);
 		Self::deposit_event(Event::QueryDataStored { query_id });
 	}
+
+	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, Error<T>> {
+		T::ValueConverter::convert(value).ok_or(Error::<T>::ValueConversionError)
+	}
 }
 
-impl<T: Config> UsingTellor<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, ValueOf<T>>
-	for Pallet<T>
-{
+impl<T: Config> UsingTellor<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, Vec<u8>> for Pallet<T> {
 	fn get_data_after(
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
-	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
+	) -> Option<(Vec<u8>, TimestampOf<T>)> {
 		Self::get_index_for_data_after(query_id, timestamp)
 			.and_then(|index| Self::get_timestamp_by_query_id_and_index(query_id, index))
 			.and_then(|timestamp_retrieved| {
 				Self::retrieve_data(query_id, timestamp_retrieved)
-					.map(|value| (value, timestamp_retrieved))
+					.map(|value| (value.into_inner(), timestamp_retrieved))
 			})
 	}
 
 	fn get_data_before(
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
-	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
-		Self::get_data_before(query_id, timestamp)
+	) -> Option<(Vec<u8>, TimestampOf<T>)> {
+		Self::get_data_before(query_id, timestamp).map(|(v, t)| (v.into_inner(), t))
 	}
 
 	fn get_index_for_data_after(
@@ -828,7 +825,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, ValueO
 		_query_id: QueryIdOf<T>,
 		_timestamp: TimestampOf<T>,
 		_max_age: TimestampOf<T>,
-	) -> Vec<(ValueOf<T>, TimestampOf<T>)> {
+	) -> Vec<(Vec<u8>, TimestampOf<T>)> {
 		todo!()
 	}
 
@@ -854,7 +851,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, ValueO
 		Self::is_in_dispute(query_id, timestamp)
 	}
 
-	fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<ValueOf<T>> {
-		Self::retrieve_data(query_id, timestamp)
+	fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<Vec<u8>> {
+		Self::retrieve_data(query_id, timestamp).map(|v| v.into_inner())
 	}
 }

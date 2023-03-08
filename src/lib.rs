@@ -188,6 +188,8 @@ pub mod pallet {
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
 
+		type Price: AtLeast32BitUnsigned + Copy + Default;
+
 		/// The location of the registry controller contract.
 		#[pallet::constant]
 		type Registry: Get<MultiLocation>;
@@ -205,8 +207,8 @@ pub mod pallet {
 
 		type Token: Inspect<Self::AccountId, Balance = Self::Amount> + Transfer<Self::AccountId>;
 
-		/// Conversion from submitted value to an amount.
-		type ValueConverter: Convert<ValueOf<Self>, Option<Self::Amount>>;
+		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
+		type ValueConverter: Convert<ValueOf<Self>, Option<Self::Price>>;
 
 		type Xcm: traits::Xcm;
 	}

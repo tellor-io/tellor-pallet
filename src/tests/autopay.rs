@@ -12,6 +12,8 @@ use sp_runtime::traits::{AccountIdConversion, BadOrigin};
 
 type ClaimBuffer = <Test as Config>::ClaimBuffer;
 type ReportingLock = <Test as Config>::ReportingLock;
+type Pallet = crate::Pallet<Test>;
+type Price = <Test as Config>::Price;
 
 #[test]
 fn claim_tip() {
@@ -1645,9 +1647,25 @@ fn get_reward_amount() {
 }
 
 #[test]
-#[ignore]
-fn value_to_amount() {
-	todo!()
+fn bytes_to_price() {
+	fn uint_to_bytes32(value: impl Into<Uint>) -> Bytes {
+		ethabi::encode(&vec![Token::Uint(value.into())])
+	}
+
+	let x: Vec<(Bytes, Price)> = vec![
+		(uint_to_bytes32(1), 1),
+		(uint_to_bytes32(2), 2),
+		(uint_to_bytes32(300000000000000u64), 300000000000000),
+		(uint_to_bytes32(300000000000001u64), 300000000000001),
+		(uint_to_bytes32(1u128), 1),
+		(uint_to_bytes32(u128::MAX), u128::MAX),
+	];
+	for (source, expected) in x {
+		println!("{:?}", source);
+		let source: ValueOf<Test> = source.try_into().unwrap();
+		let amount = Pallet::bytes_to_price(source.try_into().unwrap()).unwrap();
+		assert_eq!(amount, expected);
+	}
 }
 
 #[test]
