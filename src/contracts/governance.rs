@@ -31,7 +31,7 @@ mod tests {
 	#[allow(deprecated)]
 	fn begin_parachain_dispute() -> Function {
 		// beginParachainDispute(uint32,bytes32,uint256,uint256,bytes,address,address)
-		ethabi::Function {
+		Function {
 			name: "beginParachainDispute".to_string(),
 			inputs: vec![
 				param("_paraId", ParamType::Uint(32)),

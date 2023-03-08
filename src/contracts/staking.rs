@@ -17,7 +17,7 @@ mod tests {
 	#[allow(deprecated)]
 	fn confirm_parachain_staking_withdraw_request() -> Function {
 		// confirmParachainStakingWithdrawRequest(uint32,address,uint256)
-		ethabi::Function {
+		Function {
 			name: "confirmParachainStakingWithdrawRequest".to_string(),
 			inputs: vec![
 				param("_paraId", ParamType::Uint(32)),

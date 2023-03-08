@@ -178,7 +178,7 @@ fn claim_tip() {
 			// That's why tellor balance is .03 lower than originally expected.
 			assert_eq!(Balances::balance(&reporter), token(2.97));
 			// Checking if owner (Tellor) account was updated by fee amount (0.03)
-			let pallet_id = <Test as crate::Config>::PalletId::get();
+			let pallet_id = <Test as Config>::PalletId::get();
 			assert_eq!(
 				Balances::balance(&pallet_id.into_sub_account_truncating(b"staking")),
 				token(0.03)
@@ -253,7 +253,7 @@ fn fund_feed() {
 		assert_eq!(amount, feed.balance);
 
 		// Event details
-		let pallet_account = <Test as crate::Config>::PalletId::get().into_account_truncating();
+		let pallet_account = <Test as Config>::PalletId::get().into_account_truncating();
 		let initial_balance = Balances::balance(&pallet_account);
 		assert_ok!(Tellor::fund_feed(
 			RuntimeOrigin::signed(feed_funder),

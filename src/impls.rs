@@ -251,9 +251,9 @@ impl<T: Config> Pallet<T> {
 					let next_time =
 						Self::get_timestamp_by_query_id_and_index(query_id, middle + 1)?;
 					if next_time >= timestamp {
-						if !Self::is_in_dispute(query_id, time) {
+						return if !Self::is_in_dispute(query_id, time) {
 							// _time is correct
-							return Some(middle)
+							Some(middle)
 						} else {
 							// iterate backwards until we find a non-disputed value
 							while Self::is_in_dispute(query_id, time) && middle > 0 {
@@ -264,7 +264,7 @@ impl<T: Config> Pallet<T> {
 								return None
 							}
 							// _time is correct
-							return Some(middle)
+							Some(middle)
 						}
 					} else {
 						//look from middle + 1(next value) to end
@@ -274,9 +274,9 @@ impl<T: Config> Pallet<T> {
 					let mut previous_time =
 						Self::get_timestamp_by_query_id_and_index(query_id, middle - 1)?;
 					if previous_time < timestamp {
-						if !Self::is_in_dispute(query_id, previous_time) {
+						return if !Self::is_in_dispute(query_id, previous_time) {
 							// _prevTime is correct
-							return Some(middle - 1)
+							Some(middle - 1)
 						} else {
 							// iterate backwards until we find a non-disputed value
 							middle -= 1;
@@ -288,8 +288,8 @@ impl<T: Config> Pallet<T> {
 							if middle == 0 && Self::is_in_dispute(query_id, previous_time) {
 								return None
 							}
-							// _prevtime is correct
-							return Some(middle)
+							// _prevTime is correct
+							Some(middle)
 						}
 					} else {
 						//look from start to middle -1(prev value)

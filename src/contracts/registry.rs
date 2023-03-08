@@ -21,7 +21,7 @@ mod tests {
 	#[allow(deprecated)]
 	fn register() -> Function {
 		// register(uint32,uint8,uint256)
-		ethabi::Function {
+		Function {
 			name: "register".to_string(),
 			inputs: vec![
 				param("_paraId", ParamType::Uint(32)),

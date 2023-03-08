@@ -60,7 +60,7 @@ impl system::Config for Test {
 	type SystemWeightInfo = ();
 	type SS58Prefix = ConstU16<42>;
 	type OnSetCode = ();
-	type MaxConsumers = frame_support::traits::ConstU32<16>;
+	type MaxConsumers = ConstU32<16>;
 }
 
 impl pallet_balances::Config for Test {
@@ -157,7 +157,7 @@ impl tellor::traits::Xcm for TestSendXcm {
 	) -> Result<(), SendError> {
 		let interior = interior.into();
 		let dest = dest.into();
-		if interior != Junctions::Here {
+		if interior != Here {
 			message.0.insert(0, DescendOrigin(interior))
 		};
 		<Self as SendXcm>::send_xcm(dest, message)
