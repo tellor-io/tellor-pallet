@@ -39,7 +39,7 @@ mod tests {
 	}
 
 	#[test]
-	fn encodes_begin_parachain_dispute() {
+	fn encodes_confirm_parachain_staking_withdraw_request() {
 		let para_id = 3000;
 		let reporter = Address::random();
 		let amount = 1675711956967u128;
