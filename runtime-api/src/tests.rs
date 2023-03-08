@@ -1,6 +1,6 @@
 use crate::{
 	autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData},
-	TellorAutoPay, TellorOracle,
+	TellorAutoPay, TellorGovernance, TellorOracle,
 };
 use codec::Encode;
 use frame_support::{
@@ -26,6 +26,7 @@ type Block = frame_system::mocking::MockBlock<Test>;
 type AccountId = u64;
 type Amount = u64;
 type BlockNumber = u64;
+type DisputeId = u128;
 type QueryId = H256;
 type Moment = u64;
 type FeedId = H256;
@@ -97,7 +98,7 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = Amount;
-	type DisputeId = u128;
+	type DisputeId = DisputeId;
 	type ClaimBuffer = ();
 	type ClaimPeriod = ();
 	type Fee = ();
@@ -113,6 +114,7 @@ impl tellor::Config for Test {
 	type MaxTimestamps = ();
 	type MaxTipsPerQuery = ();
 	type MaxValueLength = ConstU32<100>;
+	type MaxVoteRounds = ();
 	type MaxVotes = ();
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
@@ -290,6 +292,12 @@ mock_impl_runtime_apis! {
 
 		fn retrieve_data(query_id: QueryId, timestamp: Moment) -> Option<Value>{
 			tellor::Pallet::<Test>::retrieve_data(query_id, timestamp)
+		}
+	}
+
+	impl crate::TellorGovernance<Block, AccountId, Amount, DisputeId, QueryId, Moment> for Test {
+		fn get_dispute_fee() -> Amount {
+			tellor::Pallet::<Test>::get_dispute_fee()
 		}
 	}
 }
@@ -624,6 +632,17 @@ mod oracle {
 				Test.retrieve_data(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
 				None
 			);
+		});
+	}
+}
+
+mod governance {
+	use super::*;
+
+	#[test]
+	fn get_dispute_fee() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), 0);
 		});
 	}
 }

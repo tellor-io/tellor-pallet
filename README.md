@@ -9,13 +9,13 @@ License: Unlicense
 
 ### AutoPay
 
-| Dispatchable Function                  |    Functional Test     | Notes                                                          |
-|----------------------------------------|:----------------------:|----------------------------------------------------------------|
-| :white_check_mark: `claim_onetime_tip` | :white_square_button:  | Waiting on source tests to be updated to check returned errors |
-| :white_check_mark: `claim_tip`         |   :white_check_mark:   |                                                                |
-| :white_check_mark: `fund_feed`         |   :white_check_mark:   |                                                                |
-| :white_check_mark: `setup_data_feed`   |   :white_check_mark:   |                                                                |
-| :white_check_mark: `tip`               |   :white_check_mark:   |                                                                |
+| Dispatchable Function                  |    Functional Test     | Notes                                                              |
+|----------------------------------------|:----------------------:|--------------------------------------------------------------------|
+| :white_check_mark: `claim_onetime_tip` | :white_square_button:  | Partially implemented, need to merge in logic from associated test |
+| :white_check_mark: `claim_tip`         |   :white_check_mark:   |                                                                    |
+| :white_check_mark: `fund_feed`         |   :white_check_mark:   |                                                                    |
+| :white_check_mark: `setup_data_feed`   |   :white_check_mark:   |                                                                    |
+| :white_check_mark: `tip`               |   :white_check_mark:   |                                                                    |
 
 | Runtime API                                       |    Functional Test    | Notes |
 |---------------------------------------------------|:---------------------:|-------|
@@ -76,6 +76,9 @@ License: Unlicense
 | :white_square_button: `begin_dispute` | :white_square_button:  |       |
 | :white_square_button: `vote`          | :white_square_button:  |       |
 
+| Runtime API                             |    Functional Test    | Notes |
+|-----------------------------------------|:---------------------:|-------|
+| :white_check_mark: `get_dispute_fee`    | :white_square_button: |       |
 
 ## Controller Contract Integration
 

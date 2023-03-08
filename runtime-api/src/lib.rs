@@ -269,7 +269,7 @@ sp_api::decl_runtime_apis! {
 		fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Value>;
 	}
 
-	pub trait TellorGovernance<AccountId: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec> where
+	pub trait TellorGovernance<AccountId: Codec, Amount: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec> where
 	{
 		/// Determines if an account voted for a specific dispute.
 		/// # Arguments
@@ -278,6 +278,11 @@ sp_api::decl_runtime_apis! {
 		/// # Returns
 		/// Whether or not the account voted for the specific dispute.
 		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> Option<bool>;
+
+		/// Get the latest dispute fee.
+		/// # Returns
+		/// The latest dispute fee.
+		fn get_dispute_fee() -> Amount;
 
 		// todo: add remaining functions
 	}
