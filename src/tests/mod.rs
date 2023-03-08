@@ -15,58 +15,58 @@ type Error = crate::Error<Test>;
 #[test]
 fn reports_stake_deposited() {
 	new_test_ext().execute_with(|| {
-		System::set_block_number(1);
+		with_block(|| {
+			let reporter = 1;
+			let amount: Amount = 42.into();
+			let address = Address::random();
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				amount,
+				address
+			));
 
-		let reporter = 1;
-		let amount: Amount = 42.into();
-		let address = Address::random();
-		assert_ok!(Tellor::report_stake_deposited(
-			Origin::Staking.into(),
-			reporter,
-			amount,
-			address
-		));
-
-		// // Read pallet storage and assert an expected result.
-		// assert_eq!(TemplateModule::something(), Some(42));
-
-		System::assert_last_event(
-			Event::NewStakerReported { staker: reporter, amount: amount.low_u64(), address }.into(),
-		);
+			System::assert_last_event(
+				Event::NewStakerReported { staker: reporter, amount: amount.low_u64(), address }
+					.into(),
+			);
+		});
 	});
 }
 
 #[test]
 fn begins_dispute() {
 	new_test_ext().execute_with(|| {
-		register_parachain(STAKE_AMOUNT);
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
 
-		let reporter = 1;
-		deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+			let reporter = 1;
+			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 
-		let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
-		assert_ok!(Tellor::submit_value(
-			RuntimeOrigin::signed(reporter),
-			query_id,
-			uint_value(123),
-			0,
-			query_data
-		));
+			let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+			let query_id = keccak_256(query_data.as_ref()).into();
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(123),
+				0,
+				query_data
+			));
 
-		let timestamp = Timestamp::now();
-		assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
+			let timestamp = Timestamp::now();
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 
-		let sent_messages = sent_xcm();
-		let (_, sent_message) = sent_messages.first().unwrap();
-		assert!(sent_message
-			.0
-			.contains(&DescendOrigin(X1(PalletInstance(Tellor::index() as u8)))));
-		// todo: check remaining instructions
+			let sent_messages = sent_xcm();
+			let (_, sent_message) = sent_messages.first().unwrap();
+			assert!(sent_message
+				.0
+				.contains(&DescendOrigin(X1(PalletInstance(Tellor::index() as u8)))));
+			// todo: check remaining instructions
 
-		System::assert_last_event(
-			Event::NewDispute { dispute_id: 1, query_id, timestamp, reporter }.into(),
-		);
+			System::assert_last_event(
+				Event::NewDispute { dispute_id: 1, query_id, timestamp, reporter }.into(),
+			);
+		});
 	});
 }
 

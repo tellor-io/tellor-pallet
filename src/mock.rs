@@ -98,9 +98,9 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = u64;
-	type DisputeId = u128;
 	type ClaimBuffer = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type ClaimPeriod = ConstU64<{ 4 * WEEK_IN_MILLISECONDS }>;
+	type DisputeId = u128;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type Hash = H256;
@@ -166,39 +166,12 @@ impl tellor::traits::Xcm for TestSendXcm {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let mut ext: sp_io::TestExternalities =
-		system::GenesisConfig::default().build_storage::<Test>().unwrap().into();
-	ext.execute_with(|| {
-		System::set_block_number(1);
-		assert_ok!(Timestamp::set(
-			RuntimeOrigin::none(),
-			SystemTime::now()
-				.duration_since(UNIX_EPOCH)
-				.expect("Current time is always after unix epoch; qed")
-				.as_millis() as u64
-		));
-	});
-	ext
-}
-
-pub(crate) fn next_block() {
-	next_block_advance_time(0)
-}
-
-pub(crate) fn next_block_advance_time(time_advance: MomentOf<Test>) {
-	let block = System::block_number();
-
-	Timestamp::on_finalize(block);
-	System::set_block_number(block + 1);
-
-	assert_ok!(Timestamp::set(RuntimeOrigin::none(), Timestamp::get() + 1 + time_advance));
+	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
 }
 
 /// Starts a new block, executing the supplied closure thereafter.
 pub(crate) fn with_block<R>(execute: impl FnOnce() -> R) -> (MomentOf<Test>, R) {
-	next_block();
-	let result = execute();
-	(Timestamp::get(), result)
+	with_block_after(0, execute)
 }
 
 /// Starts a new block after some time, executing the supplied closure thereafter.
@@ -206,7 +179,23 @@ pub(crate) fn with_block_after<R>(
 	time: MomentOf<Test>,
 	execute: impl FnOnce() -> R,
 ) -> (MomentOf<Test>, R) {
-	next_block_advance_time(time);
-	let result = execute();
-	(Timestamp::get(), result)
+	let block = System::block_number();
+	match block {
+		0 => {
+			System::set_block_number(1);
+			assert_ok!(Timestamp::set(
+				RuntimeOrigin::none(),
+				SystemTime::now()
+					.duration_since(UNIX_EPOCH)
+					.expect("Current time is always after unix epoch; qed")
+					.as_millis() as u64
+			));
+		},
+		_ => {
+			Timestamp::on_finalize(block);
+			System::set_block_number(block + 1);
+			assert_ok!(Timestamp::set(RuntimeOrigin::none(), Timestamp::get() + 1 + time));
+		},
+	}
+	(Timestamp::get(), execute())
 }
