@@ -5,7 +5,7 @@ use codec::Encode;
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
 	ensure,
-	traits::{fungible::Transfer, Len, Time},
+	traits::{fungible::Transfer, EnsureOrigin, Len, Time},
 };
 pub use pallet::*;
 use sp_core::Get;
@@ -49,8 +49,8 @@ pub mod pallet {
 	use frame_support::{
 		pallet_prelude::*,
 		sp_runtime::traits::{
-			AtLeast32BitUnsigned, BadOrigin, CheckEqual, Hash, MaybeDisplay,
-			MaybeSerializeDeserialize, Member, SimpleBitOps,
+			AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, MaybeSerializeDeserialize,
+			Member, SimpleBitOps,
 		},
 		traits::{
 			fungible::{Inspect, Transfer},
@@ -117,6 +117,9 @@ pub mod pallet {
 		/// The location of the governance controller contract.
 		#[pallet::constant]
 		type Governance: Get<ContractLocation>;
+
+		/// Origin that handles dispute resolution (governance).
+		type GovernanceOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
 		/// The output of the `Hasher` function.
 		type Hash: Parameter
@@ -205,6 +208,9 @@ pub mod pallet {
 		/// The location of the staking controller contract.
 		#[pallet::constant]
 		type Staking: Get<ContractLocation>;
+
+		/// Origin that handles staking.
+		type StakingOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
 		/// The on-chain time provider.
 		type Time: Time;
@@ -1177,7 +1183,7 @@ pub mod pallet {
 			address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
-			ensure_staking(<T as Config>::RuntimeOrigin::from(origin))?;
+			T::StakingOrigin::ensure_origin(origin)?;
 
 			let amount = amount
 				.saturated_into::<u128>() // todo: handle in single call skipping u128
@@ -1217,7 +1223,7 @@ pub mod pallet {
 			_address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
-			ensure_staking(<T as Config>::RuntimeOrigin::from(origin))?;
+			T::StakingOrigin::ensure_origin(origin)?;
 			Ok(())
 		}
 
@@ -1234,7 +1240,7 @@ pub mod pallet {
 			_address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
-			ensure_staking(<T as Config>::RuntimeOrigin::from(origin))?;
+			T::StakingOrigin::ensure_origin(origin)?;
 			Ok(())
 		}
 
@@ -1251,7 +1257,7 @@ pub mod pallet {
 			_amount: Amount,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
-			ensure_governance(<T as Config>::RuntimeOrigin::from(origin))?;
+			T::GovernanceOrigin::ensure_origin(origin)?;
 			Ok(())
 		}
 
@@ -1261,7 +1267,7 @@ pub mod pallet {
 			_dispute_id: DisputeIdOf<T>,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
-			ensure_governance(<T as Config>::RuntimeOrigin::from(origin))?;
+			T::GovernanceOrigin::ensure_origin(origin)?;
 			Ok(())
 		}
 
@@ -1271,32 +1277,42 @@ pub mod pallet {
 			_dispute_id: DisputeIdOf<T>,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
-			ensure_governance(<T as Config>::RuntimeOrigin::from(origin))?;
+			T::GovernanceOrigin::ensure_origin(origin)?;
 			Ok(())
 		}
 	}
+}
 
-	/// Ensure that the origin `o` represents is the governance controller contract.
-	/// Returns `Ok` if it does or an `Err` otherwise.
-	fn ensure_governance<OuterOrigin>(o: OuterOrigin) -> Result<(), BadOrigin>
-	where
-		OuterOrigin: Into<Result<Origin, OuterOrigin>>,
-	{
-		match o.into() {
-			Ok(Origin::Governance) => Ok(()),
-			_ => Err(BadOrigin),
-		}
+/// Ensure the origin is the governance controller contract.
+pub struct EnsureGovernance;
+impl<O: Into<Result<Origin, O>> + From<Origin>> EnsureOrigin<O> for EnsureGovernance {
+	type Success = ();
+	fn try_origin(o: O) -> Result<Self::Success, O> {
+		o.into().and_then(|o| match o {
+			Origin::Governance => Ok(()),
+			r => Err(O::from(r)),
+		})
 	}
 
-	/// Ensure that the origin `o` represents is the staking controller contract.
-	/// Returns `Ok` if it does or an `Err` otherwise.
-	fn ensure_staking<OuterOrigin>(o: OuterOrigin) -> Result<(), BadOrigin>
-	where
-		OuterOrigin: Into<Result<Origin, OuterOrigin>>,
-	{
-		match o.into() {
-			Ok(Origin::Staking) => Ok(()),
-			_ => Err(BadOrigin),
-		}
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<O, ()> {
+		Ok(O::from(Origin::Governance))
+	}
+}
+
+/// Ensure the origin is the staking controller contract.
+pub struct EnsureStaking;
+impl<O: Into<Result<Origin, O>> + From<Origin>> EnsureOrigin<O> for EnsureStaking {
+	type Success = ();
+	fn try_origin(o: O) -> Result<Self::Success, O> {
+		o.into().and_then(|o| match o {
+			Origin::Staking => Ok(()),
+			r => Err(O::from(r)),
+		})
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<O, ()> {
+		Ok(O::from(Origin::Staking))
 	}
 }

@@ -17,7 +17,7 @@ use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
-use tellor::{FeedDetails, Tip};
+use tellor::{EnsureGovernance, EnsureStaking, FeedDetails, Tip};
 use xcm::latest::prelude::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -103,6 +103,7 @@ impl tellor::Config for Test {
 	type DisputeId = DisputeId;
 	type Fee = ();
 	type Governance = ();
+	type GovernanceOrigin = EnsureGovernance;
 	type Hash = H256;
 	type Hasher = Keccak256;
 	type MaxClaimTimestamps = ();
@@ -123,6 +124,7 @@ impl tellor::Config for Test {
 	type Registry = ();
 	type ReportingLock = ConstU64<42>;
 	type Staking = ();
+	type StakingOrigin = EnsureStaking;
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ();

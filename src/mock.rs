@@ -2,6 +2,7 @@ use crate as tellor;
 use crate::{
 	types::{Address, MomentOf},
 	xcm::ContractLocation,
+	EnsureGovernance, EnsureStaking,
 };
 use ::xcm::latest::MultiLocation;
 use frame_support::{
@@ -108,6 +109,7 @@ impl tellor::Config for Test {
 	type DisputeId = u32;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
+	type GovernanceOrigin = EnsureGovernance;
 	type Hash = H256;
 	type Hasher = Keccak256;
 	type MaxClaimTimestamps = ConstU32<10>;
@@ -128,6 +130,7 @@ impl tellor::Config for Test {
 	type Registry = TellorRegistry;
 	type ReportingLock = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type Staking = TellorStaking;
+	type StakingOrigin = EnsureStaking;
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ValueConverter;
