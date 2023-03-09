@@ -1114,6 +1114,7 @@ pub mod pallet {
 			}
 
 			{
+				// Lookup corresponding addresses on controller chain
 				let dispute_initiator = <StakerDetails<T>>::get(&dispute_initiator)
 					.ok_or(Error::<T>::NotReporter)?
 					.address;
@@ -1123,7 +1124,7 @@ pub mod pallet {
 
 				let xcm_config = <XcmConfig<T>>::get().unwrap(); // todo: add error
 
-				// todo: charge corresponding fees
+				// todo: charge dispute initiator corresponding fees
 
 				let governance_contract = T::Governance::get();
 				let message = xcm::transact(
@@ -1154,7 +1155,7 @@ pub mod pallet {
 				dispute_id,
 				query_id,
 				timestamp,
-				reporter: dispute_initiator, // todo: update
+				reporter: dispute_initiator,
 			});
 			Ok(())
 		}
