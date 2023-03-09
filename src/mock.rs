@@ -1,5 +1,8 @@
 use crate as tellor;
-use crate::types::{Address, MomentOf};
+use crate::{
+	types::{Address, MomentOf},
+	xcm::ContractLocation,
+};
 use ::xcm::latest::MultiLocation;
 use frame_support::{
 	assert_ok, log, parameter_types,
@@ -88,9 +91,9 @@ const PARA_ID: u32 = 2000;
 
 parameter_types! {
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
-	pub TellorRegistry: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
-	pub TellorGovernance: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
-	pub TellorStaking: MultiLocation = crate::xcm::controller(PARA_ID, Address::random().0);
+	pub TellorRegistry: ContractLocation = (PARA_ID, Address::random().into()).into();
+	pub TellorGovernance: ContractLocation = (PARA_ID, Address::random().into()).into();
+	pub TellorStaking: ContractLocation = (PARA_ID, Address::random().into()).into();
 }
 
 pub(crate) const HOUR_IN_MILLISECONDS: u64 = 3_600_000;

@@ -70,7 +70,7 @@ pub enum TransactionAction {
 }
 
 pub(crate) fn transact(
-	contract_address: H160,
+	contract_address: impl Into<H160>,
 	call_data: BoundedVec<u8, ConstU32<MAX_ETHEREUM_XCM_INPUT_SIZE>>,
 	gas_limit: U256,
 	value: Option<U256>,
@@ -78,7 +78,7 @@ pub(crate) fn transact(
 	EthereumXcm::Moonbase(EthereumXcmCall::Transact {
 		xcm_transaction: EthereumXcmTransaction::V2(EthereumXcmTransactionV2 {
 			gas_limit,
-			action: TransactionAction::Call(contract_address),
+			action: TransactionAction::Call(contract_address.into()),
 			value: value.unwrap_or(U256::zero()),
 			input: call_data,
 			access_list: None,

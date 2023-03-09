@@ -91,7 +91,6 @@ impl pallet_timestamp::Config for Test {
 	type MinimumPeriod = ConstU64<1>;
 	type WeightInfo = ();
 }
-
 parameter_types! {
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
 }

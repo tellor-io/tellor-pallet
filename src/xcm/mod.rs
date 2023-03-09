@@ -4,6 +4,7 @@ use ::xcm::latest::{prelude::*, MultiLocation};
 use core::marker::PhantomData;
 use frame_support::{
 	log,
+	pallet_prelude::*,
 	traits::{OriginTrait, PalletInfoAccess},
 };
 use sp_core::Get;
@@ -13,10 +14,7 @@ use xcm_executor::traits::{Convert, ConvertOrigin};
 pub(crate) mod ethereum_xcm;
 
 impl<T: Config> Pallet<T> {
-	pub(super) fn send_xcm(
-		destination: impl Into<MultiLocation>,
-		message: Xcm<()>,
-	) -> Result<(), Error<T>> {
+	pub(super) fn send_xcm(destination: MultiLocation, message: Xcm<()>) -> Result<(), Error<T>> {
 		let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
 		<T::Xcm as traits::Xcm>::send_xcm(interior, destination, message).map_err(|e| match e {
 			SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
@@ -69,30 +67,24 @@ where
 	}
 }
 
-pub fn controller(para_id: ParaId, address: [u8; 20]) -> MultiLocation {
-	MultiLocation {
-		parents: 1,
-		interior: X2(Parachain(para_id), AccountKey20 { network: Any, key: address }),
+#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct ContractLocation {
+	pub(crate) para_id: ParaId,
+	pub(crate) address: [u8; 20],
+}
+impl ContractLocation {
+	pub(super) fn into(self) -> MultiLocation {
+		MultiLocation { parents: 1, interior: X1(Parachain(self.para_id)) }
 	}
 }
-
-pub(crate) fn contract_address(location: &MultiLocation) -> Option<&[u8; 20]> {
-	match location {
-		MultiLocation {
-			parents: _parents,
-			interior: X2(Parachain(_para_id), AccountKey20 { key, network: _network }),
-		} => Some(key),
-		_ => None,
+impl Default for ContractLocation {
+	fn default() -> Self {
+		Self { para_id: 0, address: [0u8; 20] }
 	}
 }
-
-pub(crate) fn destination(location: &MultiLocation) -> Option<MultiLocation> {
-	match location {
-		MultiLocation {
-			parents: _parents,
-			interior: X2(Parachain(_para_id), AccountKey20 { key: _key, network: _network }),
-		} => Some(MultiLocation { parents: 1, interior: X1(Parachain(*_para_id)) }),
-		_ => None,
+impl From<(ParaId, [u8; 20])> for ContractLocation {
+	fn from(value: (ParaId, [u8; 20])) -> Self {
+		ContractLocation { para_id: value.0, address: value.1 }
 	}
 }
 
@@ -125,35 +117,20 @@ mod tests {
 	use sp_core::blake2_256;
 	use std::borrow::Borrow;
 
-	const PARA_ID: u32 = 12345;
+	const PARA_ID: u32 = 12_345;
 
 	#[test]
-	fn controller() {
+	fn contract_location_from_tuple() {
 		let address = Address::random().0;
-		assert_eq!(
-			super::controller(PARA_ID, address),
-			MultiLocation {
-				parents: 1,
-				interior: X2(Parachain(PARA_ID), AccountKey20 { network: Any, key: address },),
-			}
-		)
+		let location: ContractLocation = (PARA_ID, address).into();
+		assert_eq!(location, ContractLocation { para_id: PARA_ID, address });
 	}
 
 	#[test]
-	fn contract_address_matches() {
-		let address = Address::random().0;
-		let location = super::controller(PARA_ID, address);
-		assert_eq!(&address, contract_address(&location).unwrap())
-	}
-
-	#[test]
-	fn destination_matches() {
-		let address = Address::random().0;
-		let location = super::controller(PARA_ID, address);
-		assert_eq!(
-			MultiLocation { parents: 1, interior: X1(Parachain(PARA_ID)) },
-			destination(&location).unwrap()
-		)
+	fn contract_location_to_parachain() {
+		let contract_location: ContractLocation = (PARA_ID, Address::random().0).into();
+		let multilocation: MultiLocation = contract_location.into();
+		assert_eq!(multilocation, MultiLocation { parents: 1, interior: X1(Parachain(PARA_ID)) });
 	}
 
 	#[test]

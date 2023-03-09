@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub use crate::xcm::ContractLocation;
 use codec::Encode;
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
@@ -43,7 +44,7 @@ pub mod pallet {
 		xcm::{self, ethereum_xcm},
 		*,
 	};
-	use crate::{types::oracle::Report, Tip};
+	use crate::{types::oracle::Report, xcm::ContractLocation, Tip};
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
@@ -115,7 +116,7 @@ pub mod pallet {
 
 		/// The location of the governance controller contract.
 		#[pallet::constant]
-		type Governance: Get<MultiLocation>;
+		type Governance: Get<ContractLocation>;
 
 		/// The output of the `Hasher` function.
 		type Hash: Parameter
@@ -195,7 +196,7 @@ pub mod pallet {
 
 		/// The location of the registry controller contract.
 		#[pallet::constant]
-		type Registry: Get<MultiLocation>;
+		type Registry: Get<ContractLocation>;
 
 		/// Base amount of time before a reporter is able to submit a value again.
 		#[pallet::constant]
@@ -203,7 +204,7 @@ pub mod pallet {
 
 		/// The location of the staking controller contract.
 		#[pallet::constant]
-		type Staking: Get<MultiLocation>;
+		type Staking: Get<ContractLocation>;
 
 		/// The on-chain time provider.
 		type Time: Time;
@@ -487,7 +488,7 @@ pub mod pallet {
 
 			<StakeAmount<T>>::set(stake_amount);
 
-			let registry = T::Registry::get();
+			let registry_contract = T::Registry::get();
 
 			// Balances pallet on destination chain
 			let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
@@ -496,9 +497,7 @@ pub mod pallet {
 				WeightLimit::Unlimited,
 				require_weight_at_most,
 				ethereum_xcm::transact(
-					xcm::contract_address(&registry)
-						.ok_or(Error::<T>::InvalidContractAddress)?
-						.into(),
+					registry_contract.address,
 					registry::register(
 						T::ParachainId::get(),
 						Pallet::<T>::index() as u8,
@@ -510,10 +509,7 @@ pub mod pallet {
 					None,
 				),
 			);
-			Self::send_xcm(
-				xcm::destination(&registry).ok_or(Error::<T>::InvalidDestination)?,
-				message,
-			)?;
+			Self::send_xcm(registry_contract.into(), message)?;
 
 			Ok(())
 		}
@@ -1115,7 +1111,7 @@ pub mod pallet {
 
 				const GAS_LIMIT: u32 = 71_000;
 
-				let governance = T::Governance::get();
+				let governance_contract = T::Governance::get();
 				// Balances pallet on destination chain
 				let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 				let message = xcm::transact(
@@ -1126,9 +1122,7 @@ pub mod pallet {
 					WeightLimit::Unlimited,
 					5_000_000_000u64,
 					ethereum_xcm::transact(
-						xcm::contract_address(&governance)
-							.ok_or(Error::<T>::InvalidContractAddress)?
-							.into(),
+						governance_contract.address,
 						governance::begin_parachain_dispute(
 							T::ParachainId::get(),
 							query_id.as_ref(),
@@ -1144,10 +1138,7 @@ pub mod pallet {
 						None,
 					),
 				);
-				Self::send_xcm(
-					xcm::destination(&governance).ok_or(Error::<T>::InvalidDestination)?,
-					message,
-				)?;
+				Self::send_xcm(governance_contract.into(), message)?;
 			}
 
 			Self::deposit_event(Event::NewDispute {
