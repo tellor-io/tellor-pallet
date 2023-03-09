@@ -6,11 +6,7 @@ use crate::{
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{assert_ok, traits::PalletInfoAccess};
 use sp_core::{bytes::to_hex, keccak_256, H256};
-use xcm::{
-	latest::prelude::*,
-	prelude::{DescendOrigin, PalletInstance, X1},
-	v1::MultiAsset,
-};
+use xcm::latest::prelude::*;
 
 mod autopay;
 

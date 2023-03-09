@@ -1,6 +1,6 @@
 use super::{traits, Config, Error, Pallet};
 use crate::types::ParaId;
-use ::xcm::latest::{prelude::*, MultiLocation};
+use ::xcm::latest::prelude::*;
 use core::marker::PhantomData;
 use frame_support::{
 	log,

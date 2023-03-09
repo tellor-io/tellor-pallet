@@ -4,7 +4,6 @@ use crate::{
 	xcm::ContractLocation,
 	EnsureGovernance, EnsureStaking, HOUR_IN_MILLISECONDS, WEEK_IN_MILLISECONDS,
 };
-use ::xcm::latest::MultiLocation;
 use frame_support::{
 	assert_ok, log, parameter_types,
 	traits::{ConstU16, ConstU64, OnFinalize},

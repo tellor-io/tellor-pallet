@@ -1,12 +1,12 @@
 use sp_std::vec::Vec;
-use xcm::prelude::*;
+use xcm::latest::prelude::*;
 
 // Simple trait to avoid taking a hard dependency on pallet-xcm.
 pub trait Xcm {
 	fn send_xcm(
 		interior: impl Into<Junctions>,
 		dest: impl Into<MultiLocation>,
-		message: xcm::v2::Xcm<()>,
+		message: xcm::latest::prelude::Xcm<()>,
 	) -> Result<(), SendError>;
 }
 
