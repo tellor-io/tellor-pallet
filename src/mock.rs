@@ -2,7 +2,7 @@ use crate as tellor;
 use crate::{
 	types::{Address, MomentOf},
 	xcm::ContractLocation,
-	EnsureGovernance, EnsureStaking,
+	EnsureGovernance, EnsureStaking, HOUR_IN_MILLISECONDS, WEEK_IN_MILLISECONDS,
 };
 use ::xcm::latest::MultiLocation;
 use frame_support::{
@@ -96,9 +96,6 @@ parameter_types! {
 	pub TellorGovernance: ContractLocation = (PARA_ID, Address::random().into()).into();
 	pub TellorStaking: ContractLocation = (PARA_ID, Address::random().into()).into();
 }
-
-pub(crate) const HOUR_IN_MILLISECONDS: u64 = 3_600_000;
-const WEEK_IN_MILLISECONDS: u64 = HOUR_IN_MILLISECONDS * 168;
 
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;

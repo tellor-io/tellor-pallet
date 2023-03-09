@@ -36,6 +36,11 @@ pub mod traits;
 mod types;
 pub mod xcm;
 
+pub const MINUTE_IN_MILLISECONDS: u64 = 60 * 1_000;
+pub const HOUR_IN_MILLISECONDS: u64 = 60 * MINUTE_IN_MILLISECONDS;
+pub const DAY_IN_MILLISECONDS: u64 = 24 * HOUR_IN_MILLISECONDS;
+pub const WEEK_IN_MILLISECONDS: u64 = 7 * DAY_IN_MILLISECONDS;
+
 #[frame_support::pallet(dev_mode)]
 pub mod pallet {
 	use super::{

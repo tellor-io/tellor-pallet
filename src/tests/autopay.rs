@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
 	types::{FeedDetailsOf, FeedIdOf, QueryDataOf, QueryIdOf, TimestampOf, TipOf},
-	Config,
+	Config, HOUR_IN_MILLISECONDS,
 };
 use frame_support::{
 	assert_noop, assert_ok,
