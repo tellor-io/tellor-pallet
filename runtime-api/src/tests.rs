@@ -159,8 +159,8 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_data_feed(feed_id)
 		}
 
-		fn get_funded_feed_details(feed_id: FeedId) -> Vec<FeedDetailsWithQueryData<Amount, Moment>> {
-			tellor::Pallet::<Test>::get_funded_feed_details(feed_id).into_iter()
+		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount, Moment>> {
+			tellor::Pallet::<Test>::get_funded_feed_details().into_iter()
 			.map(|(details, query_data)| FeedDetailsWithQueryData {
 				details: details,
 				query_data: query_data.to_vec()})
@@ -208,7 +208,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reward_claimed_status(feed_id, query_id, timestamp)
 		}
 
-		fn get_reward_claim_status_list(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Moment>) -> Vec<Option<bool>>{
+		fn get_reward_claim_status_list(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Moment>) -> Vec<bool>{
 			tellor::Pallet::<Test>::get_reward_claim_status_list(feed_id, query_id, timestamps)
 		}
 
@@ -342,10 +342,7 @@ mod autopay {
 	#[test]
 	fn get_funded_feed_details() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.get_funded_feed_details(&BLOCKID, FeedId::random()).unwrap(),
-				Vec::default()
-			);
+			assert_eq!(Test.get_funded_feed_details(&BLOCKID).unwrap(), Vec::default());
 		});
 	}
 
@@ -436,7 +433,7 @@ mod autopay {
 					vec![]
 				)
 				.unwrap(),
-				Vec::default()
+				Vec::<bool>::default()
 			);
 		});
 	}

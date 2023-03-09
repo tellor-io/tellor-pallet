@@ -36,11 +36,9 @@ sp_api::decl_runtime_apis! {
 		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount, Timestamp>>;
 
 		/// Read currently funded feed details.
-		/// # Arguments
-		/// * `query_id` - Unique feed identifier of parameters.
 		/// # Returns
-		/// Details of the specified feed.
-		fn get_funded_feed_details(feed_id: FeedId) -> Vec<FeedDetailsWithQueryData<Amount, Timestamp>>;
+		/// Details for funded feeds.
+		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount, Timestamp>>;
 
 		/// Read currently funded feeds.
 		/// # Returns
@@ -111,7 +109,7 @@ sp_api::decl_runtime_apis! {
 		/// * `timestamps` - Timestamps of oracle submissions.
 		/// # Returns
 		/// Whether rewards have been claimed.
-		fn get_reward_claim_status_list(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Timestamp>) -> Vec<Option<bool>>;
+		fn get_reward_claim_status_list(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Timestamp>) -> Vec<bool>;
 
 		/// Read the total amount of tips paid by a user.
 		/// # Arguments

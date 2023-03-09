@@ -1747,7 +1747,7 @@ fn get_reward_amount() {
 		});
 	});
 
-	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L136
+	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L632
 	ext.execute_with(|| {
 		let (timestamp_0, feed_id) = with_block(|| {
 			// setup data feed with time based rewards
@@ -1894,21 +1894,200 @@ fn bytes_to_price() {
 }
 
 #[test]
-#[ignore]
 fn get_funded_single_tips_info() {
-	todo!()
+	let query_data_1: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id_1: H256 = keccak_256(query_data_1.as_ref()).into();
+	let query_data_2: QueryDataOf<Test> = spot_price("ksm", "usd").try_into().unwrap();
+	let query_id_2: H256 = keccak_256(query_data_2.as_ref()).into();
+	let tipper = 1;
+
+	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L713
+	new_test_ext().execute_with(|| {
+		with_block(|| {
+			Balances::make_free_balance_be(&tipper, token(1_000));
+			assert_ok!(Tellor::tip(
+				RuntimeOrigin::signed(tipper),
+				query_id_1,
+				token(100),
+				query_data_1.clone()
+			));
+			assert_ok!(Tellor::tip(
+				RuntimeOrigin::signed(tipper),
+				query_id_2,
+				token(100),
+				query_data_2.clone()
+			));
+			assert_eq!(
+				Tellor::get_funded_single_tips_info(),
+				vec![(query_data_1, token(100)), (query_data_2, token(100))]
+			)
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn get_funded_feed_details() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let feed_creator = 1;
+
+	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L724
+	new_test_ext().execute_with(|| {
+		with_block(|| {
+			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			create_feed(
+				feed_creator,
+				query_id,
+				token(1),
+				Timestamp::get(),
+				3600 * SECONDS,
+				600 * SECONDS,
+				0,
+				0,
+				query_data.clone(),
+				token(1_000),
+			);
+			assert_eq!(
+				&Tellor::get_funded_feed_details()[0].0,
+				&FeedDetailsOf::<Test> {
+					reward: token(1),
+					balance: token(1_000),
+					start_time: Timestamp::get(),
+					interval: 3600 * SECONDS,
+					window: 600 * SECONDS,
+					price_threshold: 0,
+					reward_increase_per_second: 0,
+					feeds_with_funding_index: 1,
+				}
+			);
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn get_reward_claim_status_list() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id: H256 = keccak_256(query_data.as_ref()).into();
+	let feed_creator = 1;
+	let reporter_1 = 2;
+	let reporter_2 = 3;
+	let reporter_3 = 4;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			deposit_stake(reporter_1, STAKE_AMOUNT, Address::random());
+			deposit_stake(reporter_2, STAKE_AMOUNT, Address::random());
+			deposit_stake(reporter_3, STAKE_AMOUNT, Address::random());
+		});
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L738
+	ext.execute_with(|| {
+		// setup feeds with funding
+		let (_, feed_id) = with_block(|| {
+			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			create_feed(
+				feed_creator,
+				query_id,
+				token(10),
+				Timestamp::get(),
+				3600 * SECONDS,
+				600 * SECONDS,
+				0,
+				0,
+				query_data.clone(),
+				token(1_000),
+			)
+		});
+
+		// submit to feeds
+		let (timestamp_1, _) = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_1),
+				query_id,
+				uint_value(3500),
+				0,
+				query_data.clone(),
+			));
+		});
+		let (timestamp_2, _) = with_block_after(ClaimBuffer::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_2),
+				query_id,
+				uint_value(3525),
+				1,
+				query_data.clone(),
+			));
+		});
+		let (timestamp_3, _) = with_block_after(ClaimBuffer::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_3),
+				query_id,
+				uint_value(3550),
+				2,
+				query_data.clone(),
+			));
+		});
+
+		// check timestamps
+		assert_eq!(
+			Tellor::get_reward_claim_status_list(
+				feed_id,
+				query_id,
+				vec![timestamp_1, timestamp_2, timestamp_3]
+			),
+			vec![false, false, false]
+		);
+
+		// claim tip and check status
+		with_block_after(ClaimBuffer::get(), || {
+			assert_ok!(Tellor::claim_tip(
+				RuntimeOrigin::signed(reporter_1),
+				feed_id,
+				query_id,
+				bounded_vec![timestamp_1]
+			));
+			assert_eq!(
+				Tellor::get_reward_claim_status_list(
+					feed_id,
+					query_id,
+					vec![timestamp_1, timestamp_2, timestamp_3]
+				),
+				vec![true, false, false]
+			);
+			assert_ok!(Tellor::claim_tip(
+				RuntimeOrigin::signed(reporter_2),
+				feed_id,
+				query_id,
+				bounded_vec![timestamp_2]
+			));
+			assert_eq!(
+				Tellor::get_reward_claim_status_list(
+					feed_id,
+					query_id,
+					vec![timestamp_1, timestamp_2, timestamp_3]
+				),
+				vec![true, true, false]
+			);
+			assert_ok!(Tellor::claim_tip(
+				RuntimeOrigin::signed(reporter_3),
+				feed_id,
+				query_id,
+				bounded_vec![timestamp_3]
+			));
+			assert_eq!(
+				Tellor::get_reward_claim_status_list(
+					feed_id,
+					query_id,
+					vec![timestamp_1, timestamp_2, timestamp_3]
+				),
+				vec![true, true, true]
+			);
+		})
+	});
 }
 
 // Helper function for creating feeds

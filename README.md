@@ -9,32 +9,31 @@ License: Unlicense
 
 ### AutoPay
 
-| Dispatchable Function                  |    Functional Test     | Notes                                                              |
-|----------------------------------------|:----------------------:|--------------------------------------------------------------------|
-| :white_check_mark: `claim_onetime_tip` | :white_square_button:  | Partially implemented, need to merge in logic from associated test |
-| :white_check_mark: `claim_tip`         |   :white_check_mark:   |                                                                    |
-| :white_check_mark: `fund_feed`         |   :white_check_mark:   |                                                                    |
-| :white_check_mark: `setup_data_feed`   |   :white_check_mark:   |                                                                    |
-| :white_check_mark: `tip`               |   :white_check_mark:   |                                                                    |
+| Dispatchable Function                  |    Functional Test     | Notes                                                                  |
+|----------------------------------------|:----------------------:|------------------------------------------------------------------------|
+| :white_check_mark: `claim_onetime_tip` | :white_square_button:  | Partially implemented, need to merge in logic from new associated test |
+| :white_check_mark: `claim_tip`         | :white_square_button:  | Partially implemented, need to merge in logic from new associated test |
+| :white_check_mark: `fund_feed`         |   :white_check_mark:   |                                                                        |
+| :white_check_mark: `setup_data_feed`   |   :white_check_mark:   |                                                                        |
+| :white_check_mark: `tip`               |   :white_check_mark:   |                                                                        |
 
-| Runtime API                                       |    Functional Test    | Notes |
-|---------------------------------------------------|:---------------------:|-------|
-| :white_check_mark: `get_current_feeds`            | :white_square_button: |       |
-| :white_check_mark: `get_current_tip`              |  :white_check_mark:   |       |
-| :white_check_mark: `get_data_feed`                |  :white_check_mark:   |       |
-| :white_check_mark: `get_funded_feed_details `     | :white_square_button: |       |
-| :white_check_mark: `get_funded_feeds`             |  :white_check_mark:   |       |
-| :white_check_mark: `get_funded_query_ids`         |  :white_check_mark:   |       |
-| :white_check_mark: `get_funded_single_tips_info`  | :white_square_button: |       |
-| :white_check_mark: `get_past_tip_count`           |  :white_check_mark:   |       |
-| :white_check_mark: `get_past_tips`                |  :white_check_mark:   |       |
-| :white_check_mark: `get_past_tip_by_index`        |  :white_check_mark:   |       |
-| :white_check_mark: `get_query_id_from_feed_id`    |  :white_check_mark:   |       |
-| :white_check_mark: `get_reward_amount`            |  :white_check_mark:   |       |
-| :white_check_mark: `get_reward_claimed_status`    |  :white_check_mark:   |       |
-| :white_check_mark: `get_reward_claim_status_list` | :white_square_button: |       |
-| :white_check_mark: `get_tips_by_address`          |  :white_check_mark:   |       |
-
+| Runtime API                                       |    Functional Test    | Notes             |
+|---------------------------------------------------|:---------------------:|-------------------|
+| :white_check_mark: `get_current_feeds`            | :white_square_button: | No reference test |
+| :white_check_mark: `get_current_tip`              |  :white_check_mark:   |                   |
+| :white_check_mark: `get_data_feed`                |  :white_check_mark:   |                   |
+| :white_check_mark: `get_funded_feed_details `     |  :white_check_mark:   |                   |
+| :white_check_mark: `get_funded_feeds`             |  :white_check_mark:   |                   |
+| :white_check_mark: `get_funded_query_ids`         |  :white_check_mark:   |                   |
+| :white_check_mark: `get_funded_single_tips_info`  |  :white_check_mark:   |                   |
+| :white_check_mark: `get_past_tip_count`           |  :white_check_mark:   |                   |
+| :white_check_mark: `get_past_tips`                |  :white_check_mark:   |                   |
+| :white_check_mark: `get_past_tip_by_index`        |  :white_check_mark:   |                   |
+| :white_check_mark: `get_query_id_from_feed_id`    |  :white_check_mark:   |                   |
+| :white_check_mark: `get_reward_amount`            |  :white_check_mark:   |                   |
+| :white_check_mark: `get_reward_claimed_status`    |  :white_check_mark:   |                   |
+| :white_check_mark: `get_reward_claim_status_list` |  :white_check_mark:   |                   |
+| :white_check_mark: `get_tips_by_address`          |  :white_check_mark:   |                   |
 
 ### Oracle (Tellor Flex)
 

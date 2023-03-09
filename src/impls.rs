@@ -174,13 +174,9 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Read currently funded feed details.
-	/// # Arguments
-	/// * `query_id` - Unique feed identifier of parameters.
 	/// # Returns
-	/// Details of the specified feed.
-	pub fn get_funded_feed_details(
-		_feed_id: FeedIdOf<T>,
-	) -> Vec<(FeedDetailsOf<T>, QueryDataOf<T>)> {
+	/// Details for funded feeds.
+	pub fn get_funded_feed_details() -> Vec<(FeedDetailsOf<T>, QueryDataOf<T>)> {
 		Self::get_funded_feeds()
 			.into_iter()
 			.filter_map(|feed_id| {
@@ -657,12 +653,12 @@ impl<T: Config> Pallet<T> {
 		feed_id: FeedIdOf<T>,
 		query_id: QueryIdOf<T>,
 		timestamps: Vec<TimestampOf<T>>,
-	) -> Vec<Option<bool>> {
+	) -> Vec<bool> {
 		// todo: use boundedvec for timestamps
 		<DataFeeds<T>>::get(query_id, feed_id).map_or_else(Vec::default, |feed| {
 			timestamps
 				.into_iter()
-				.map(|timestamp| feed.reward_claimed.get(&timestamp).copied())
+				.map(|timestamp| feed.reward_claimed.get(&timestamp).copied().unwrap_or_default())
 				.collect()
 		})
 	}
