@@ -2,7 +2,7 @@ use crate as tellor;
 use crate::types::{Address, MomentOf};
 use ::xcm::latest::MultiLocation;
 use frame_support::{
-	assert_ok, parameter_types,
+	assert_ok, log, parameter_types,
 	traits::{ConstU16, ConstU64, OnFinalize},
 	PalletId,
 };
@@ -150,24 +150,23 @@ pub fn sent_xcm() -> Vec<(MultiLocation, opaque::Xcm)> {
 }
 /// Sender that never returns error, always sends
 pub struct TestSendXcm;
-impl SendXcm for TestSendXcm {
-	fn send_xcm(dest: impl Into<MultiLocation>, msg: Xcm<()>) -> SendResult {
-		SENT_XCM.with(|q| q.borrow_mut().push((dest.into(), msg)));
-		Ok(())
-	}
-}
 impl tellor::traits::Xcm for TestSendXcm {
 	fn send_xcm(
 		interior: impl Into<Junctions>,
 		dest: impl Into<MultiLocation>,
 		mut message: Xcm<()>,
 	) -> Result<(), SendError> {
+		// From https://github.com/paritytech/polkadot/blob/645723987cf9662244be8faf4e9b63e8b9a1b3a3/xcm/pallet-xcm/src/lib.rs#L1085-L1090
 		let interior = interior.into();
 		let dest = dest.into();
-		if interior != Here {
+		if interior != Junctions::Here {
 			message.0.insert(0, DescendOrigin(interior))
 		};
-		<Self as SendXcm>::send_xcm(dest, message)
+		log::trace!(target: "xcm::send_xcm", "dest: {:?}, message: {:?}", &dest, &message);
+
+		// From https://github.com/paritytech/polkadot/blob/645723987cf9662244be8faf4e9b63e8b9a1b3a3/xcm/pallet-xcm/src/mock.rs#L154
+		SENT_XCM.with(|q| q.borrow_mut().push((dest.into(), message)));
+		Ok(())
 	}
 }
 
