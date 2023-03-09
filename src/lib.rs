@@ -14,7 +14,7 @@ use sp_runtime::{
 	SaturatedConversion, Saturating,
 };
 use sp_std::vec::Vec;
-use traits::UsingTellor;
+pub use traits::{UsingTellor, Xcm};
 use types::*;
 pub use types::{
 	autopay::{FeedDetails, Tip},
