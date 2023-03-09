@@ -2,7 +2,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use autopay::*;
+pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
 use sp_std::vec::Vec;
 use tellor::{FeedDetails, Tip};
