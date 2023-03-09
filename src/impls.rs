@@ -61,7 +61,7 @@ impl<T: Config> Pallet<T> {
 		}
 		let feed_details = feed.details.clone();
 		<DataFeeds<T>>::insert(query_id, feed_id, feed);
-		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_add(amount));
+		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
 		Self::deposit_event(Event::DataFeedFunded {
 			feed_id,
 			query_id,
@@ -584,7 +584,11 @@ impl<T: Config> Pallet<T> {
 		if time_diff < feed.details.window && timestamp_before < c {
 			// add time based rewards if applicable
 			reward_amount.saturating_accrue(
-				feed.details.reward_increase_per_second.saturating_mul(time_diff.into()),
+				feed.details
+					.reward_increase_per_second
+					.checked_div(&<AmountOf<T>>::from(1_000u16))
+					.ok_or(Error::<T>::RewardCalculationError)? // convert to ms
+					.saturating_mul(time_diff.into()),
 			);
 		} else {
 			ensure!(price_change > feed.details.price_threshold, Error::<T>::PriceThresholdNotMet);

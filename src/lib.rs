@@ -432,6 +432,7 @@ pub mod pallet {
 		PriceChangeCalculationError,
 		/// Price threshold not met.
 		PriceThresholdNotMet,
+		RewardCalculationError,
 		/// Timestamp not eligible for tip.
 		TimestampIneligibleForTip,
 		/// Tip already claimed.
@@ -885,7 +886,7 @@ pub mod pallet {
 				amount,
 				true,
 			)?;
-			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_add(amount));
+			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
 			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
 			Ok(())
 		}

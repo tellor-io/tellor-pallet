@@ -30,10 +30,10 @@ License: Unlicense
 | :white_check_mark: `get_past_tips`                |  :white_check_mark:   |       |
 | :white_check_mark: `get_past_tip_by_index`        |  :white_check_mark:   |       |
 | :white_check_mark: `get_query_id_from_feed_id`    |  :white_check_mark:   |       |
-| :white_check_mark: `get_reward_amount`            | :white_square_button: |       |
+| :white_check_mark: `get_reward_amount`            |  :white_check_mark:   |       |
 | :white_check_mark: `get_reward_claimed_status`    |  :white_check_mark:   |       |
 | :white_check_mark: `get_reward_claim_status_list` | :white_square_button: |       |
-| :white_check_mark: `get_tips_by_address`          | :white_square_button: |       |
+| :white_check_mark: `get_tips_by_address`          |  :white_check_mark:   |       |
 
 
 ### Oracle (Tellor Flex)
