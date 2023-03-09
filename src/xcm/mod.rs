@@ -67,7 +67,7 @@ where
 	}
 }
 
-#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Default, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct ContractLocation {
 	pub(crate) para_id: ParaId,
 	pub(crate) address: [u8; 20],
@@ -75,11 +75,6 @@ pub struct ContractLocation {
 impl ContractLocation {
 	pub(super) fn into(self) -> MultiLocation {
 		MultiLocation { parents: 1, interior: X1(Parachain(self.para_id)) }
-	}
-}
-impl Default for ContractLocation {
-	fn default() -> Self {
-		Self { para_id: 0, address: [0u8; 20] }
 	}
 }
 impl From<(ParaId, [u8; 20])> for ContractLocation {
