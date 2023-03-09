@@ -9,6 +9,7 @@ use frame_support::{
 };
 use sp_core::Get;
 use sp_std::{fmt::Debug, vec, vec::Vec};
+use traits::SendXcm;
 use xcm_executor::traits::{Convert, ConvertOrigin};
 
 pub(crate) mod ethereum_xcm;
@@ -17,7 +18,7 @@ impl<T: Config> Pallet<T> {
 	pub(super) fn send_xcm(para_id: ParaId, message: Xcm<()>) -> Result<(), Error<T>> {
 		let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
 		let dest = MultiLocation { parents: 1, interior: X1(Parachain(para_id)) };
-		<T::Xcm as traits::Xcm>::send_xcm(interior, dest, message).map_err(|e| match e {
+		T::Xcm::send_xcm(interior, dest, message).map_err(|e| match e {
 			SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
 			_ => Error::<T>::SendFailure,
 		})

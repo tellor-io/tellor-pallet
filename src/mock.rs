@@ -152,7 +152,7 @@ pub fn sent_xcm() -> Vec<(MultiLocation, opaque::Xcm)> {
 }
 /// Sender that never returns error, always sends
 pub struct TestSendXcm;
-impl tellor::traits::Xcm for TestSendXcm {
+impl tellor::traits::SendXcm for TestSendXcm {
 	fn send_xcm(
 		interior: impl Into<Junctions>,
 		dest: impl Into<MultiLocation>,

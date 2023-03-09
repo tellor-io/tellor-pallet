@@ -131,7 +131,7 @@ impl tellor::Config for Test {
 	type Xcm = TestSendXcm;
 }
 pub struct TestSendXcm;
-impl tellor::traits::Xcm for TestSendXcm {
+impl tellor::traits::SendXcm for TestSendXcm {
 	fn send_xcm(
 		_interior: impl Into<Junctions>,
 		_dest: impl Into<MultiLocation>,

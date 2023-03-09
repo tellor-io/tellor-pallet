@@ -14,7 +14,7 @@ use sp_runtime::{
 	SaturatedConversion, Saturating,
 };
 use sp_std::vec::Vec;
-pub use traits::{UsingTellor, Xcm};
+pub use traits::{SendXcm, UsingTellor};
 use types::*;
 pub use types::{
 	autopay::{FeedDetails, Tip},
@@ -225,7 +225,7 @@ pub mod pallet {
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
 
-		type Xcm: traits::Xcm;
+		type Xcm: traits::SendXcm;
 	}
 
 	// AutoPay
