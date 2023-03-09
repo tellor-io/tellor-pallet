@@ -462,10 +462,7 @@ pub mod pallet {
 		NotReporter,
 		/// No value exists at given timestamp.
 		NoValueExists,
-
 		// XCM
-		InvalidContractAddress,
-		InvalidDestination,
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,
 		Unreachable,
