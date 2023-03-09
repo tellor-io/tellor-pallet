@@ -109,6 +109,14 @@ pub(crate) fn transact(
 	])
 }
 
+#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct XcmConfig {
+	pub(crate) fees: MultiAsset,
+	pub(crate) weight_limit: WeightLimit,
+	pub(crate) require_weight_at_most: u64,
+	pub(crate) gas_limit: u128,
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

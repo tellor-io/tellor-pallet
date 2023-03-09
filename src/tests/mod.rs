@@ -6,7 +6,11 @@ use crate::{
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{assert_ok, traits::PalletInfoAccess};
 use sp_core::{bytes::to_hex, keccak_256, H256};
-use xcm::prelude::{DescendOrigin, PalletInstance, X1};
+use xcm::{
+	latest::prelude::*,
+	prelude::{DescendOrigin, PalletInstance, X1},
+	v1::MultiAsset,
+};
 
 mod autopay;
 
@@ -81,7 +85,15 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address
 
 const STAKE_AMOUNT: AmountOf<Test> = 100 * UNIT;
 fn register_parachain(stake_amount: AmountOf<Test>) {
-	assert_ok!(Tellor::register(RuntimeOrigin::root(), stake_amount, 1000, 1000));
+	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
+	assert_ok!(Tellor::register(
+		RuntimeOrigin::root(),
+		stake_amount,
+		MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000_u128) },
+		WeightLimit::Unlimited,
+		1000,
+		1000
+	));
 }
 
 fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {

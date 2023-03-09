@@ -299,6 +299,9 @@ pub mod pallet {
 	// Query Data
 	#[pallet::storage]
 	pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, QueryDataOf<T>>;
+	// XCM
+	#[pallet::storage]
+	pub type XcmConfig<T> = StorageValue<_, xcm::XcmConfig>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -484,20 +487,25 @@ pub mod pallet {
 		pub fn register(
 			origin: OriginFor<T>,
 			stake_amount: AmountOf<T>,
+			fees: MultiAsset,
+			weight_limit: WeightLimit,
 			require_weight_at_most: u64,
 			gas_limit: u128,
 		) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 
 			<StakeAmount<T>>::set(stake_amount);
+			<XcmConfig<T>>::set(Some(xcm::XcmConfig {
+				fees: fees.clone(),
+				weight_limit: weight_limit.clone(),
+				require_weight_at_most,
+				gas_limit,
+			}));
 
 			let registry_contract = T::Registry::get();
-
-			// Balances pallet on destination chain
-			let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 			let message = xcm::transact(
-				MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000_u128) },
-				WeightLimit::Unlimited,
+				fees,
+				weight_limit,
 				require_weight_at_most,
 				ethereum_xcm::transact(
 					registry_contract.address,
@@ -1030,6 +1038,7 @@ pub mod pallet {
 			timestamp: TimestampOf<T>,
 		) -> DispatchResult {
 			// todo: complete implementation
+			// todo: ensure registered
 			let dispute_initiator = ensure_signed(origin)?;
 			// Only reporters can begin disputes due to requiring an account on staking chain to potentially receive slash amount if dispute successful
 			ensure!(<StakerDetails<T>>::contains_key(&dispute_initiator), Error::<T>::NotReporter);
@@ -1112,18 +1121,15 @@ pub mod pallet {
 					.ok_or(Error::<T>::NotReporter)?
 					.address;
 
-				const GAS_LIMIT: u32 = 71_000;
+				let xcm_config = <XcmConfig<T>>::get().unwrap(); // todo: add error
+
+				// todo: charge corresponding fees
 
 				let governance_contract = T::Governance::get();
-				// Balances pallet on destination chain
-				let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 				let message = xcm::transact(
-					MultiAsset {
-						id: Concrete(self_reserve),
-						fun: Fungible(1_000_000_000_000_000_u128),
-					},
-					WeightLimit::Unlimited,
-					5_000_000_000u64,
+					xcm_config.fees,
+					xcm_config.weight_limit,
+					xcm_config.require_weight_at_most,
 					ethereum_xcm::transact(
 						governance_contract.address,
 						governance::begin_parachain_dispute(
@@ -1137,7 +1143,7 @@ pub mod pallet {
 						)
 						.try_into()
 						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-						GAS_LIMIT.into(),
+						xcm_config.gas_limit.into(),
 						None,
 					),
 				);
