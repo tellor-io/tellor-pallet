@@ -123,6 +123,7 @@ fn claim_tip() {
 			),
 			Error::InvalidFeed
 		);
+		// no funds available for this feed
 		assert_noop!(
 			Tellor::claim_tip(RuntimeOrigin::signed(reporter), feed_id, query_id, bounded_vec![]),
 			Error::InsufficientFeedBalance
@@ -133,6 +134,7 @@ fn claim_tip() {
 			query_id,
 			token(1_000)
 		));
+		// buffer time has not passed
 		assert_noop!(
 			Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
@@ -145,7 +147,7 @@ fn claim_tip() {
 
 		// Advancing time 12 hours to satisfy hardcoded buffer time.
 		with_block_after(12 * HOUR_IN_MILLISECONDS, || {
-			// Expect throw cause of bad timestamp values.
+			// message sender not reporter for given queryId and timestamp
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(reporter),
@@ -170,7 +172,7 @@ fn claim_tip() {
 				RuntimeOrigin::signed(reporter),
 				feed_id,
 				query_id,
-				timestamps
+				timestamps.clone()
 			));
 			System::assert_last_event(
 				Event::TipClaimed { feed_id, query_id, amount: token(3), reporter }.into(),
@@ -379,6 +381,7 @@ fn setup_data_feed() {
 				),
 				BadOrigin
 			);
+			// id must be hash of bytes data
 			assert_noop!(
 				Tellor::setup_data_feed(
 					RuntimeOrigin::signed(feed_creator),
@@ -394,21 +397,7 @@ fn setup_data_feed() {
 				),
 				Error::InvalidQueryId
 			);
-			assert_noop!(
-				Tellor::setup_data_feed(
-					RuntimeOrigin::signed(feed_creator),
-					query_id,
-					token(1),
-					timestamp,
-					600 * SECONDS,
-					60 * SECONDS,
-					0,
-					0,
-					query_data.clone(),
-					0
-				),
-				Error::FeedAlreadyExists
-			);
+			// reward must be greater than zero
 			assert_noop!(
 				Tellor::setup_data_feed(
 					RuntimeOrigin::signed(feed_creator),
@@ -424,36 +413,23 @@ fn setup_data_feed() {
 				),
 				Error::InvalidReward
 			);
+			// feed must not be set up already
 			assert_noop!(
 				Tellor::setup_data_feed(
 					RuntimeOrigin::signed(feed_creator),
 					query_id,
 					token(1),
 					timestamp,
-					0 * SECONDS,
 					600 * SECONDS,
+					60 * SECONDS,
 					0,
 					0,
 					query_data.clone(),
 					0
 				),
-				Error::InvalidInterval
+				Error::FeedAlreadyExists
 			);
-			assert_noop!(
-				Tellor::setup_data_feed(
-					RuntimeOrigin::signed(feed_creator),
-					query_id,
-					token(1),
-					timestamp,
-					0 * SECONDS,
-					600 * SECONDS,
-					0,
-					0,
-					query_data.clone(),
-					0
-				),
-				Error::InvalidInterval
-			);
+			// window must be less than interval length
 			assert_noop!(
 				Tellor::setup_data_feed(
 					RuntimeOrigin::signed(feed_creator),
@@ -468,6 +444,22 @@ fn setup_data_feed() {
 					0
 				),
 				Error::InvalidWindow
+			);
+			// interval must be greater than zero
+			assert_noop!(
+				Tellor::setup_data_feed(
+					RuntimeOrigin::signed(feed_creator),
+					query_id,
+					token(1),
+					timestamp,
+					0 * SECONDS,
+					600 * SECONDS,
+					0,
+					0,
+					query_data.clone(),
+					0
+				),
+				Error::InvalidInterval
 			);
 
 			let feed_id = create_feed(
