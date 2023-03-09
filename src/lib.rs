@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use crate::xcm::ContractLocation;
+pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
 use codec::Encode;
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
@@ -520,7 +520,7 @@ pub mod pallet {
 					None,
 				),
 			);
-			Self::send_xcm(registry_contract.into(), message)?;
+			Self::send_xcm(registry_contract.para_id, message)?;
 
 			Ok(())
 		}
@@ -1148,7 +1148,7 @@ pub mod pallet {
 						None,
 					),
 				);
-				Self::send_xcm(governance_contract.into(), message)?;
+				Self::send_xcm(governance_contract.para_id, message)?;
 			}
 
 			Self::deposit_event(Event::NewDispute {

@@ -14,23 +14,24 @@ use xcm_executor::traits::{Convert, ConvertOrigin};
 pub(crate) mod ethereum_xcm;
 
 impl<T: Config> Pallet<T> {
-	pub(super) fn send_xcm(destination: MultiLocation, message: Xcm<()>) -> Result<(), Error<T>> {
+	pub(super) fn send_xcm(para_id: ParaId, message: Xcm<()>) -> Result<(), Error<T>> {
 		let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
-		<T::Xcm as traits::Xcm>::send_xcm(interior, destination, message).map_err(|e| match e {
+		let dest = MultiLocation { parents: 1, interior: X1(Parachain(para_id)) };
+		<T::Xcm as traits::Xcm>::send_xcm(interior, dest, message).map_err(|e| match e {
 			SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
 			_ => Error::<T>::SendFailure,
 		})
 	}
 }
 
-pub struct LocationToPalletAccount<Location, Account, AccountId>(
+pub struct LocationToAccount<Location, Account, AccountId>(
 	PhantomData<(Location, Account, AccountId)>,
 );
-impl<Location: Get<MultiLocation>, Account: Get<AccountId>, AccountId: Clone + Debug>
-	Convert<MultiLocation, AccountId> for LocationToPalletAccount<Location, Account, AccountId>
+impl<Location: Get<ContractLocation>, Account: Get<AccountId>, AccountId: Clone + Debug>
+	Convert<MultiLocation, AccountId> for LocationToAccount<Location, Account, AccountId>
 {
 	fn convert(location: MultiLocation) -> Result<AccountId, MultiLocation> {
-		if location == Location::get() {
+		if location == Location::get().into() {
 			Ok(Account::get())
 		} else {
 			Err(location)
@@ -38,14 +39,14 @@ impl<Location: Get<MultiLocation>, Account: Get<AccountId>, AccountId: Clone + D
 	}
 }
 
-pub struct LocationToPalletOrigin<Location, PalletOrigin, RuntimeOrigin>(
+pub struct LocationToOrigin<Location, PalletOrigin, RuntimeOrigin>(
 	PhantomData<(Location, PalletOrigin, RuntimeOrigin)>,
 );
 impl<
-		Location: Get<MultiLocation>,
+		Location: Get<ContractLocation>,
 		PalletOrigin: Get<RuntimeOrigin>,
 		RuntimeOrigin: OriginTrait,
-	> ConvertOrigin<RuntimeOrigin> for LocationToPalletOrigin<Location, PalletOrigin, RuntimeOrigin>
+	> ConvertOrigin<RuntimeOrigin> for LocationToOrigin<Location, PalletOrigin, RuntimeOrigin>
 where
 	RuntimeOrigin: Debug,
 	RuntimeOrigin::AccountId: Clone + Debug,
@@ -61,7 +62,8 @@ where
 			origin, kind,
 		);
 		match kind {
-			OriginKind::SovereignAccount if origin == Location::get() => Ok(PalletOrigin::get()),
+			OriginKind::SovereignAccount if origin == Location::get().into() =>
+				Ok(PalletOrigin::get()),
 			_ => Err(origin),
 		}
 	}
@@ -72,14 +74,18 @@ pub struct ContractLocation {
 	pub(crate) para_id: ParaId,
 	pub(crate) address: [u8; 20],
 }
-impl ContractLocation {
-	pub(super) fn into(self) -> MultiLocation {
-		MultiLocation { parents: 1, interior: X1(Parachain(self.para_id)) }
-	}
-}
 impl From<(ParaId, [u8; 20])> for ContractLocation {
 	fn from(value: (ParaId, [u8; 20])) -> Self {
 		ContractLocation { para_id: value.0, address: value.1 }
+	}
+}
+
+impl Into<MultiLocation> for ContractLocation {
+	fn into(self) -> MultiLocation {
+		MultiLocation {
+			parents: 1,
+			interior: X2(Parachain(self.para_id), AccountKey20 { network: Any, key: self.address }),
+		}
 	}
 }
 
@@ -127,13 +133,6 @@ mod tests {
 		let address = Address::random().0;
 		let location: ContractLocation = (PARA_ID, address).into();
 		assert_eq!(location, ContractLocation { para_id: PARA_ID, address });
-	}
-
-	#[test]
-	fn contract_location_to_parachain() {
-		let contract_location: ContractLocation = (PARA_ID, Address::random().0).into();
-		let multilocation: MultiLocation = contract_location.into();
-		assert_eq!(multilocation, MultiLocation { parents: 1, interior: X1(Parachain(PARA_ID)) });
 	}
 
 	#[test]
