@@ -89,7 +89,10 @@ fn register_parachain(stake_amount: AmountOf<Test>) {
 	assert_ok!(Tellor::register(
 		RuntimeOrigin::root(),
 		stake_amount,
-		MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000_u128) },
+		Box::new(MultiAsset {
+			id: Concrete(self_reserve),
+			fun: Fungible(300_000_000_000_000_u128)
+		}),
 		WeightLimit::Unlimited,
 		1000,
 		1000

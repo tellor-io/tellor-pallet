@@ -487,7 +487,7 @@ pub mod pallet {
 		pub fn register(
 			origin: OriginFor<T>,
 			stake_amount: AmountOf<T>,
-			fees: MultiAsset,
+			fees: Box<MultiAsset>,
 			weight_limit: WeightLimit,
 			require_weight_at_most: u64,
 			gas_limit: u128,
@@ -496,7 +496,7 @@ pub mod pallet {
 
 			<StakeAmount<T>>::set(stake_amount);
 			<XcmConfig<T>>::set(Some(xcm::XcmConfig {
-				fees: fees.clone(),
+				fees: *fees.clone(),
 				weight_limit: weight_limit.clone(),
 				require_weight_at_most,
 				gas_limit,
@@ -504,7 +504,7 @@ pub mod pallet {
 
 			let registry_contract = T::Registry::get();
 			let message = xcm::transact(
-				fees,
+				*fees,
 				weight_limit,
 				require_weight_at_most,
 				ethereum_xcm::transact(
