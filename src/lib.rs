@@ -190,6 +190,9 @@ pub mod pallet {
 
 		type Price: AtLeast32BitUnsigned + Copy + Default;
 
+		/// Origin that manages registration and deregistration from the controller contracts.
+		type RegistrationOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
+
 		/// The location of the registry controller contract.
 		#[pallet::constant]
 		type Registry: Get<MultiLocation>;
@@ -480,7 +483,7 @@ pub mod pallet {
 			require_weight_at_most: u64,
 			gas_limit: u128,
 		) -> DispatchResult {
-			ensure_root(origin)?; // todo: use configurable origin
+			T::RegistrationOrigin::ensure_origin(origin)?;
 
 			<StakeAmount<T>>::set(stake_amount);
 

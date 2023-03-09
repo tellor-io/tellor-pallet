@@ -16,6 +16,7 @@ use sp_std::cell::RefCell;
 use std::time::{SystemTime, UNIX_EPOCH};
 use xcm::latest::prelude::*;
 
+type AccountId = u128; // u64 is not enough to hold bytes used to generate bounty account
 type Balance = u64;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -47,7 +48,7 @@ impl system::Config for Test {
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
 	// todo: enforce AccountId = u128 in pallet config
-	type AccountId = u128; // u64 is not enough to hold bytes used to generate bounty account
+	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
 	type RuntimeEvent = RuntimeEvent;
@@ -120,6 +121,7 @@ impl tellor::Config for Test {
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
 	type Price = u128;
+	type RegistrationOrigin = system::EnsureRoot<AccountId>;
 	type Registry = TellorRegistry;
 	type ReportingLock = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type Staking = TellorStaking;
