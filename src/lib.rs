@@ -218,7 +218,7 @@ pub mod pallet {
 		type Token: Inspect<Self::AccountId, Balance = Self::Amount> + Transfer<Self::AccountId>;
 
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
-		type ValueConverter: Convert<ValueOf<Self>, Option<Self::Price>>;
+		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
 
 		type Xcm: traits::Xcm;
 	}

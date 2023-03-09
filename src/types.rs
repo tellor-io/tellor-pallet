@@ -19,6 +19,7 @@ pub(crate) type HasherOf<T> = <T as Config>::Hasher;
 pub(crate) type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
+pub(crate) type PriceOf<T> = <T as Config>::Price;
 pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLength>;
 pub(crate) type QueryIdOf<T> = <T as Config>::Hash;
 pub(crate) type ReportOf<T> = oracle::Report<

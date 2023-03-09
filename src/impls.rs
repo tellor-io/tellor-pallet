@@ -797,11 +797,13 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, Error<T>> {
-		T::ValueConverter::convert(value).ok_or(Error::<T>::ValueConversionError)
+		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
 	}
 }
 
-impl<T: Config> UsingTellor<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, Vec<u8>> for Pallet<T> {
+impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>, QueryIdOf<T>, TimestampOf<T>>
+	for Pallet<T>
+{
 	fn get_data_after(
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
@@ -867,5 +869,9 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, Vec<u8
 
 	fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<Vec<u8>> {
 		Self::retrieve_data(query_id, timestamp).map(|v| v.into_inner())
+	}
+
+	fn value_to_price(value: Vec<u8>) -> Option<PriceOf<T>> {
+		T::ValueConverter::convert(value)
 	}
 }

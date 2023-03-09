@@ -11,7 +11,7 @@ use frame_support::{
 	PalletId,
 };
 use frame_system as system;
-use sp_core::{bounded::BoundedVec, ConstU32, H256};
+use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, Convert, IdentityLookup, Keccak256},
@@ -138,8 +138,8 @@ impl tellor::Config for Test {
 }
 
 pub struct ValueConverter;
-impl Convert<BoundedVec<u8, ConstU32<128>>, Option<u128>> for ValueConverter {
-	fn convert(a: BoundedVec<u8, ConstU32<128>>) -> Option<u128> {
+impl Convert<Vec<u8>, Option<u128>> for ValueConverter {
+	fn convert(a: Vec<u8>) -> Option<u128> {
 		// Should be more advanced depending on chain config
 		match a[16..].try_into() {
 			Ok(v) => Some(u128::from_be_bytes(v)),

@@ -10,15 +10,15 @@ pub trait Xcm {
 	) -> Result<(), SendError>;
 }
 
-/// This traits helps pallets read data from Tellor
-pub trait UsingTellor<AccountId, QueryId, Timestamp, Value> {
+/// This trait helps pallets read data from Tellor
+pub trait UsingTellor<AccountId, Price, QueryId, Timestamp> {
 	/// Retrieves the next value for the query identifier after the specified timestamp.
 	/// # Arguments
 	/// * `query_id` - The query identifier to look up the value for.
 	/// * `timestamp` - The timestamp after which to search for next value.
 	/// # Returns
 	/// The value retrieved, along with timestamp, if found.
-	fn get_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<(Value, Timestamp)>;
+	fn get_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<(Vec<u8>, Timestamp)>;
 
 	/// Retrieves the latest value for the query identifier before the specified timestamp.
 	/// # Arguments
@@ -26,7 +26,7 @@ pub trait UsingTellor<AccountId, QueryId, Timestamp, Value> {
 	/// * `timestamp` - The timestamp before which to search for the latest value.
 	/// # Returns
 	/// The value retrieved and its timestamp, if found.
-	fn get_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<(Value, Timestamp)>;
+	fn get_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<(Vec<u8>, Timestamp)>;
 
 	/// Retrieves the latest index of data after the specified timestamp for the query identifier.
 	/// # Arguments
@@ -56,7 +56,7 @@ pub trait UsingTellor<AccountId, QueryId, Timestamp, Value> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 		max_age: Timestamp,
-	) -> Vec<(Value, Timestamp)>;
+	) -> Vec<(Vec<u8>, Timestamp)>;
 
 	/// Counts the number of values that have been submitted for the query identifier.
 	/// # Arguments
@@ -95,5 +95,12 @@ pub trait UsingTellor<AccountId, QueryId, Timestamp, Value> {
 	/// * `timestamp` - Timestamp to retrieve data/value from.
 	/// # Returns
 	/// Value for timestamp submitted, if found.
-	fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Value>;
+	fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Vec<u8>>;
+
+	/// Attempts to convert value to a price.
+	/// # Arguments
+	/// * `value` - Value to be converted to a price.
+	/// # Returns
+	/// A price converted from the value, if successful.
+	fn value_to_price(value: Vec<u8>) -> Option<Price>;
 }
