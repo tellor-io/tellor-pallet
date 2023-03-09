@@ -1,6 +1,16 @@
 use super::*;
 
 impl<T: Config> Pallet<T> {
+	/// Determines if an account voted for a specific dispute.
+	/// # Arguments
+	/// * `dispute_id` - The identifier of the dispute.
+	/// * `voter` - The account of the voter to check.
+	/// # Returns
+	/// Whether or not the account voted for the specific dispute.
+	pub fn did_vote(dispute_id: DisputeIdOf<T>, voter: AccountIdOf<T>) -> Option<bool> {
+		<VoteInfo<T>>::get(dispute_id).and_then(|v| v.voted.get(&voter).copied())
+	}
+
 	pub fn get_block_number_by_timestamp(
 		_query_id: QueryIdOf<T>,
 		_timestamp: TimestampOf<T>,

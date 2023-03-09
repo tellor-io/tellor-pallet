@@ -76,9 +76,10 @@ License: Unlicense
 | :white_square_button: `begin_dispute` | :white_square_button:  |       |
 | :white_square_button: `vote`          | :white_square_button:  |       |
 
-| Runtime API                             |    Functional Test    | Notes |
-|-----------------------------------------|:---------------------:|-------|
-| :white_check_mark: `get_dispute_fee`    | :white_square_button: |       |
+| Runtime API                          |    Functional Test    | Notes |
+|--------------------------------------|:---------------------:|-------|
+| :white_check_mark: `did_vote`        | :white_square_button: |       |
+| :white_check_mark: `get_dispute_fee` | :white_square_button: |       |
 
 ## Controller Contract Integration
 

@@ -300,6 +300,10 @@ mock_impl_runtime_apis! {
 	}
 
 	impl crate::TellorGovernance<Block, AccountId, Amount, DisputeId, QueryId, Moment> for Test {
+		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> Option<bool>{
+			tellor::Pallet::<Test>::did_vote(dispute_id, voter)
+		}
+
 		fn get_dispute_fee() -> Amount {
 			tellor::Pallet::<Test>::get_dispute_fee()
 		}
@@ -642,6 +646,16 @@ mod oracle {
 
 mod governance {
 	use super::*;
+
+	#[test]
+	fn did_vote() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.did_vote(&BLOCKID, DisputeId::default(), AccountId::default()).unwrap(),
+				None
+			);
+		});
+	}
 
 	#[test]
 	fn get_dispute_fee() {
