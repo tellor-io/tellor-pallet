@@ -114,7 +114,7 @@ impl tellor::Config for Test {
 	type MaxQueriesPerReporter = ConstU32<10>;
 	type MaxQueryDataLength = ConstU32<1000>;
 	type MaxRewardClaims = ConstU32<10>;
-	type MaxTimestamps = ConstU32<10>;
+	type MaxTimestamps = ConstU32<100>;
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so ValueConverter needs to handle conversion to price for threshold checks
 	type MaxVotes = ();

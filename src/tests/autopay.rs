@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
 	types::{FeedDetailsOf, FeedIdOf, QueryDataOf, QueryIdOf, TimestampOf, TipOf},
-	Config, HOUR_IN_MILLISECONDS, WEEK_IN_MILLISECONDS,
+	Config, WEEK_IN_MILLISECONDS,
 };
 use frame_support::{
 	assert_noop, assert_ok,
@@ -19,7 +19,7 @@ type Price = <Test as Config>::Price;
 const SECONDS: u64 = 1_000;
 
 #[test]
-fn claim_tip() {
+fn claim_tip_ensures() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
@@ -31,13 +31,13 @@ fn claim_tip() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| {
+	let claimed = ext.execute_with(|| {
 		with_block(|| {
 			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 			deposit_stake(another_reporter, STAKE_AMOUNT, Address::random());
 
-			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			Balances::make_free_balance_be(&feed_creator, token(1_010) + 1);
 			feed_id = create_feed(
 				feed_creator,
 				query_id,
@@ -50,23 +50,35 @@ fn claim_tip() {
 				query_data.clone(),
 				0,
 			);
+		});
 
+		let (claimed_timestamp, _) = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(3575),
+				0,
+				query_data.clone(),
+			));
+		});
+
+		with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
 				uint_value(3500),
-				0,
+				1,
 				query_data.clone(),
 			));
 			timestamps.try_push(Timestamp::get()).unwrap();
 		});
 
-		with_block(|| {
+		with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
 				uint_value(3525),
-				1,
+				2,
 				query_data.clone(),
 			));
 			bad_timestamps.try_push(Timestamp::get()).unwrap();
@@ -77,7 +89,7 @@ fn claim_tip() {
 				RuntimeOrigin::signed(reporter),
 				query_id,
 				uint_value(3550),
-				2,
+				3,
 				query_data.clone(),
 			));
 			// Note: timestamp not added to vector as per reference test
@@ -88,7 +100,7 @@ fn claim_tip() {
 				RuntimeOrigin::signed(reporter),
 				query_id,
 				uint_value(3550),
-				3,
+				4,
 				query_data.clone(),
 			));
 			timestamps.try_push(Timestamp::get()).unwrap();
@@ -100,53 +112,60 @@ fn claim_tip() {
 				RuntimeOrigin::signed(reporter),
 				query_id,
 				uint_value(3575),
-				4,
-				query_data,
+				5,
+				query_data.clone(),
 			));
 			timestamps.try_push(Timestamp::get()).unwrap();
 		});
+
+		claimed_timestamp
 	});
 
-	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L74
+	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L74
 	ext.execute_with(|| {
-		// Require Checks
-		assert_noop!(
-			Tellor::claim_tip(RuntimeOrigin::root(), feed_id, query_id, bounded_vec![]),
-			BadOrigin
-		);
-		assert_noop!(
-			Tellor::claim_tip(
-				RuntimeOrigin::signed(reporter),
-				H256::random(),
-				query_id,
-				bounded_vec![]
-			),
-			Error::InvalidFeed
-		);
-		// no funds available for this feed
-		assert_noop!(
-			Tellor::claim_tip(RuntimeOrigin::signed(reporter), feed_id, query_id, bounded_vec![]),
-			Error::InsufficientFeedBalance
-		);
-		assert_ok!(Tellor::fund_feed(
-			RuntimeOrigin::signed(feed_creator),
-			feed_id,
-			query_id,
-			token(1_000)
-		));
-		// buffer time has not passed
-		assert_noop!(
-			Tellor::claim_tip(
-				RuntimeOrigin::signed(reporter),
+		with_block(|| {
+			assert_noop!(
+				Tellor::claim_tip(RuntimeOrigin::root(), feed_id, query_id, bounded_vec![]),
+				BadOrigin
+			);
+			assert_noop!(
+				Tellor::claim_tip(
+					RuntimeOrigin::signed(reporter),
+					H256::random(),
+					query_id,
+					bounded_vec![]
+				),
+				Error::InvalidFeed
+			);
+			// no tips submitted for this queryId
+			assert_noop!(
+				Tellor::claim_tip(
+					RuntimeOrigin::signed(reporter),
+					feed_id,
+					query_id,
+					bounded_vec![12345]
+				),
+				Error::InsufficientFeedBalance
+			);
+			assert_ok!(Tellor::fund_feed(
+				RuntimeOrigin::signed(feed_creator),
 				feed_id,
 				query_id,
-				timestamps.clone()
-			),
-			Error::ClaimBufferNotPassed
-		);
-
+				token(1_000)
+			));
+			// buffer time has not passed
+			assert_noop!(
+				Tellor::claim_tip(
+					RuntimeOrigin::signed(reporter),
+					feed_id,
+					query_id,
+					timestamps.clone()
+				),
+				Error::ClaimBufferNotPassed
+			);
+		});
 		// Advancing time 12 hours to satisfy hardcoded buffer time.
-		with_block_after(12 * HOUR_IN_MILLISECONDS, || {
+		with_block_after(ClaimBuffer::get(), || {
 			// message sender not reporter for given queryId and timestamp
 			assert_noop!(
 				Tellor::claim_tip(
@@ -157,7 +176,6 @@ fn claim_tip() {
 				),
 				Error::InvalidClaimer
 			);
-			// Testing Events emitted and claiming tips for later checks.
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -167,16 +185,217 @@ fn claim_tip() {
 				),
 				Error::InvalidClaimer
 			);
+			// reward already claimed
+			assert_ok!(Tellor::claim_tip(
+				RuntimeOrigin::signed(reporter),
+				feed_id,
+				query_id,
+				bounded_vec![claimed]
+			));
+			assert_noop!(
+				Tellor::claim_tip(
+					RuntimeOrigin::signed(reporter),
+					feed_id,
+					query_id,
+					bounded_vec![claimed]
+				),
+				Error::TipAlreadyClaimed
+			);
+		});
+		// no value exists at timestamp
+		let (timestamp, _) = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				uint_value(3575),
+				6,
+				query_data.clone(),
+			));
+		});
+		with_block(|| {
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				timestamp
+			));
+		});
+		with_block_after(ClaimBuffer::get(), || {
+			assert_noop!(
+				Tellor::claim_tip(
+					RuntimeOrigin::signed(another_reporter),
+					feed_id,
+					query_id,
+					bounded_vec![timestamp]
+				),
+				Error::InvalidTimestamp
+			);
+		});
+		// price threshold not met
+		let (_, feed_id) = with_block(|| {
+			create_feed(
+				feed_creator,
+				query_id,
+				token(1),
+				Timestamp::get(),
+				3600000 * SECONDS,
+				2 * SECONDS,
+				10_000,
+				0,
+				query_data.clone(),
+				token(1),
+			)
+		});
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				uint_value(3500),
+				7,
+				query_data.clone(),
+			));
+		});
+		let (timestamp, _) = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(3501),
+				8,
+				query_data.clone(),
+			));
+		});
+		with_block_after(ClaimBuffer::get(), || {
+			assert_noop!(
+				Tellor::claim_tip(
+					RuntimeOrigin::signed(reporter),
+					feed_id,
+					query_id,
+					bounded_vec![timestamp]
+				),
+				Error::PriceThresholdNotMet
+			);
+		});
+		// insufficient balance for all submitted timestamps
+		let (timestamp_1, _) = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(35000),
+				9,
+				query_data.clone(),
+			));
+		});
+		let (timestamp_2, _) = with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(350000),
+				10,
+				query_data.clone(),
+			));
+		});
+		with_block_after(ClaimBuffer::get(), || {
+			assert_noop!(
+				Tellor::claim_tip(
+					RuntimeOrigin::signed(reporter),
+					feed_id,
+					query_id,
+					bounded_vec![timestamp_1, timestamp_2]
+				),
+				Error::InsufficientFeedBalance
+			);
+		});
+		// timestamp too old to claim tip
+		with_block_after(4 * WEEK_IN_MILLISECONDS, || {
+			assert_noop!(
+				Tellor::claim_tip(
+					RuntimeOrigin::signed(reporter),
+					feed_id,
+					query_id,
+					bounded_vec![timestamp_2]
+				),
+				Error::ClaimPeriodExpired
+			);
+		});
+	});
+}
+
+#[test]
+fn claim_tip() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let feed_creator = 10;
+	let mut feed_id = H256::zero();
+	let mut timestamps = Vec::default();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+
+			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			feed_id = create_feed(
+				feed_creator,
+				query_id,
+				token(1),
+				Timestamp::get(),
+				3600 * SECONDS,
+				600 * SECONDS,
+				0,
+				0,
+				query_data.clone(),
+				token(1_000),
+			);
+		});
+		with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(3500),
+				0,
+				query_data.clone(),
+			));
+			timestamps.push(Timestamp::get());
+		});
+		with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(3550),
+				1,
+				query_data.clone(),
+			));
+			timestamps.push(Timestamp::get());
+		});
+		with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(3575),
+				2,
+				query_data.clone(),
+			));
+			timestamps.push(Timestamp::get());
+		});
+	});
+
+	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L120
+	ext.execute_with(|| {
+		// Advancing time 12 hours to satisfy hardcoded buffer time.
+		with_block_after(ClaimBuffer::get(), || {
 			let payer_before = Tellor::get_data_feed(feed_id).unwrap();
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
 				feed_id,
 				query_id,
-				timestamps.clone()
+				timestamps.try_into().unwrap()
 			));
 			System::assert_last_event(
 				Event::TipClaimed { feed_id, query_id, amount: token(3), reporter }.into(),
 			);
+
 			let payer_after = Tellor::get_data_feed(feed_id).unwrap();
 			assert_ne!(payer_before.balance, payer_after.balance);
 			assert_eq!(payer_after.balance, token(997));
@@ -756,7 +975,7 @@ fn claim_onetime_tip() {
 		});
 	});
 
-	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L74
+	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L267
 	ext.execute_with(|| {
 		assert_noop!(
 			Tellor::claim_onetime_tip(RuntimeOrigin::root(), query_id, bounded_vec![]),
@@ -964,9 +1183,40 @@ fn claim_onetime_tip() {
 				Error::TipAlreadyClaimed
 			);
 		});
+	});
 
-		// todo: merge in https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L120
-	})
+	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L323
+	ext.execute_with(|| {
+		let start_balance = Balances::balance(&reporter);
+		with_block(|| {
+			Balances::make_free_balance_be(&tipper, token(100) + 1);
+			assert_ok!(Tellor::tip(
+				RuntimeOrigin::signed(tipper),
+				query_id,
+				token(100),
+				query_data.clone(),
+			));
+		});
+		let (timestamp, _) = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(3550),
+				5,
+				query_data.clone(),
+			));
+		});
+		with_block_after(ClaimBuffer::get(), || {
+			assert_ok!(Tellor::claim_onetime_tip(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				bounded_vec![timestamp]
+			));
+			assert_eq!(Tellor::get_current_tip(query_id), 0, "tip should be correct");
+			let final_balance = Balances::balance(&reporter);
+			assert_eq!(final_balance - start_balance, token(99), "balance should change correctly")
+		});
+	});
 }
 
 #[test]

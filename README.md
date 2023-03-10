@@ -9,13 +9,13 @@ License: Unlicense
 
 ### AutoPay
 
-| Dispatchable Function                  |    Functional Test     | Notes                                                                  |
-|----------------------------------------|:----------------------:|------------------------------------------------------------------------|
-| :white_check_mark: `claim_onetime_tip` | :white_square_button:  | Partially implemented, need to merge in logic from new associated test |
-| :white_check_mark: `claim_tip`         | :white_square_button:  | Partially implemented, need to merge in logic from new associated test |
-| :white_check_mark: `fund_feed`         |   :white_check_mark:   |                                                                        |
-| :white_check_mark: `setup_data_feed`   |   :white_check_mark:   |                                                                        |
-| :white_check_mark: `tip`               |   :white_check_mark:   |                                                                        |
+| Dispatchable Function                  |  Functional Test   | Notes |
+|----------------------------------------|:------------------:|-------|
+| :white_check_mark: `claim_onetime_tip` | :white_check_mark: |       |
+| :white_check_mark: `claim_tip`         | :white_check_mark: |       |
+| :white_check_mark: `fund_feed`         | :white_check_mark: |       |
+| :white_check_mark: `setup_data_feed`   | :white_check_mark: |       |
+| :white_check_mark: `tip`               | :white_check_mark: |       |
 
 | Runtime API                                       |    Functional Test    | Notes             |
 |---------------------------------------------------|:---------------------:|-------------------|
@@ -39,7 +39,7 @@ License: Unlicense
 
 | Dispatchable Function                |    Functional Test     | Notes                                     |
 |--------------------------------------|:----------------------:|-------------------------------------------|
-| :white_square_button: `remove_value` | :white_square_button:  |                                           |
+| :white_square_button: `remove_value` | :white_square_button:  | Implemented, needs test                   |
 | :heavy_check_mark: `submit_value`    | :white_square_button:  | Implemented apart from time-based rewards |
 
 | Runtime API                                                        |    Functional Test     | Notes |
