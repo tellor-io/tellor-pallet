@@ -389,6 +389,10 @@ pub mod pallet {
 		QueryDataStored {
 			query_id: QueryIdOf<T>,
 		},
+		// Registration
+		Registered {
+			stake_amount: AmountOf<T>,
+		},
 	}
 
 	#[pallet::error]
@@ -527,7 +531,7 @@ pub mod pallet {
 				),
 			);
 			Self::send_xcm(registry_contract.para_id, message)?;
-
+			Self::deposit_event(Event::Registered { stake_amount });
 			Ok(())
 		}
 
