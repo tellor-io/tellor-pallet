@@ -111,12 +111,15 @@ pub(crate) fn transact(
 	])
 }
 
+pub(crate) fn transact_with_config(call: Vec<u8>, config: XcmConfig) -> Xcm<()> {
+	transact(config.fees, config.weight_limit, config.require_weight_at_most, call)
+}
+
 #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub struct XcmConfig {
 	pub(crate) fees: MultiAsset,
 	pub(crate) weight_limit: WeightLimit,
 	pub(crate) require_weight_at_most: u64,
-	pub(crate) gas_limit: u128,
 }
 
 #[cfg(test)]

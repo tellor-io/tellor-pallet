@@ -304,9 +304,9 @@ pub mod pallet {
 	// Query Data
 	#[pallet::storage]
 	pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, QueryDataOf<T>>;
-	// XCM
+	// Configuration
 	#[pallet::storage]
-	pub type XcmConfig<T> = StorageValue<_, xcm::XcmConfig>;
+	pub type Configuration<T> = StorageValue<_, types::Configuration>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -366,7 +366,7 @@ pub mod pallet {
 		},
 		StakeWithdrawRequestReported {
 			reporter: AccountIdOf<T>,
-			balance: AmountOf<T>,
+			amount: AmountOf<T>,
 			address: Address,
 		},
 		ValueRemoved {
@@ -448,6 +448,7 @@ pub mod pallet {
 		ValueDisputed,
 
 		// Oracle
+		InvalidAddress,
 		/// Balance must be greater than stake amount.
 		InsufficientStake,
 		/// Nonce must match the timestamp index.
@@ -458,6 +459,7 @@ pub mod pallet {
 		MaxQueriesReached,
 		/// The maximum number of timestamps has been reached.
 		MaxTimestampsReached,
+		NotStaking,
 		/// Still in reporter time lock, please wait!
 		ReporterTimeLocked,
 		ReportingLockCalculationError,
@@ -475,6 +477,10 @@ pub mod pallet {
 		NotReporter,
 		/// No value exists at given timestamp.
 		NoValueExists,
+
+		// Registration
+		NotRegistered,
+
 		// XCM
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,
@@ -505,12 +511,15 @@ pub mod pallet {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 
 			<StakeAmount<T>>::set(stake_amount);
-			<XcmConfig<T>>::set(Some(xcm::XcmConfig {
-				fees: *fees.clone(),
-				weight_limit: weight_limit.clone(),
-				require_weight_at_most,
+			let config = types::Configuration {
+				xcm_config: xcm::XcmConfig {
+					fees: *fees.clone(),
+					weight_limit: weight_limit.clone(),
+					require_weight_at_most,
+				},
 				gas_limit,
-			}));
+			};
+			<Configuration<T>>::set(Some(config));
 
 			let registry_contract = T::Registry::get();
 			let message = xcm::transact(
@@ -526,7 +535,7 @@ pub mod pallet {
 					)
 					.try_into()
 					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					gas_limit.into(),
+					gas_limit,
 					None,
 				),
 			);
@@ -1132,15 +1141,12 @@ pub mod pallet {
 					.ok_or(Error::<T>::NotReporter)?
 					.address;
 
-				let xcm_config = <XcmConfig<T>>::get().unwrap(); // todo: add error
+				let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
 
 				// todo: charge dispute initiator corresponding fees
 
 				let governance_contract = T::Governance::get();
-				let message = xcm::transact(
-					xcm_config.fees,
-					xcm_config.weight_limit,
-					xcm_config.require_weight_at_most,
+				let message = xcm::transact_with_config(
 					ethereum_xcm::transact(
 						governance_contract.address,
 						governance::begin_parachain_dispute(
@@ -1154,9 +1160,10 @@ pub mod pallet {
 						)
 						.try_into()
 						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-						xcm_config.gas_limit.into(),
+						config.gas_limit,
 						None,
 					),
+					config.xcm_config,
 				);
 				Self::send_xcm(governance_contract.para_id, message)?;
 			}
@@ -1198,28 +1205,57 @@ pub mod pallet {
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
-
 			let amount = amount
 				.saturated_into::<u128>() // todo: handle in single call skipping u128
 				.saturated_into::<AmountOf<T>>();
-
-			<StakerDetails<T>>::insert(
-				&reporter,
-				StakeInfoOf::<T> {
-					address,
-					start_date: T::Time::now(),
-					staked_balance: amount,
-					locked_balance: T::Amount::default(),
-					reward_debt: T::Amount::default(),
-					reporter_last_timestamp: <MomentOf<T>>::default(),
-					reports_submitted: 0,
-					start_vote_count: 0,
-					start_vote_tally: 0,
-					staked: false,
-					reports_submitted_by_query_id: BoundedBTreeMap::default(),
-				},
-			);
-
+			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
+				let mut staker = maybe.take().unwrap_or_else(|| <StakeInfoOf<T>>::new(address));
+				ensure!(address == staker.address, Error::<T>::InvalidAddress);
+				let staked_balance = staker.staked_balance;
+				let locked_balance = staker.locked_balance;
+				if locked_balance > <AmountOf<T>>::default() {
+					if locked_balance >= amount {
+						// if staker's locked balance covers full amount, use that
+						staker.locked_balance.saturating_reduce(amount);
+					// 		toWithdraw -= _amount; // <- todo: check whether this is required
+					} else {
+						// todo:
+						// 		// otherwise, stake the whole locked balance and transfer the
+						// 		// remaining amount from the staker's address
+						// 		require(
+						// 			token.transferFrom(
+						// 				msg.sender,
+						// 				address(this),
+						// 				_amount - _lockedBalance
+						// 			)
+						// 		);
+						// 		toWithdraw -= _staker.lockedBalance;
+						// 		_staker.lockedBalance = 0;
+					}
+				} else {
+					if staked_balance == <AmountOf<T>>::default() {
+						// todo:
+						// 		// if staked balance and locked balance equal 0, save current vote tally.
+						// 		// voting participation used for calculating rewards
+						// 		(bool _success, bytes memory _returnData) = governance.call(
+						// 			abi.encodeWithSignature("getVoteCount()")
+						// 		);
+						// 		if (_success) {
+						// 			_staker.startVoteCount = uint256(abi.decode(_returnData, (uint256)));
+						// 		}
+						// 		(_success,_returnData) = governance.call(
+						// 			abi.encodeWithSignature("getVoteTallyByAddress(address)",msg.sender)
+						// 		);
+						// 		if(_success){
+						// 			_staker.startVoteTally =  abi.decode(_returnData,(uint256));
+						// 		}
+					}
+				}
+				Self::update_stake_and_pay_rewards(&mut staker, staked_balance + amount)?;
+				staker.start_date = T::Time::now(); // This resets the staker start date to now
+				*maybe = Some(staker);
+				Ok(())
+			})?;
 			Self::deposit_event(Event::NewStakerReported { staker: reporter, amount, address });
 			Ok(())
 		}
@@ -1232,12 +1268,49 @@ pub mod pallet {
 		#[pallet::call_index(11)]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
-			_reporter: AccountIdOf<T>,
-			_amount: Amount,
-			_address: Address,
+			reporter: AccountIdOf<T>,
+			amount: Amount,
+			address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
+			let amount = amount
+				.saturated_into::<u128>() // todo: handle in single call skipping u128
+				.saturated_into::<AmountOf<T>>();
+			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
+				match maybe {
+					None => Err(Error::<T>::NotStaking.into()),
+					Some(staker) => {
+						ensure!(address == staker.address, Error::<T>::InvalidAddress);
+						ensure!(staker.staked_balance >= amount, Error::<T>::InsufficientStake);
+						// todo: safe math
+						let stake_amount = staker.staked_balance - amount;
+						Self::update_stake_and_pay_rewards(staker, stake_amount)?;
+						staker.start_date = T::Time::now();
+						staker.locked_balance.saturating_accrue(amount);
+						// toWithdraw += _amount; // <- todo: check whether this is required here
+						Ok(())
+					},
+				}
+			})?;
+
+			// Confirm staking withdraw request
+			let staking_contract = T::Staking::get();
+			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+			let message = xcm::transact_with_config(
+				ethereum_xcm::transact(
+					staking_contract.address,
+					registry::confirm_parachain_stake_withdraw_request(address, amount)
+						.try_into()
+						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+					config.gas_limit,
+					None,
+				),
+				config.xcm_config,
+			);
+			Self::send_xcm(staking_contract.para_id, message)?;
+
+			Self::deposit_event(Event::StakeWithdrawRequestReported { reporter, amount, address });
 			Ok(())
 		}
 

@@ -16,6 +16,7 @@ pub(crate) type FeedOf<T> =
 pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>, TimestampOf<T>>;
 pub(crate) type _HashOf<T> = <T as Config>::Hash;
 pub(crate) type HasherOf<T> = <T as Config>::Hasher;
+#[cfg(test)]
 pub(crate) type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
@@ -153,6 +154,26 @@ pub(crate) mod oracle {
 		/// Mapping of query identifier to number of reports submitted by reporter.
 		pub(crate) reports_submitted_by_query_id: BoundedBTreeMap<QueryId, u128, MaxQueries>,
 	}
+
+	impl<Amount: Default, MaxQueries: Get<u32>, QueryId: Ord, Timestamp: Default>
+		StakeInfo<Amount, MaxQueries, QueryId, Timestamp>
+	{
+		pub(crate) fn new(address: Address) -> Self {
+			Self {
+				address,
+				start_date: Timestamp::default(),
+				staked_balance: Amount::default(),
+				locked_balance: Amount::default(),
+				reward_debt: Amount::default(),
+				reporter_last_timestamp: Timestamp::default(),
+				reports_submitted: 0,
+				start_vote_count: 0,
+				start_vote_tally: 0,
+				staked: false,
+				reports_submitted_by_query_id: BoundedBTreeMap::default(),
+			}
+		}
+	}
 }
 
 mod governance {
@@ -195,4 +216,10 @@ mod governance {
 		Passed,
 		Invalid,
 	}
+}
+
+#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct Configuration {
+	pub(crate) xcm_config: crate::xcm::XcmConfig,
+	pub(crate) gas_limit: u128,
 }

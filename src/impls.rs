@@ -1,6 +1,10 @@
 use super::*;
 
 impl<T: Config> Pallet<T> {
+	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, Error<T>> {
+		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
+	}
+
 	/// Determines if an account voted for a specific dispute.
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.
@@ -806,8 +810,80 @@ impl<T: Config> Pallet<T> {
 		Self::deposit_event(Event::QueryDataStored { query_id });
 	}
 
-	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, Error<T>> {
-		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
+	pub(super) fn update_stake_and_pay_rewards(
+		staker: &mut StakeInfoOf<T>,
+		new_staked_balance: AmountOf<T>,
+	) -> Result<(), Error<T>> {
+		// todo: complete implementation
+		// _updateRewards();
+		if staker.staked_balance > <AmountOf<T>>::default() {
+			// 	// if address already has a staked balance, calculate and transfer pending rewards
+			// 	uint256 _pendingReward = (_staker.stakedBalance *
+			// 		accumulatedRewardPerShare) /
+			// 		1e18 -
+			// 		_staker.rewardDebt;
+			// 	// get staker voting participation rate
+			// 	uint256 _numberOfVotes;
+			// 	(bool _success, bytes memory _returnData) = governance.call(
+			// 		abi.encodeWithSignature("getVoteCount()")
+			// 	);
+			// 	if (_success) {
+			// 		_numberOfVotes =
+			// 			uint256(abi.decode(_returnData, (uint256))) -
+			// 				_staker.startVoteCount;
+			// 	}
+			// 	if (_numberOfVotes > 0) {
+			// 		// staking reward = pending reward * voting participation rate
+			// 		(_success, _returnData) = governance.call(
+			// 			abi.encodeWithSignature("getVoteTallyByAddress(address)",_stakerAddress)
+			// 		);
+			// 		if(_success){
+			// 			uint256 _voteTally = abi.decode(_returnData,(uint256));
+			// 			uint256 _tempPendingReward =
+			// 				(_pendingReward *
+			// 					(_voteTally - _staker.startVoteTally)) /
+			// 					_numberOfVotes;
+			// 			if (_tempPendingReward < _pendingReward) {
+			// 				_pendingReward = _tempPendingReward;
+			// 			}
+			// 		}
+			// 	}
+			// 	stakingRewardsBalance -= _pendingReward;
+			// 	require(token.transfer(msg.sender, _pendingReward));
+			// 	totalRewardDebt -= _staker.rewardDebt;
+			// 	totalStakeAmount -= _staker.stakedBalance;
+		}
+		staker.staked_balance = new_staked_balance;
+		// Update total stakers
+		<TotalStakers<T>>::mutate(|total| {
+			if staker.staked_balance >= <StakeAmount<T>>::get() {
+				if !staker.staked {
+					total.saturating_inc();
+				}
+				staker.staked = true;
+			} else {
+				if staker.staked && *total > 0 {
+					total.saturating_dec();
+				}
+				staker.staked = false;
+			}
+		});
+		// // tracks rewards accumulated before stake amount updated
+		// _staker.rewardDebt =
+		// 	(_staker.stakedBalance * accumulatedRewardPerShare) /
+		// 		1e18;
+		// totalRewardDebt += _staker.rewardDebt;
+		<TotalStakeAmount<T>>::mutate(|total| total.saturating_accrue(staker.staked_balance));
+		// // update reward rate if staking rewards are available given staker's updated parameters
+		// if(rewardRate == 0) {
+		// 	rewardRate =
+		// 		(stakingRewardsBalance -
+		// 			((accumulatedRewardPerShare * totalStakeAmount) /
+		// 				1e18 -
+		// 				totalRewardDebt)) /
+		// 			30 days;
+		// }
+		Ok(())
 	}
 }
 
