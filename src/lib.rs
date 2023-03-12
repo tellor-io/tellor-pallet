@@ -390,8 +390,12 @@ pub mod pallet {
 			query_id: QueryIdOf<T>,
 		},
 		// Registration
-		Registered {
+		Configured {
 			stake_amount: AmountOf<T>,
+		},
+		RegistrationAttempted {
+			para_id: u32,
+			contract_address: Address,
 		},
 	}
 
@@ -510,6 +514,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 
+			// Update local configuration
 			<StakeAmount<T>>::set(stake_amount);
 			let config = types::Configuration {
 				xcm_config: xcm::XcmConfig {
@@ -520,7 +525,9 @@ pub mod pallet {
 				gas_limit,
 			};
 			<Configuration<T>>::set(Some(config));
+			Self::deposit_event(Event::Configured { stake_amount });
 
+			// Register relevant supplied config with parachain registry contract
 			let registry_contract = T::Registry::get();
 			let message = xcm::transact(
 				*fees,
@@ -540,7 +547,10 @@ pub mod pallet {
 				),
 			);
 			Self::send_xcm(registry_contract.para_id, message)?;
-			Self::deposit_event(Event::Registered { stake_amount });
+			Self::deposit_event(Event::RegistrationAttempted {
+				para_id: registry_contract.para_id,
+				contract_address: registry_contract.address.into(),
+			});
 			Ok(())
 		}
 
