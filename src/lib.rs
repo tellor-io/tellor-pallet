@@ -291,6 +291,8 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, DisputeOf<T>>;
 	#[pallet::storage]
+	pub type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, u128>;
+	#[pallet::storage]
 	pub type VoteCount<T> = StorageValue<_, DisputeIdOf<T>, ValueQuery>;
 	#[pallet::storage]
 	pub type VoteInfo<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, VoteOf<T>>;
@@ -1134,16 +1136,50 @@ pub mod pallet {
 				},
 				Ok,
 			)?;
-
+			// disputeIdsByReporter[_thisDispute.disputedReporter].push(_disputeId);
+			// uint256 _disputeFee = getDisputeFee();
 			if vote_rounds == 1 {
 				ensure!(
 					T::Time::now().saturating_sub(timestamp) < T::ReportingLock::get(),
 					Error::<T>::DisputeReportingPeriodExpired
 				);
+				<OpenDisputesOnId<T>>::mutate(query_id, |open_disputes| {
+					*open_disputes =
+						Some(open_disputes.take().unwrap_or_default().saturating_add(1));
+				});
+				// todo:
+				// // calculate dispute fee based on number of open disputes on query ID
+				// _disputeFee = _disputeFee * 2**(openDisputesOnId[_queryId] - 1);
+				// // slash a single stakeAmount from reporter
+				// _thisDispute.slashedAmount = oracle.slashReporter(_thisDispute.disputedReporter, address(this));
+				// _thisDispute.value = oracle.retrieveData(_queryId, _timestamp);
 				Self::_remove_value(query_id, timestamp)?;
 			} else {
-				todo!()
+				// todo:
+				// uint256 _prevId = _voteRounds[_voteRounds.length - 2];
+				// require(
+				// 	block.timestamp - voteInfo[_prevId].tallyDate < 1 days,
+				// 	"New dispute round must be started within a day"
+				// );
+				// _disputeFee = _disputeFee * 2**(_voteRounds.length - 1);
+				// _thisDispute.slashedAmount = disputeInfo[_voteRounds[0]].slashedAmount;
+				// _thisDispute.value = disputeInfo[_voteRounds[0]].value;
 			}
+			// if (_disputeFee > oracle.getStakeAmount()) {
+			// 	_disputeFee = oracle.getStakeAmount();
+			// }
+			// _thisVote.fee = _disputeFee;
+			// voteCount++;
+			// require(
+			// 	token.transferFrom(msg.sender, address(this), _disputeFee),
+			// 	"Fee must be paid"
+			// ); // This is the dispute fee. Returned if dispute passes
+			Self::deposit_event(Event::NewDispute {
+				dispute_id,
+				query_id,
+				timestamp,
+				reporter: dispute_initiator.clone(),
+			});
 
 			{
 				// Lookup corresponding addresses on controller chain
@@ -1179,14 +1215,8 @@ pub mod pallet {
 					config.xcm_config,
 				);
 				Self::send_xcm(governance_contract.para_id, message)?;
+				// todo: emit event such as GovernanceBeginDisputeAttempted?
 			}
-
-			Self::deposit_event(Event::NewDispute {
-				dispute_id,
-				query_id,
-				timestamp,
-				reporter: dispute_initiator,
-			});
 			Ok(())
 		}
 

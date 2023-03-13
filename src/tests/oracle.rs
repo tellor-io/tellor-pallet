@@ -84,9 +84,62 @@ fn deposit_stake() {
 }
 
 #[test]
-#[ignore]
 fn remove_value() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let another_reporter = 2;
+	let address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			super::deposit_stake(another_reporter, STAKE_AMOUNT, Address::random());
+		});
+	});
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L127
+	ext.execute_with(|| {
+		with_block(|| {
+			let timestamp = Timestamp::get();
+
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				address
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+
+			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 1);
+			assert_noop!(Tellor::_remove_value(query_id, 500), Error::InvalidTimestamp);
+			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(100));
+			assert!(!Tellor::is_in_dispute(query_id, timestamp));
+
+			// Value can only be removed via dispute
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				timestamp
+			));
+			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 1);
+			assert_eq!(Tellor::retrieve_data(query_id, timestamp), None);
+			assert!(Tellor::is_in_dispute(query_id, timestamp));
+			assert_noop!(Tellor::_remove_value(query_id, timestamp), Error::ValueDisputed);
+
+			// Test min/max values for timestamp argument
+			assert_noop!(Tellor::_remove_value(query_id, 0), Error::InvalidTimestamp);
+			assert_noop!(Tellor::_remove_value(query_id, u64::MAX), Error::InvalidTimestamp);
+		});
+	});
 }
 
 #[test]
