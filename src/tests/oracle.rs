@@ -1,5 +1,6 @@
 use super::*;
 use frame_support::{assert_noop, assert_ok};
+use sp_core::U256;
 use sp_runtime::traits::BadOrigin;
 
 #[test]
@@ -143,9 +144,114 @@ fn remove_value() {
 }
 
 #[test]
-#[ignore]
 fn request_stake_withdraw() {
-	todo!()
+	let reporter = 1;
+	let amount = token(1_000);
+	let address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+		});
+	});
+
+	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L151
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_noop!(
+				Tellor::report_staking_withdraw_request(
+					RuntimeOrigin::signed(reporter),
+					reporter,
+					token(10).into(),
+					address
+				),
+				BadOrigin
+			);
+			assert_noop!(
+				Tellor::report_staking_withdraw_request(
+					Origin::Staking.into(),
+					reporter,
+					token(5).into(),
+					address
+				),
+				Error::InsufficientStake
+			);
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				amount.into(),
+				address
+			));
+
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.start_date, Timestamp::get());
+			assert_eq!(staker_details.staked_balance, amount);
+			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(staker_details.staked, true);
+			assert_eq!(Tellor::get_total_stake_amount(), amount);
+			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
+			assert_noop!(
+				Tellor::report_staking_withdraw_request(
+					Origin::Staking.into(),
+					reporter,
+					(amount + 1).into(),
+					address
+				),
+				Error::InsufficientStake
+			);
+
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				token(10).into(),
+				address
+			));
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.start_date, Timestamp::get());
+			assert_eq!(staker_details.reward_debt, 0);
+			assert_eq!(staker_details.staked_balance, token(990));
+			assert_eq!(staker_details.locked_balance, token(10));
+			assert_eq!(staker_details.staked, true);
+			assert_eq!(Tellor::get_total_stake_amount(), token(990));
+			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
+
+			// Test max/min for amount arg
+			assert_noop!(
+				Tellor::report_staking_withdraw_request(
+					Origin::Staking.into(),
+					reporter,
+					U256::max_value(),
+					address
+				),
+				Error::InsufficientStake
+			);
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				U256::zero(),
+				address
+			));
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.start_date, Timestamp::get());
+			assert_eq!(staker_details.reward_debt, 0);
+			assert_eq!(staker_details.staked_balance, token(990));
+			assert_eq!(staker_details.locked_balance, token(10));
+			assert_eq!(staker_details.staked, true);
+			assert_eq!(Tellor::get_total_stake_amount(), token(990));
+			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
+
+			assert_eq!(Tellor::get_total_stakers(), 1);
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				token(990).into(),
+				address
+			));
+			assert_eq!(Tellor::get_total_stakers(), 0);
+		});
+	});
 }
 
 #[test]

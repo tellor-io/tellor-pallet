@@ -465,7 +465,6 @@ pub mod pallet {
 		MaxQueriesReached,
 		/// The maximum number of timestamps has been reached.
 		MaxTimestampsReached,
-		NotStaking,
 		/// Still in reporter time lock, please wait!
 		ReporterTimeLocked,
 		ReportingLockCalculationError,
@@ -1309,12 +1308,13 @@ pub mod pallet {
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
+
 			let amount = amount
 				.saturated_into::<u128>() // todo: handle in single call skipping u128
 				.saturated_into::<AmountOf<T>>();
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
-					None => Err(Error::<T>::NotStaking.into()),
+					None => Err(Error::<T>::InsufficientStake.into()),
 					Some(staker) => {
 						ensure!(address == staker.address, Error::<T>::InvalidAddress);
 						ensure!(staker.staked_balance >= amount, Error::<T>::InsufficientStake);
@@ -1328,6 +1328,7 @@ pub mod pallet {
 					},
 				}
 			})?;
+			Self::deposit_event(Event::StakeWithdrawRequestReported { reporter, amount, address });
 
 			// Confirm staking withdraw request
 			let staking_contract = T::Staking::get();
@@ -1344,8 +1345,7 @@ pub mod pallet {
 				config.xcm_config,
 			);
 			Self::send_xcm(staking_contract.para_id, message)?;
-
-			Self::deposit_event(Event::StakeWithdrawRequestReported { reporter, amount, address });
+			// todo: emit StakeWithRequestConfirmationSent event?
 			Ok(())
 		}
 
