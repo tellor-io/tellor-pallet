@@ -37,10 +37,10 @@ License: Unlicense
 
 ### Oracle (Tellor Flex)
 
-| Dispatchable Function                |    Functional Test     | Notes                                     |
-|--------------------------------------|:----------------------:|-------------------------------------------|
-| :white_square_button: `remove_value` | :white_square_button:  | Implemented, needs test                   |
-| :heavy_check_mark: `submit_value`    | :white_square_button:  | Implemented apart from time-based rewards |
+| Dispatchable Function              |    Functional Test     | Notes                                     |
+|------------------------------------|:----------------------:|-------------------------------------------|
+| :heavy_check_mark: `remove_value`  | :white_square_button:  | Implemented, needs test                   |
+| :heavy_check_mark: `submit_value`  | :white_square_button:  | Implemented apart from time-based rewards |
 
 | Runtime API                                                        |    Functional Test     | Notes |
 |--------------------------------------------------------------------|:----------------------:|-------|
@@ -82,13 +82,13 @@ License: Unlicense
 
 ## Controller Contract Integration
 
-| Dispatchable Function                                   |    Functional Test    | Notes |
-|---------------------------------------------------------|:---------------------:|-------|
-| :white_square_button: `register`                        | :white_square_button: |       |
-| :white_square_button: `report_stake_deposited`          | :white_square_button: |       |
-| :white_square_button: `report_staking_withdraw_request` | :white_square_button: |       |
-| :white_square_button: `report_stake_withdrawn`          | :white_square_button: |       |
-| :white_square_button: `report_slash`                    | :white_square_button: |       |
-| :white_square_button: `report_invalid_dispute`          | :white_square_button: |       |
-| :white_square_button: `slash_dispute_initiator`         | :white_square_button: |       |
-| :white_square_button: `deregister`                      | :white_square_button: |       |
+| Dispatchable Function                                   |    Functional Test    | Notes                                                          |
+|---------------------------------------------------------|:---------------------:|----------------------------------------------------------------|
+| :white_square_button: `register`                        | :white_square_button: |                                                                |
+| :heavy_check_mark: `report_stake_deposited`             |  :heavy_check_mark:   | Mostly implemented, `depositStake` functional test implemented |
+| :white_square_button: `report_staking_withdraw_request` | :white_square_button: |                                                                |
+| :white_square_button: `report_stake_withdrawn`          | :white_square_button: |                                                                |
+| :white_square_button: `report_slash`                    | :white_square_button: |                                                                |
+| :white_square_button: `report_invalid_dispute`          | :white_square_button: |                                                                |
+| :white_square_button: `slash_dispute_initiator`         | :white_square_button: |                                                                |
+| :white_square_button: `deregister`                      | :white_square_button: |                                                                |

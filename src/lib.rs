@@ -273,7 +273,7 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type RewardRate<T> = StorageValue<_, AmountOf<T>>;
 	#[pallet::storage]
-	pub type StakeAmount<T> = StorageValue<_, AmountOf<T>, ValueQuery>;
+	pub type StakeAmount<T> = StorageValue<_, AmountOf<T>>;
 	#[pallet::storage]
 	pub type StakerDetails<T> = StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
 	#[pallet::storage]
@@ -515,7 +515,7 @@ pub mod pallet {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 
 			// Update local configuration
-			<StakeAmount<T>>::set(stake_amount);
+			<StakeAmount<T>>::set(Some(stake_amount));
 			let config = types::Configuration {
 				xcm_config: xcm::XcmConfig {
 					fees: *fees.clone(),
@@ -958,7 +958,8 @@ pub mod pallet {
 			let mut staker =
 				<StakerDetails<T>>::get(&reporter).ok_or(Error::<T>::InsufficientStake)?;
 			ensure!(
-				staker.staked_balance >= <StakeAmount<T>>::get(),
+				staker.staked_balance >=
+					<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
 				Error::<T>::InsufficientStake
 			);
 			// Require reporter to abide by given reporting lock
@@ -972,7 +973,9 @@ pub mod pallet {
 						.checked_div(
 							staker
 								.staked_balance
-								.checked_div(&<StakeAmount<T>>::get())
+								.checked_div(
+									&<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?
+								)
 								.ok_or(Error::<T>::ReportingLockCalculationError)?
 								.saturated_into::<u128>()
 						)
@@ -1215,6 +1218,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
+
 			let amount = amount
 				.saturated_into::<u128>() // todo: handle in single call skipping u128
 				.saturated_into::<AmountOf<T>>();
@@ -1229,18 +1233,9 @@ pub mod pallet {
 						staker.locked_balance.saturating_reduce(amount);
 					// 		toWithdraw -= _amount; // <- todo: check whether this is required
 					} else {
-						// todo:
-						// 		// otherwise, stake the whole locked balance and transfer the
-						// 		// remaining amount from the staker's address
-						// 		require(
-						// 			token.transferFrom(
-						// 				msg.sender,
-						// 				address(this),
-						// 				_amount - _lockedBalance
-						// 			)
-						// 		);
-						// 		toWithdraw -= _staker.lockedBalance;
-						// 		_staker.lockedBalance = 0;
+						// otherwise, stake the whole locked balance
+						// 		toWithdraw -= _staker.lockedBalance; <- todo: check whether this is required
+						staker.locked_balance = <AmountOf<T>>::default();
 					}
 				} else {
 					if staked_balance == <AmountOf<T>>::default() {

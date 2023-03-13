@@ -9,30 +9,10 @@ use sp_core::{bytes::to_hex, keccak_256, H256};
 use xcm::latest::prelude::*;
 
 mod autopay;
+mod governance;
+mod oracle;
 
 type Error = crate::Error<Test>;
-
-#[test]
-fn reports_stake_deposited() {
-	new_test_ext().execute_with(|| {
-		with_block(|| {
-			let reporter = 1;
-			let amount: Amount = 42.into();
-			let address = Address::random();
-			assert_ok!(Tellor::report_stake_deposited(
-				Origin::Staking.into(),
-				reporter,
-				amount,
-				address
-			));
-
-			System::assert_last_event(
-				Event::NewStakerReported { staker: reporter, amount: amount.low_u64(), address }
-					.into(),
-			);
-		});
-	});
-}
 
 #[test]
 fn begins_dispute() {
@@ -85,10 +65,7 @@ fn register_parachain(stake_amount: AmountOf<Test>) {
 	assert_ok!(Tellor::register(
 		RuntimeOrigin::root(),
 		stake_amount,
-		Box::new(MultiAsset {
-			id: Concrete(self_reserve),
-			fun: Fungible(300_000_000_000_000_u128)
-		}),
+		Box::new(MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000u128) }),
 		WeightLimit::Unlimited,
 		1000,
 		1000

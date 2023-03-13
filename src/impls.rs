@@ -174,7 +174,7 @@ impl<T: Config> Pallet<T> {
 	/// The latest dispute fee.
 	pub fn get_dispute_fee() -> AmountOf<T> {
 		// todo: make configurable and use safe math
-		<StakeAmount<T>>::get() / 10u8.into()
+		<StakeAmount<T>>::get().unwrap_or_default() / 10u8.into()
 	}
 
 	/// Read currently funded feed details.
@@ -671,7 +671,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The stake amount.
 	pub fn get_stake_amount() -> AmountOf<T> {
-		<StakeAmount<T>>::get()
+		<StakeAmount<T>>::get().unwrap_or_default()
 	}
 
 	/// Returns all information about a staker.
@@ -817,7 +817,7 @@ impl<T: Config> Pallet<T> {
 		// todo: complete implementation
 		// _updateRewards();
 		if staker.staked_balance > <AmountOf<T>>::default() {
-			// 	// if address already has a staked balance, calculate and transfer pending rewards
+			// if address already has a staked balance, calculate and transfer pending rewards
 			// 	uint256 _pendingReward = (_staker.stakedBalance *
 			// 		accumulatedRewardPerShare) /
 			// 		1e18 -
@@ -851,12 +851,12 @@ impl<T: Config> Pallet<T> {
 			// 	stakingRewardsBalance -= _pendingReward;
 			// 	require(token.transfer(msg.sender, _pendingReward));
 			// 	totalRewardDebt -= _staker.rewardDebt;
-			// 	totalStakeAmount -= _staker.stakedBalance;
+			<TotalStakeAmount<T>>::mutate(|total| total.saturating_reduce(staker.staked_balance));
 		}
 		staker.staked_balance = new_staked_balance;
 		// Update total stakers
-		<TotalStakers<T>>::mutate(|total| {
-			if staker.staked_balance >= <StakeAmount<T>>::get() {
+		<TotalStakers<T>>::try_mutate(|total| -> Result<(), Error<T>> {
+			if staker.staked_balance >= <StakeAmount<T>>::get().ok_or(Error::NotRegistered)? {
 				if !staker.staked {
 					total.saturating_inc();
 				}
@@ -867,7 +867,8 @@ impl<T: Config> Pallet<T> {
 				}
 				staker.staked = false;
 			}
-		});
+			Ok(())
+		})?;
 		// // tracks rewards accumulated before stake amount updated
 		// _staker.rewardDebt =
 		// 	(_staker.stakedBalance * accumulatedRewardPerShare) /
