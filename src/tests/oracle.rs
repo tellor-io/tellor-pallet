@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
 	types::{Nonce, QueryIdOf, TimestampOf},
-	Config,
+	Config, DAY_IN_MILLISECONDS,
 };
 use frame_support::{assert_noop, assert_ok};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, Get, U256};
@@ -1017,69 +1017,502 @@ fn get_staker_info() {
 }
 
 #[test]
-#[ignore]
 fn get_time_of_last_new_value() {
-	todo!()
+	let reporter = 1;
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L461
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4000),
+				0,
+				query_data.clone(),
+			));
+			assert_eq!(Tellor::get_time_of_last_new_value().unwrap(), Timestamp::get())
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn get_timestamp_by_query_and_index() {
-	todo!()
+	let reporter = 1;
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L471
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4000),
+				0,
+				query_data.clone(),
+			));
+		});
+
+		with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4000),
+				0,
+				query_data.clone(),
+			));
+			assert_eq!(
+				Tellor::get_timestamp_by_query_id_and_index(query_id, 1).unwrap(),
+				Timestamp::get()
+			)
+		})
+	});
 }
 
 #[test]
-#[ignore]
 fn get_timestamp_index_by_timestamp() {
-	todo!()
+	let reporter = 1;
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L481
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4000),
+				0,
+				query_data.clone(),
+			));
+		});
+
+		with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4000),
+				0,
+				query_data.clone(),
+			));
+			assert_eq!(
+				Tellor::get_timestamp_index_by_timestamp(query_id, Timestamp::get()).unwrap(),
+				1
+			)
+		})
+	});
 }
 
 #[test]
-#[ignore]
 fn get_total_stake_amount() {
-	todo!()
+	let reporter = 1;
+	let address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L491
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				address
+			));
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				token(10).into(),
+				address
+			));
+			assert_eq!(Tellor::get_total_stake_amount(), token(90))
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn get_total_stakers() {
-	todo!()
+	let reporter = 1;
+	let address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L502
+	ext.execute_with(|| {
+		with_block(|| {
+			// Only count unique stakers
+			assert_eq!(Tellor::get_total_stakers(), 0);
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				address
+			));
+			assert_eq!(Tellor::get_total_stakers(), 1);
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				address
+			));
+			assert_eq!(Tellor::get_total_stakers(), 1);
+
+			// Unstake, restake
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				token(200).into(),
+				address
+			));
+			assert_eq!(Tellor::get_total_stakers(), 0);
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				address
+			));
+			assert_eq!(Tellor::get_total_stakers(), 1);
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn retrieve_data() {
-	todo!()
+	let reporter = 1;
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L519
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4000),
+				0,
+				query_data.clone(),
+			));
+		});
+
+		with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4001),
+				0,
+				query_data.clone(),
+			));
+			assert_eq!(
+				Tellor::retrieve_data(query_id, Timestamp::get()).unwrap(),
+				uint_value(4001)
+			);
+
+			// Test max/min values for _timestamp arg
+			assert_eq!(Tellor::retrieve_data(query_id, 0), None);
+			assert_eq!(Tellor::retrieve_data(query_id, <TimestampOf<Test>>::MAX), None);
+		})
+	});
 }
 
 #[test]
 #[ignore]
 fn get_total_time_based_rewards_balance() {
+	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L533
 	todo!()
 }
 
 #[test]
 #[ignore]
 fn add_staking_rewards() {
+	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L539
 	todo!()
 }
 
 #[test]
 #[ignore]
 fn get_pending_reward_by_staker() {
+	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L561
 	todo!()
 }
 
 #[test]
-#[ignore]
 fn get_index_for_data_before() {
-	todo!()
+	let reporter = 1;
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L519
+	ext.execute_with(|| {
+		let (timestamp_0, _) = with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				token(1_000).into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+		});
+		let (timestamp_1, _) = with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				1,
+				query_data.clone(),
+			));
+		});
+		let (timestamp_2, _) = with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				2,
+				query_data.clone(),
+			));
+		});
+
+		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
+
+		// advance time and test
+		for year in 1..2 {
+			with_block_after(year * 365 * DAY_IN_MILLISECONDS, || {
+				assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
+			});
+		}
+
+		for i in 0..50 {
+			with_block_after(ReportingLock::get(), || {
+				assert_ok!(Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(100 + i),
+					0,
+					query_data.clone(),
+				));
+			});
+		}
+		let timestamp_52 = Timestamp::get();
+
+		// test last value disputed
+		with_block(|| {
+			assert_ok!(Tellor::_remove_value(query_id, timestamp_52));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_52), Some(51));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), Some(2));
+
+			// remove value at index 2
+			assert_ok!(Tellor::_remove_value(query_id, timestamp_2));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), Some(1));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), Some(1));
+
+			assert_ok!(Tellor::_remove_value(query_id, timestamp_1));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 - 1), Some(0));
+
+			assert_ok!(Tellor::_remove_value(query_id, timestamp_0));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 - 1), None);
+		});
+
+		let query_data: QueryDataOf<Test> = spot_price("ksm", "usd").try_into().unwrap();
+		let query_id = keccak_256(query_data.as_ref()).into();
+
+		let (timestamp_0, _) = with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+		});
+		let (timestamp_1, _) = with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+
+			assert_ok!(Tellor::_remove_value(query_id, timestamp_0));
+			assert_ok!(Tellor::_remove_value(query_id, Timestamp::get()));
+		});
+
+		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), None);
+		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_0 + 1), None);
+
+		let (timestamp_2, _) = with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+		});
+
+		with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+
+			assert_ok!(Tellor::_remove_value(query_id, timestamp_2));
+			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), None);
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn get_data_before() {
-	todo!()
+	let reporter = 1;
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L697
+	ext.execute_with(|| {
+		let (timestamp_1, _) = with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				token(1_000).into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(150),
+				0,
+				query_data.clone(),
+			));
+		});
+		let (timestamp_2, _) = with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(160),
+				1,
+				query_data.clone(),
+			));
+		});
+		let (timestamp_3, _) = with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(170),
+				2,
+				query_data.clone(),
+			));
+		});
+
+		assert_eq!(
+			Tellor::get_data_before(query_id, timestamp_3 + 1),
+			Some((uint_value(170), timestamp_3))
+		);
+		assert_eq!(
+			Tellor::get_data_before(query_id, timestamp_2),
+			Some((uint_value(150), timestamp_1))
+		);
+
+		// advance time one year and test
+		for year in 1..2 {
+			with_block_after(year * 365 * DAY_IN_MILLISECONDS, || {
+				assert_eq!(
+					Tellor::get_data_before(query_id, timestamp_3 + 1),
+					Some((uint_value(170), timestamp_3))
+				);
+				assert_eq!(
+					Tellor::get_data_before(query_id, timestamp_2),
+					Some((uint_value(150), timestamp_1))
+				);
+			});
+		}
+
+		// submit 50 values and test
+		for i in 0..50 {
+			with_block_after(ReportingLock::get(), || {
+				assert_ok!(Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(100 + i),
+					0,
+					query_data.clone(),
+				));
+			});
+		}
+
+		assert_eq!(
+			Tellor::get_data_before(query_id, timestamp_3 + 1),
+			Some((uint_value(170), timestamp_3))
+		);
+		assert_eq!(
+			Tellor::get_data_before(query_id, timestamp_2),
+			Some((uint_value(150), timestamp_1))
+		);
+	});
 }
 
 #[test]

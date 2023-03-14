@@ -46,7 +46,7 @@ License: Unlicense
 |--------------------------------------------------------------------|:---------------------:|-------|
 | :white_check_mark: `get_block_number_by_timestamp`                 |  :white_check_mark:   |       |
 | :white_check_mark: `get_current_value`                             |  :white_check_mark:   |       |
-| :white_check_mark: `get_data_before`                               | :white_square_button: |       |
+| :white_check_mark: `get_data_before`                               |  :white_check_mark:   |       |
 | :white_check_mark: `get_new_value_count_by_query_id`               |  :white_check_mark:   |       |
 | :white_square_button: `get_pending_reward_by_staker`?              | :white_square_button: |       |
 | :white_square_button: `get_real_staking_rewards_balance`?          | :white_square_button: |       |
@@ -58,15 +58,15 @@ License: Unlicense
 | :white_check_mark: `get_reports_submitted_by_address_and_query_id` |  :white_check_mark:   |       |
 | :white_check_mark: `get_stake_amount`                              |  :white_check_mark:   |       |
 | :white_check_mark: `get_staker_info`                               |  :white_check_mark:   |       |
-| :white_check_mark: `get_time_of_last_new_value`                    | :white_square_button: |       |
-| :white_check_mark: `get_timestamp_by_query_id_and_index`           | :white_square_button: |       |
-| :white_check_mark: `get_index_for_data_before`                     | :white_square_button: |       |
-| :white_check_mark: `get_timestamp_index_by_timestamp`              | :white_square_button: |       |
-| :white_check_mark: `get_total_stake_amount`                        | :white_square_button: |       |
-| :white_check_mark: `get_total_stakers`                             | :white_square_button: |       |
+| :white_check_mark: `get_time_of_last_new_value`                    |  :white_check_mark:   |       |
+| :white_check_mark: `get_timestamp_by_query_id_and_index`           |  :white_check_mark:   |       |
+| :white_check_mark: `get_index_for_data_before`                     |  :white_check_mark:   |       |
+| :white_check_mark: `get_timestamp_index_by_timestamp`              |  :white_check_mark:   |       |
+| :white_check_mark: `get_total_stake_amount`                        |  :white_check_mark:   |       |
+| :white_check_mark: `get_total_stakers`                             |  :white_check_mark:   |       |
 | :white_square_button: `get_total_time_based_rewards_balance`?      | :white_square_button: |       |
 | :white_check_mark: `is_in_dispute`                                 | :white_square_button: |       |
-| :white_check_mark: `retrieve_data`                                 | :white_square_button: |       |
+| :white_check_mark: `retrieve_data`                                 |  :white_check_mark:   |       |
 
 ### Governance
 
