@@ -734,11 +734,11 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Allows Tellor reporters to claim their tips in batches.
+		/// Allows data feed account to be filled with tokens.
 		///
 		/// - `feed_id`: Unique feed identifier.
-		/// - `query_id`: Identifier of reported data.
-		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
+		/// - `query_id`: Identifier of reported data type associated with feed.
+		/// - `amount`: Quantity of tokens to fund feed.
 		#[pallet::call_index(3)]
 		pub fn fund_feed(
 			origin: OriginFor<T>,
