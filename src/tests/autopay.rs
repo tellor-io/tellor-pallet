@@ -2332,6 +2332,37 @@ fn get_reward_claim_status_list() {
 	});
 }
 
+#[test]
+fn get_current_feeds() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let feed_creator = 1;
+
+	new_test_ext().execute_with(|| {
+		with_block(|| {
+			// create multiple feeds for the same query id
+			let feeds: Vec<FeedIdOf<Test>> = (1..=5u8)
+				.map(|i| {
+					create_feed(
+						feed_creator,
+						query_id,
+						token(i),
+						Timestamp::get(),
+						600 * SECONDS,
+						60 * SECONDS,
+						0,
+						0,
+						query_data.clone(),
+						0,
+					)
+				})
+				.collect();
+			assert_eq!(feeds.len(), 5);
+			assert_eq!(Tellor::get_current_feeds(query_id), feeds);
+		});
+	});
+}
+
 // Helper function for creating feeds
 fn create_feed(
 	feed_creator: AccountIdOf<Test>,
