@@ -283,6 +283,7 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
 	#[pallet::storage]
+	#[pallet::getter(fn time_of_last_new_value)]
 	pub type TimeOfLastNewValue<T> = StorageValue<_, TimestampOf<T>>;
 	#[pallet::storage]
 	pub type TotalStakeAmount<T> = StorageValue<_, AmountOf<T>, ValueQuery>;
@@ -961,7 +962,8 @@ pub mod pallet {
 					report.as_ref().map_or(Nonce::default(), |r| r
 						.timestamps
 						.len()
-						.saturated_into::<Nonce>()),
+						.saturated_into::<Nonce>()) ||
+					nonce == 0, // todo: query || nonce == 0 check
 				Error::<T>::InvalidNonce
 			);
 			let mut staker =

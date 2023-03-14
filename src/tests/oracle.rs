@@ -1,9 +1,11 @@
 use super::*;
+use crate::{types::Nonce, Config};
 use frame_support::{assert_noop, assert_ok};
-use sp_core::{Get, U256};
+use sp_core::{bounded_vec, Get, U256};
 use sp_runtime::traits::BadOrigin;
 
-type WithdrawalPeriod = <Test as crate::Config>::WithdrawalPeriod;
+type ReportingLock = <Test as Config>::ReportingLock;
+type WithdrawalPeriod = <Test as Config>::WithdrawalPeriod;
 
 #[test]
 fn deposit_stake() {
@@ -159,7 +161,7 @@ fn request_stake_withdraw() {
 		});
 	});
 
-	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L151
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L151
 	ext.execute_with(|| {
 		with_block(|| {
 			assert_noop!(
@@ -271,7 +273,7 @@ fn slash_reporter() {
 		});
 	});
 
-	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
 	ext.execute_with(|| {
 		with_block(|| {
 			assert_noop!(Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, 0), BadOrigin);
@@ -402,9 +404,174 @@ fn slash_reporter() {
 }
 
 #[test]
-#[ignore]
 fn submit_value() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let another_reporter = 2;
+	let address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+		});
+	});
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L277
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				token(1_200).into(),
+				address
+			));
+			assert_noop!(
+				Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					bounded_vec![],
+					0,
+					query_data.clone()
+				),
+				Error::InvalidValue
+			);
+			assert_noop!(
+				Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(4_000),
+					1,
+					query_data.clone()
+				),
+				Error::InvalidNonce
+			);
+			assert_noop!(
+				Tellor::submit_value(
+					RuntimeOrigin::signed(another_reporter),
+					query_id,
+					uint_value(4_000),
+					0,
+					query_data.clone()
+				),
+				Error::InsufficientStake
+			);
+			assert_noop!(
+				Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					H256::random(),
+					uint_value(4_000),
+					0,
+					query_data.clone()
+				),
+				Error::InvalidQueryId
+			);
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4_000),
+				0,
+				query_data.clone()
+			));
+			assert_noop!(
+				Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(4_000),
+					1,
+					query_data.clone()
+				),
+				Error::ReporterTimeLocked
+			);
+		});
+
+		with_block_after(WithdrawalPeriod::get(), || {
+			let timestamp = Timestamp::get();
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4_001),
+				1,
+				query_data.clone()
+			));
+			assert_eq!(Tellor::get_timestamp_index_by_timestamp(query_id, timestamp).unwrap(), 1);
+			assert_eq!(
+				Tellor::get_timestamp_by_query_id_and_index(query_id, 1).unwrap(),
+				timestamp
+			);
+			assert_eq!(
+				Tellor::get_block_number_by_timestamp(query_id, timestamp).unwrap(),
+				System::block_number()
+			);
+			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(4_001));
+			assert_eq!(Tellor::get_reporter_by_timestamp(query_id, timestamp).unwrap(), reporter);
+			assert_eq!(Tellor::time_of_last_new_value().unwrap(), timestamp);
+			assert_eq!(Tellor::get_reports_submitted_by_address(reporter), 2);
+			assert_eq!(
+				Tellor::get_reports_submitted_by_address_and_query_id(reporter, query_id),
+				2
+			);
+		});
+
+		// Test submit multiple identical values w/ min nonce
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				another_reporter,
+				token(120).into(),
+				address
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				uint_value(4_001),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(ReportingLock::get(), || {
+			let timestamp = Timestamp::get();
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(4_001),
+				0,
+				query_data.clone()
+			));
+
+			assert_eq!(Tellor::get_timestamp_index_by_timestamp(query_id, timestamp).unwrap(), 3);
+			assert_eq!(
+				Tellor::get_timestamp_by_query_id_and_index(query_id, 3).unwrap(),
+				timestamp
+			);
+			assert_eq!(
+				Tellor::get_block_number_by_timestamp(query_id, timestamp).unwrap(),
+				System::block_number()
+			);
+			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(4001));
+			assert_eq!(Tellor::get_reporter_by_timestamp(query_id, timestamp).unwrap(), reporter);
+			assert_eq!(Tellor::time_of_last_new_value().unwrap(), timestamp);
+			assert_eq!(Tellor::get_reports_submitted_by_address(reporter), 3);
+			assert_eq!(
+				Tellor::get_reports_submitted_by_address_and_query_id(reporter, query_id),
+				3
+			);
+
+			// Test max val for nonce
+			assert_noop!(
+				Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(4_001),
+					Nonce::MAX,
+					query_data
+				),
+				Error::InvalidNonce
+			);
+		})
+	});
 }
 
 #[test]

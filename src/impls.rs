@@ -15,11 +15,18 @@ impl<T: Config> Pallet<T> {
 		<VoteInfo<T>>::get(dispute_id).and_then(|v| v.voted.get(&voter).copied())
 	}
 
+	/// Returns the block number at a given timestamp.
+	/// # Arguments
+	/// * `query_id` - The identifier of the specific data feed.
+	/// * `timestamp` - The timestamp to find the corresponding block number for.
+	/// # Returns
+	/// Block number of the timestamp for the given query identifier and timestamp, if found.
 	pub fn get_block_number_by_timestamp(
-		_query_id: QueryIdOf<T>,
-		_timestamp: TimestampOf<T>,
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
 	) -> Option<BlockNumberOf<T>> {
-		todo!()
+		<Reports<T>>::get(query_id)
+			.and_then(|r| r.timestamp_to_block_number.get(&timestamp).copied())
 	}
 
 	pub(super) fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
