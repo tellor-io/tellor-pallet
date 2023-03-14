@@ -598,37 +598,32 @@ pub mod pallet {
 			)?;
 			Self::add_staking_rewards(fee)?;
 			if Self::get_current_tip(query_id) == <AmountOf<T>>::default() {
-				// todo: replace with if let once guards stable
-				match <QueryIdsWithFundingIndex<T>>::get(query_id) {
-					Some(index) if index != 0 => {
-						// todo: safe math
-						let idx: usize = index as usize - 1;
-						// Replace unfunded feed in array with last element
-						<QueryIdsWithFunding<T>>::try_mutate(
-							|query_ids_with_funding| -> DispatchResult {
+				let index = <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default();
+				if index != 0 {
+					// todo: safe math
+					let idx: usize = index as usize - 1;
+					// Replace unfunded feed in array with last element
+					<QueryIdsWithFunding<T>>::try_mutate(
+						|query_ids_with_funding| -> DispatchResult {
+							// todo: safe math
+							let qid =
+								*query_ids_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
+							query_ids_with_funding
+								.get_mut(idx)
+								.map(|i| *i = qid)
+								.ok_or(Error::<T>::InvalidIndex)?;
+							let query_id_last_funded =
+								query_ids_with_funding.get(idx).ok_or(Error::<T>::InvalidIndex)?;
+							<QueryIdsWithFundingIndex<T>>::set(
+								query_id_last_funded,
 								// todo: safe math
-								let qid = *query_ids_with_funding
-									.last()
-									.ok_or(Error::<T>::InvalidIndex)?;
-								query_ids_with_funding
-									.get_mut(idx)
-									.map(|i| *i = qid)
-									.ok_or(Error::<T>::InvalidIndex)?;
-								let query_id_last_funded = query_ids_with_funding
-									.get(idx)
-									.ok_or(Error::<T>::InvalidIndex)?;
-								<QueryIdsWithFundingIndex<T>>::set(
-									query_id_last_funded,
-									// todo: safe math
-									Some((idx + 1).saturated_into()),
-								);
-								<QueryIdsWithFundingIndex<T>>::remove(query_id);
-								query_ids_with_funding.pop();
-								Ok(())
-							},
-						)?;
-					},
-					_ => {},
+								Some((idx + 1).saturated_into()),
+							);
+							<QueryIdsWithFundingIndex<T>>::remove(query_id);
+							query_ids_with_funding.pop();
+							Ok(())
+						},
+					)?;
 				}
 			}
 			Self::deposit_event(Event::OneTimeTipClaimed {
