@@ -82,13 +82,13 @@ License: Unlicense
 
 ## Controller Contract Integration
 
-| Dispatchable Function                                 |    Functional Test    | Notes                                                          |
-|-------------------------------------------------------|:---------------------:|----------------------------------------------------------------|
-| :white_square_button: `register`                      | :white_square_button: |                                                                |
-| :heavy_check_mark: `report_stake_deposited`           |  :heavy_check_mark:   | Mostly implemented, `depositStake` functional test implemented |
-| :heavy_check_mark: `report_staking_withdraw_request`  |  :white_check_mark:   | 99% implemented                                                |
-| :white_square_button: `report_stake_withdrawn`        | :white_square_button: |                                                                |
-| :white_square_button: `report_slash`                  | :white_square_button: |                                                                |
-| :white_square_button: `report_invalid_dispute`        | :white_square_button: |                                                                |
-| :white_square_button: `slash_dispute_initiator`       | :white_square_button: |                                                                |
-| :white_square_button: `deregister`                    | :white_square_button: |                                                                |
+| Dispatchable Function                                |    Functional Test    | Notes                                                          |
+|------------------------------------------------------|:---------------------:|----------------------------------------------------------------|
+| :heavy_check_mark: `register`                        | :white_square_button: | Partially implemented                                          |
+| :heavy_check_mark: `report_stake_deposited`          |  :heavy_check_mark:   | Mostly implemented, `depositStake` functional test implemented |
+| :heavy_check_mark: `report_staking_withdraw_request` |  :white_check_mark:   | 99% implemented                                                |
+| :heavy_check_mark: `report_stake_withdrawal`         | :white_square_button: |                                                                |
+| :heavy_check_mark: `report_slash`                    |  :heavy_check_mark:   | 99% implemented                                                |
+| :white_square_button: `report_invalid_dispute`       | :white_square_button: |                                                                |
+| :white_square_button: `slash_dispute_initiator`      | :white_square_button: |                                                                |
+| :white_square_button: `deregister`                   | :white_square_button: |                                                                |

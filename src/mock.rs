@@ -2,7 +2,8 @@ use crate as tellor;
 use crate::{
 	types::{Address, MomentOf},
 	xcm::ContractLocation,
-	EnsureGovernance, EnsureStaking, HOUR_IN_MILLISECONDS, WEEK_IN_MILLISECONDS,
+	EnsureGovernance, EnsureStaking, DAY_IN_MILLISECONDS, HOUR_IN_MILLISECONDS,
+	WEEK_IN_MILLISECONDS,
 };
 use frame_support::{
 	assert_ok, log, parameter_types,
@@ -130,6 +131,7 @@ impl tellor::Config for Test {
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ValueConverter;
+	type WithdrawalPeriod = ConstU64<{ 7 * DAY_IN_MILLISECONDS }>;
 	type Xcm = TestSendXcm;
 }
 

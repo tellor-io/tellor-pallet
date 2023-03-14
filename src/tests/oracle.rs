@@ -1,7 +1,9 @@
 use super::*;
 use frame_support::{assert_noop, assert_ok};
-use sp_core::U256;
+use sp_core::{Get, U256};
 use sp_runtime::traits::BadOrigin;
+
+type WithdrawalPeriod = <Test as crate::Config>::WithdrawalPeriod;
 
 #[test]
 fn deposit_stake() {
@@ -255,9 +257,148 @@ fn request_stake_withdraw() {
 }
 
 #[test]
-#[ignore]
 fn slash_reporter() {
-	todo!()
+	let reporter = 1;
+	let recipient = 2;
+	let amount = token(1_000);
+	let address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+		});
+	});
+
+	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_noop!(Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, 0), BadOrigin);
+			assert_noop!(
+				Tellor::report_slash(Origin::Governance.into(), 0, 0, 0),
+				Error::InsufficientStake
+			);
+
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				amount.into(),
+				address
+			));
+
+			// Slash when locked balance = 0
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, amount);
+			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(Tellor::get_total_stake_amount(), amount);
+			assert_ok!(Tellor::report_slash(
+				Origin::Governance.into(),
+				reporter,
+				recipient,
+				STAKE_AMOUNT
+			));
+			// todo?
+			// blocky0 = await h.getBlock()
+			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky0.timestamp)
+			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(900));
+			assert_eq!(staker_details.locked_balance, 0);
+			assert!(staker_details.staked);
+			assert_eq!(Tellor::get_total_stakers(), 1); // Still one staker as reporter has 900 staked & stake amount is 100
+			assert_eq!(Tellor::get_total_stake_amount(), token(900));
+
+			// Slash when lockedBalance >= stakeAmount
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				token(100).into(),
+				address
+			));
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(800));
+			assert_eq!(staker_details.locked_balance, token(100));
+			assert!(staker_details.staked);
+			assert_ok!(Tellor::report_slash(
+				Origin::Governance.into(),
+				reporter,
+				recipient,
+				STAKE_AMOUNT
+			));
+			// todo?
+			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky1.timestamp)
+			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(800));
+			assert_eq!(staker_details.locked_balance, 0);
+			assert!(staker_details.staked);
+			assert_eq!(Tellor::get_total_stake_amount(), token(800));
+
+			// Slash when 0 < locked balance < stake amount
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				token(5).into(),
+				address
+			));
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(795));
+			assert_eq!(staker_details.locked_balance, token(5));
+			assert_eq!(Tellor::get_total_stake_amount(), token(795));
+			assert_ok!(Tellor::report_slash(
+				Origin::Governance.into(),
+				reporter,
+				recipient,
+				STAKE_AMOUNT
+			));
+			// todo?
+			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky2.timestamp)
+			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(700));
+			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(Tellor::get_total_stake_amount(), token(700));
+
+			// Slash when locked balance + staked balance < stake amount
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				token(625).into(),
+				address
+			));
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(75));
+			assert_eq!(staker_details.locked_balance, token(625));
+			assert_eq!(Tellor::get_total_stake_amount(), token(75));
+		});
+
+		with_block_after(WithdrawalPeriod::get(), || {
+			assert_ok!(Tellor::report_stake_withdrawal(
+				Origin::Staking.into(),
+				reporter,
+				token(625).into(),
+				address
+			));
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(75));
+			assert_eq!(staker_details.locked_balance, token(0));
+			assert_ok!(Tellor::report_slash(
+				Origin::Governance.into(),
+				reporter,
+				recipient,
+				STAKE_AMOUNT
+			));
+			// todo?
+			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky.timestamp)
+			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, 0);
+			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(Tellor::get_total_stakers(), 0);
+			assert_eq!(Tellor::get_total_stake_amount(), 0);
+		})
+	});
 }
 
 #[test]

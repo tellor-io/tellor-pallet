@@ -225,6 +225,10 @@ pub mod pallet {
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
 
+		/// The withdrawal period.
+		#[pallet::constant]
+		type WithdrawalPeriod: Get<<Self::Time as Time>::Moment>;
+
 		type Xcm: traits::SendXcm;
 	}
 
@@ -465,11 +469,15 @@ pub mod pallet {
 		MaxQueriesReached,
 		/// The maximum number of timestamps has been reached.
 		MaxTimestampsReached,
+		/// Reporter not locked for withdrawal.
+		NoWithdrawalRequested,
 		/// Still in reporter time lock, please wait!
 		ReporterTimeLocked,
 		ReportingLockCalculationError,
 		/// Timestamp already reported.
 		TimestampAlreadyReported,
+		/// Withdrawal period didn't pass.
+		WithdrawalPeriodPending,
 
 		// Governance
 		/// Dispute must be started within reporting lock time.
@@ -1357,12 +1365,39 @@ pub mod pallet {
 		#[pallet::call_index(12)]
 		pub fn report_stake_withdrawal(
 			origin: OriginFor<T>,
-			_reporter: AccountIdOf<T>,
-			_amount: Amount,
-			_address: Address,
+			reporter: AccountIdOf<T>,
+			amount: Amount,
+			// todo: consider removal of address
+			address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
+
+			let amount = amount
+				.saturated_into::<u128>() // todo: handle in single call skipping u128
+				.saturated_into::<AmountOf<T>>();
+
+			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
+				match maybe {
+					None => Err(Error::<T>::InsufficientStake.into()),
+					Some(staker) => {
+						// Ensure reporter is locked and that enough time has passed
+						ensure!(
+							T::Time::now().saturating_sub(staker.start_date) >=
+								T::WithdrawalPeriod::get(),
+							Error::<T>::WithdrawalPeriodPending
+						);
+						ensure!(
+							staker.locked_balance > <AmountOf<T>>::default(),
+							Error::<T>::NoWithdrawalRequested
+						);
+						// toWithdraw -= _staker.lockedBalance; // todo: required?
+						staker.locked_balance.saturating_reduce(amount);
+						Ok(())
+					},
+				}
+			})?;
+			Self::deposit_event(Event::StakeWithdrawnReported { staker: reporter });
 			Ok(())
 		}
 
@@ -1374,12 +1409,56 @@ pub mod pallet {
 		#[pallet::call_index(13)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
-			_reporter: Address,
-			_recipient: Address,
-			_amount: Amount,
+			reporter: AccountIdOf<T>,
+			recipient: AccountIdOf<T>,
+			amount: AmountOf<T>,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
+
+			// todo: reconsider amount and accountidof<t> parameters
+
+			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
+				match maybe {
+					None => Err(Error::<T>::InsufficientStake.into()),
+					Some(staker) => {
+						let staked_balance = staker.staked_balance;
+						let locked_balance = staker.locked_balance;
+						ensure!(
+							staked_balance.saturating_add(locked_balance) >
+								<AmountOf<T>>::default(),
+							Error::<T>::InsufficientStake
+						);
+						let stake_amount =
+							<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+						if locked_balance >= stake_amount {
+							// if locked balance is at least stakeAmount, slash from locked balance
+							// 	_slashAmount = stakeAmount;
+							staker.locked_balance.saturating_reduce(stake_amount);
+						// 	toWithdraw -= stakeAmount;  // todo: required?
+						} else if locked_balance.saturating_add(staked_balance) >= stake_amount {
+							// if locked balance + staked balance is at least stake amount,
+							// slash from locked balance and slash remainder from staked balance
+							// 	_slashAmount = stakeAmount;
+							Self::update_stake_and_pay_rewards(
+								staker,
+								staked_balance
+									.saturating_sub(stake_amount.saturating_sub(locked_balance)),
+							)?;
+							// 	toWithdraw -= _lockedBalance; // todo: required?
+							staker.locked_balance = <AmountOf<T>>::default();
+						} else {
+							// if sum(locked balance + staked balance) is less than stakeAmount, slash sum
+							// 	_slashAmount = _stakedBalance + _lockedBalance;
+							// 	toWithdraw -= _lockedBalance; // todo: required?
+							Self::update_stake_and_pay_rewards(staker, <AmountOf<T>>::default())?;
+							staker.locked_balance = <AmountOf<T>>::default();
+						}
+						Ok(())
+					},
+				}
+			})?;
+			Self::deposit_event(Event::SlashReported { reporter, recipient, amount });
 			Ok(())
 		}
 
