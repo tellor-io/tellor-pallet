@@ -948,7 +948,9 @@ pub mod pallet {
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
 			ensure!(
-				HasherOf::<T>::hash(value.as_ref()) != HasherOf::<T>::hash(&[]),
+				// todo: confirm replacement with Tellor
+				//HasherOf::<T>::hash(value.as_ref()) != HasherOf::<T>::hash(&[]),
+				!value.is_empty(),
 				Error::<T>::InvalidValue
 			);
 			let report = <Reports<T>>::get(query_id);
