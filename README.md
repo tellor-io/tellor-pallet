@@ -37,10 +37,10 @@ License: Unlicense
 
 ### Oracle (Tellor Flex)
 
-| Dispatchable Function              |   Functional Test   | Notes                                            |
-|------------------------------------|:-------------------:|--------------------------------------------------|
-| :heavy_check_mark: `remove_value`  | :white_check_mark:  | Needs removing as only called by `begin_dispute` |
-| :heavy_check_mark: `submit_value`  | :white_check_mark:  | Implemented apart from time-based rewards        |
+| Dispatchable Function              |   Functional Test   | Notes                                                                                |
+|------------------------------------|:-------------------:|--------------------------------------------------------------------------------------|
+| :heavy_check_mark: `remove_value`  | :white_check_mark:  | Needs removing as dispatchable function as only called internally by `begin_dispute` |
+| :heavy_check_mark: `submit_value`  | :white_check_mark:  | Implemented apart from time-based rewards                                            |
 
 | Runtime API                                                        |    Functional Test    | Notes |
 |--------------------------------------------------------------------|:---------------------:|-------|
