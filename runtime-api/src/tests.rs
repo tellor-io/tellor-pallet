@@ -128,6 +128,7 @@ impl tellor::Config for Test {
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ();
+	type WithdrawalPeriod = ();
 	type Xcm = TestSendXcm;
 }
 pub struct TestSendXcm;
@@ -453,7 +454,6 @@ mod oracle {
 	use super::*;
 
 	#[test]
-	#[should_panic]
 	fn get_block_number_by_timestamp() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
