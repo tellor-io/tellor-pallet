@@ -1385,13 +1385,13 @@ pub mod pallet {
 					Some(staker) => {
 						// Ensure reporter is locked and that enough time has passed
 						ensure!(
+							staker.locked_balance > <AmountOf<T>>::default(),
+							Error::<T>::NoWithdrawalRequested
+						);
+						ensure!(
 							T::Time::now().saturating_sub(staker.start_date) >=
 								T::WithdrawalPeriod::get(),
 							Error::<T>::WithdrawalPeriodPending
-						);
-						ensure!(
-							staker.locked_balance > <AmountOf<T>>::default(),
-							Error::<T>::NoWithdrawalRequested
 						);
 						// toWithdraw -= _staker.lockedBalance; // todo: required?
 						staker.locked_balance.saturating_reduce(amount);

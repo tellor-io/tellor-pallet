@@ -575,9 +575,79 @@ fn submit_value() {
 }
 
 #[test]
-#[ignore]
 fn withdraw_stake() {
-	todo!()
+	let reporter = 1;
+	let amount = token(1_000);
+	let address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+		});
+	});
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L323
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				address
+			));
+			assert_eq!(Tellor::get_total_stakers(), 1);
+			assert_noop!(
+				Tellor::report_stake_withdrawal(
+					Origin::Staking.into(),
+					reporter,
+					STAKE_AMOUNT.into(),
+					address
+				),
+				Error::NoWithdrawalRequested
+			);
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				token(10).into(),
+				address
+			));
+			assert_noop!(
+				Tellor::report_stake_withdrawal(
+					Origin::Staking.into(),
+					reporter,
+					STAKE_AMOUNT.into(),
+					address
+				),
+				Error::WithdrawalPeriodPending
+			);
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(90));
+			assert_eq!(staker_details.locked_balance, token(10));
+		});
+
+		with_block_after(WithdrawalPeriod::get(), || {
+			assert_ok!(Tellor::report_stake_withdrawal(
+				Origin::Staking.into(),
+				reporter,
+				token(10).into(),
+				address
+			));
+			let staker_details = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_details.staked_balance, token(90));
+			assert_eq!(staker_details.locked_balance, 0);
+			assert_noop!(
+				Tellor::report_stake_withdrawal(
+					Origin::Staking.into(),
+					reporter,
+					token(10).into(),
+					address
+				),
+				Error::NoWithdrawalRequested
+			);
+		});
+	});
 }
 
 #[test]
