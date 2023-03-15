@@ -539,6 +539,14 @@ pub mod pallet {
 		Staking,
 	}
 
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(_n: T::BlockNumber) -> Weight {
+			// todo: check for any pending votes to be tallied and sent to governance controller contract
+			Weight::zero()
+		}
+	}
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
