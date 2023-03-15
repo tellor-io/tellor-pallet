@@ -18,6 +18,7 @@ pub use traits::{SendXcm, UsingTellor};
 use types::*;
 pub use types::{
 	autopay::{FeedDetails, Tip},
+	governance::VoteResult,
 	oracle::StakeInfo,
 	Address,
 };
@@ -1136,6 +1137,8 @@ pub mod pallet {
 				tally_date: <TimestampOf<T>>::default(),
 				users: Tally::default(),
 				reporters: Tally::default(),
+				executed: false,
+				result: None,
 				initiator: dispute_initiator.clone(),
 				voted: BoundedBTreeMap::default(),
 			};
@@ -1476,6 +1479,7 @@ pub mod pallet {
 			T::GovernanceOrigin::ensure_origin(origin)?;
 
 			// todo: reconsider amount and accountidof<t> parameters
+			// todo: update vote result
 
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
@@ -1528,6 +1532,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
+			// todo: update vote result
 			Ok(())
 		}
 
@@ -1538,6 +1543,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
+			// todo: update vote result
 			Ok(())
 		}
 	}

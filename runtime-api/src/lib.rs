@@ -4,10 +4,12 @@
 
 pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
+pub use governance::VoteInfo;
 use sp_std::vec::Vec;
-use tellor::{FeedDetails, Tip};
+use tellor::{FeedDetails, Tip, VoteResult};
 
 mod autopay;
+mod governance;
 #[cfg(test)]
 mod tests;
 
@@ -267,7 +269,7 @@ sp_api::decl_runtime_apis! {
 		fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Value>;
 	}
 
-	pub trait TellorGovernance<AccountId: Codec, Amount: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec> where
+	pub trait TellorGovernance<AccountId: Codec, Amount: Codec, BlockNumber: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec, Value: Codec, VoteCount: Codec, VoteId: Codec> where
 	{
 		/// Determines if an account voted for a specific dispute.
 		/// # Arguments
@@ -282,6 +284,54 @@ sp_api::decl_runtime_apis! {
 		/// The latest dispute fee.
 		fn get_dispute_fee() -> Amount;
 
-		// todo: add remaining functions
+		/// Returns the dispute identifiers for a reporter.
+		/// # Arguments
+		/// * `reporter` - The account of the reporter to check for.
+		/// # Returns
+		/// Dispute identifiers for a reporter.
+		fn get_disputes_by_reporter(reporter: AccountId) -> Vec<DisputeId>;
+
+		/// Returns information on a dispute for a given identifier.
+		/// # Arguments
+		/// * `dispute_id` - Identifier of the specific dispute.
+		/// # Returns
+		/// Returns information on a dispute for a given dispute identifier including:
+		/// query identifier of disputed value, timestamp of disputed value, value being disputed,
+		/// reporter of the disputed value.
+		fn get_dispute_info(dispute_id: DisputeId) -> Option<(QueryId, Timestamp, Value, AccountId)>;
+
+		/// Returns the number of open disputes for a specific query identifier.
+		/// # Arguments
+		/// * `query_id` - Identifier of a specific data feed.
+		/// # Returns
+		/// The number of open disputes for the query identifier.
+		fn get_open_disputes_on_id(query_id: QueryId) -> u128;
+
+		/// Returns the total number of votes
+		/// # Returns
+		/// The total number of votes.
+		fn get_vote_count() -> VoteCount;
+
+		/// Returns info on a vote for a given dispute identifier.
+		/// # Arguments
+		/// * `dispute_id` - Identifier of a specific dispute.
+		/// # Returns
+		/// Information on a vote for a given dispute identifier including: the vote identifier, the
+		/// vote information, whether it has been executed, the vote result and the dispute initiator.
+		fn get_vote_info(dispute_id: DisputeId) -> Option<(VoteId,VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)>;
+
+		/// Returns the voting rounds for a given vote identifier.
+		/// # Arguments
+		/// * `vote_id` - Identifier for a vote.
+		/// # Returns
+		/// Dispute identifiers of the vote rounds.
+		fn get_vote_rounds(vote_id: VoteId) -> Vec<DisputeId>;
+
+		/// Returns the total number of votes cast by a voter.
+		/// # Arguments
+		/// * `voter` - The account of the voter to check for.
+		/// # Returns
+		/// The total number of votes cast by the voter.
+		fn get_vote_tally_by_address(voter: AccountId) -> u128;
 	}
 }

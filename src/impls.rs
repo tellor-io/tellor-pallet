@@ -184,6 +184,29 @@ impl<T: Config> Pallet<T> {
 		<StakeAmount<T>>::get().unwrap_or_default() / 10u8.into()
 	}
 
+	/// Returns information on a dispute for a given identifier.
+	/// # Arguments
+	/// * `dispute_id` - Identifier of the specific dispute.
+	/// # Returns
+	/// Returns information on a dispute for a given dispute identifier including:
+	/// query identifier of disputed value, timestamp of disputed value, value being disputed,
+	/// reporter of the disputed value.
+	pub fn get_dispute_info(
+		dispute_id: DisputeIdOf<T>,
+	) -> Option<(QueryIdOf<T>, TimestampOf<T>, ValueOf<T>, AccountIdOf<T>)> {
+		<DisputeInfo<T>>::get(dispute_id)
+			.map(|d| (d.query_id, d.timestamp, d.value, d.disputed_reporter))
+	}
+
+	/// Returns the dispute identifiers for a reporter.
+	/// # Arguments
+	/// * `reporter` - The account of the reporter to check for.
+	/// # Returns
+	/// Dispute identifiers for a reporter.
+	pub fn get_disputes_by_reporter(reporter: AccountIdOf<T>) -> Vec<DisputeIdOf<T>> {
+		<DisputeIdsByReporter<T>>::iter_key_prefix(reporter).collect()
+	}
+
 	/// Read currently funded feed details.
 	/// # Returns
 	/// Details for funded feeds.
@@ -426,6 +449,15 @@ impl<T: Config> Pallet<T> {
 				},
 			}
 		})
+	}
+
+	/// Returns the number of open disputes for a specific query identifier.
+	/// # Arguments
+	/// * `query_id` - Identifier of a specific data feed.
+	/// # Returns
+	/// The number of open disputes for the query identifier.
+	pub fn get_open_disputes_on_id(query_id: QueryIdOf<T>) -> u128 {
+		<OpenDisputesOnId<T>>::get(query_id).unwrap_or_default()
 	}
 
 	/// Read the number of past tips for a query identifier.
@@ -754,6 +786,41 @@ impl<T: Config> Pallet<T> {
 	/// Count of the number of values received for the query identifier.
 	pub fn get_new_value_count_by_query_id(query_id: QueryIdOf<T>) -> usize {
 		<Reports<T>>::get(query_id).map_or(usize::default(), |r| r.timestamps.len())
+	}
+
+	/// Returns the total number of votes
+	/// # Returns
+	/// The total number of votes.
+	pub fn get_vote_count() -> VoteCountOf<T> {
+		<VoteCount<T>>::get()
+	}
+
+	/// Returns info on a vote for a given dispute identifier.
+	/// # Arguments
+	/// * `dispute_id` - Identifier of a specific dispute.
+	/// # Returns
+	/// Information on a vote for a given dispute identifier including: the vote identifier, the
+	/// vote information, whether it has been executed, the vote result and the dispute initiator.
+	pub fn get_vote_info(dispute_id: DisputeIdOf<T>) -> Option<VoteOf<T>> {
+		<VoteInfo<T>>::get(dispute_id)
+	}
+
+	/// Returns the voting rounds for a given vote identifier.
+	/// # Arguments
+	/// * `vote_id` - Identifier for a vote.
+	/// # Returns
+	/// Dispute identifiers of the vote rounds.
+	pub fn get_vote_rounds(vote_id: VoteIdOf<T>) -> Vec<DisputeIdOf<T>> {
+		<VoteRounds<T>>::get(vote_id).into_inner()
+	}
+
+	/// Returns the total number of votes cast by a voter.
+	/// # Arguments
+	/// * `voter` - The account of the voter to check for.
+	/// # Returns
+	/// The total number of votes cast by the voter.
+	pub fn get_vote_tally_by_address(voter: AccountIdOf<T>) -> u128 {
+		<VoteTallyByAddress<T>>::get(voter)
 	}
 
 	/// Returns whether a given value is disputed.

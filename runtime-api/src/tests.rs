@@ -1,5 +1,6 @@
 use crate::{
 	autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData},
+	governance::VoteInfo,
 	TellorAutoPay, TellorGovernance, TellorOracle,
 };
 use codec::Encode;
@@ -17,7 +18,7 @@ use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
-use tellor::{EnsureGovernance, EnsureStaking, FeedDetails, Tip};
+use tellor::{EnsureGovernance, EnsureStaking, FeedDetails, Tip, VoteResult};
 use xcm::latest::prelude::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -34,6 +35,7 @@ type FeedId = H256;
 type StakeInfo =
 	tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter, QueryId, Moment>;
 type Value = BoundedVec<u8, MaxValueLength>;
+type VoteId = H256;
 
 // Configure a mock runtime to test implementation of the runtime-api
 frame_support::construct_runtime!(
@@ -301,7 +303,7 @@ mock_impl_runtime_apis! {
 		}
 	}
 
-	impl crate::TellorGovernance<Block, AccountId, Amount, DisputeId, QueryId, Moment> for Test {
+	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, DisputeId, QueryId, Moment, Value, DisputeId, VoteId> for Test {
 		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> Option<bool>{
 			tellor::Pallet::<Test>::did_vote(dispute_id, voter)
 		}
@@ -309,10 +311,56 @@ mock_impl_runtime_apis! {
 		fn get_dispute_fee() -> Amount {
 			tellor::Pallet::<Test>::get_dispute_fee()
 		}
+
+		fn get_disputes_by_reporter(reporter: AccountId) -> Vec<DisputeId> {
+			tellor::Pallet::<Test>::get_disputes_by_reporter(reporter)
+		}
+
+		fn get_dispute_info(dispute_id: DisputeId) -> Option<(QueryId, Moment, Value, AccountId)> {
+			tellor::Pallet::<Test>::get_dispute_info(dispute_id)
+		}
+
+		fn get_open_disputes_on_id(query_id: QueryId) -> u128 {
+			tellor::Pallet::<Test>::get_open_disputes_on_id(query_id)
+		}
+
+		fn get_vote_count() -> DisputeId {
+			tellor::Pallet::<Test>::get_vote_count()
+		}
+
+		fn get_vote_info(dispute_id: DisputeId) -> Option<(VoteId,VoteInfo<Amount,BlockNumber, Moment>,bool,Option<VoteResult>,AccountId)> {
+			tellor::Pallet::<Test>::get_vote_info(dispute_id).map(|v| (v.identifier,
+			VoteInfo{
+					vote_round: v.vote_round,
+					start_date: v.start_date,
+					block_number: v.block_number,
+					fee: v.fee,
+					tally_date: v.tally_date,
+					users_does_support: v.users.does_support,
+					users_against: v.users.against,
+					users_invalid_query: v.users.invalid_query,
+					reporters_does_support: v.reporters.does_support,
+					reporters_against: v.reporters.against,
+					reporters_invalid_query: v.reporters.invalid_query,
+				},
+			v.executed,
+			v.result,
+			v.initiator))
+		}
+
+		fn get_vote_rounds(vote_id: VoteId) -> Vec<DisputeId>{
+			tellor::Pallet::<Test>::get_vote_rounds(vote_id)
+		}
+
+		fn get_vote_tally_by_address(voter: AccountId) -> u128 {
+			tellor::Pallet::<Test>::get_vote_tally_by_address(voter)
+		}
 	}
 }
 
 const BLOCKID: BlockId<Block> = BlockId::Number(0);
+
+// Tests simply ensure that required API functions are accessible to a runtime
 
 mod autopay {
 	use super::*;
@@ -659,6 +707,58 @@ mod governance {
 	fn get_dispute_fee() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), 0);
+		});
+	}
+
+	#[test]
+	fn get_disputes_by_reporter() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(
+				Test.get_disputes_by_reporter(&BLOCKID, AccountId::default()).unwrap(),
+				vec![]
+			);
+		});
+	}
+
+	#[test]
+	fn get_dispute_info() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_dispute_info(&BLOCKID, 0).unwrap(), None);
+		});
+	}
+
+	#[test]
+	fn get_open_disputes_on_id() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_open_disputes_on_id(&BLOCKID, H256::random()).unwrap(), 0);
+		});
+	}
+
+	#[test]
+	fn get_vote_count() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_vote_count(&BLOCKID).unwrap(), 0);
+		});
+	}
+
+	#[test]
+	fn get_vote_info() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_vote_info(&BLOCKID, 0).unwrap(), None);
+		});
+	}
+
+	#[test]
+	fn get_vote_rounds() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_vote_rounds(&BLOCKID, H256::random()).unwrap(), vec![]);
+		});
+	}
+
+	#[test]
+	fn get_vote_tally_by_address() {
+		new_test_ext().execute_with(|| {
+			assert_eq!(Test.get_vote_tally_by_address(&BLOCKID, 0).unwrap(), 0);
 		});
 	}
 }

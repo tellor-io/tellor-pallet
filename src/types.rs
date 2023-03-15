@@ -41,6 +41,7 @@ pub(crate) type Timestamp = U256;
 pub(crate) type TimestampOf<T> = <<T as Config>::Time as Time>::Moment;
 pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>, TimestampOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
+pub(crate) type VoteCountOf<T> = DisputeIdOf<T>;
 pub(crate) type VoteIdOf<T> = <T as Config>::Hash;
 pub(crate) type VoteOf<T> = governance::Vote<
 	AccountIdOf<T>,
@@ -197,40 +198,45 @@ pub(crate) mod governance {
 	)]
 	pub struct Tally<Number> {
 		/// Number of votes in favor.
-		pub(crate) does_support: Number,
+		pub does_support: Number,
 		/// Number of votes against.
-		pub(crate) against: Number,
+		pub against: Number,
 		/// Number of votes for invalid.
-		pub(crate) invalid_query: Number,
+		pub invalid_query: Number,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxVotes))]
 	pub struct Vote<AccountId, Amount, BlockNumber, Timestamp, VoteId, MaxVotes: Get<u32>> {
 		/// Identifier of the vote.
-		pub(crate) identifier: VoteId,
+		pub identifier: VoteId,
 		/// The round of voting on a given dispute or proposal.
-		pub(crate) vote_round: u32,
+		pub vote_round: u32,
 		/// Timestamp of when vote was initiated.
-		pub(crate) start_date: Timestamp,
+		pub start_date: Timestamp,
 		/// Block number of when vote was initiated.
-		pub(crate) block_number: BlockNumber,
+		pub block_number: BlockNumber,
 		/// Fee paid to initiate the vote round.
-		pub(crate) fee: Amount,
+		pub fee: Amount,
 		/// Timestamp of when the votes were tallied.
-		pub(crate) tally_date: Timestamp,
+		pub tally_date: Timestamp,
 		/// Vote tally of users.
-		pub(crate) users: Tally<Amount>,
+		pub users: Tally<Amount>,
 		/// Vote tally of reporters.
-		pub(crate) reporters: Tally<u128>,
+		pub reporters: Tally<u128>,
+		/// Whether the vote was executed.
+		pub executed: bool,
+		/// Result after votes were tallied.
+		pub result: Option<VoteResult>,
 		/// Address which initiated dispute/proposal.
-		pub(crate) initiator: AccountId,
+		pub initiator: AccountId,
 		/// Mapping of accounts to whether they voted or not.
 		pub(crate) voted: BoundedBTreeMap<AccountId, bool, MaxVotes>,
 	}
 
 	/// The status of a potential vote.
-	enum _VoteResult {
+	#[derive(Clone, Encode, Debug, Decode, Eq, PartialEq, TypeInfo, MaxEncodedLen)]
+	pub enum VoteResult {
 		Failed,
 		Passed,
 		Invalid,
