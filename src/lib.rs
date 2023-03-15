@@ -1496,13 +1496,11 @@ pub mod pallet {
 							<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?;
 						if locked_balance >= stake_amount {
 							// if locked balance is at least stakeAmount, slash from locked balance
-							// 	_slashAmount = stakeAmount;
 							staker.locked_balance.saturating_reduce(stake_amount);
 						// 	toWithdraw -= stakeAmount;  // todo: required?
 						} else if locked_balance.saturating_add(staked_balance) >= stake_amount {
 							// if locked balance + staked balance is at least stake amount,
 							// slash from locked balance and slash remainder from staked balance
-							// 	_slashAmount = stakeAmount;
 							Self::update_stake_and_pay_rewards(
 								staker,
 								staked_balance
@@ -1512,7 +1510,6 @@ pub mod pallet {
 							staker.locked_balance = <AmountOf<T>>::default();
 						} else {
 							// if sum(locked balance + staked balance) is less than stakeAmount, slash sum
-							// 	_slashAmount = _stakedBalance + _lockedBalance;
 							// 	toWithdraw -= _lockedBalance; // todo: required?
 							Self::update_stake_and_pay_rewards(staker, <AmountOf<T>>::default())?;
 							staker.locked_balance = <AmountOf<T>>::default();
