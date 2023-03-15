@@ -1546,6 +1546,12 @@ pub mod pallet {
 			// todo: update vote result
 			Ok(())
 		}
+
+		#[pallet::call_index(16)]
+		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
+			T::RegistrationOrigin::ensure_origin(origin)?;
+			todo!()
+		}
 	}
 }
 
