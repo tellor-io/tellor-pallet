@@ -214,7 +214,7 @@ mock_impl_runtime_apis! {
 		}
 
 		fn get_tips_by_address(user: AccountId) -> Amount {
-			tellor::Pallet::<Test>::get_tips_by_address(user)
+			tellor::Pallet::<Test>::get_tips_by_address(&user)
 		}
 	}
 
@@ -252,7 +252,7 @@ mock_impl_runtime_apis! {
 		}
 
 		fn get_reports_submitted_by_address(reporter: AccountId) -> u128 {
-			tellor::Pallet::<Test>::get_reports_submitted_by_address(reporter)
+			tellor::Pallet::<Test>::get_reports_submitted_by_address(&reporter)
 		}
 
 		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u128 {

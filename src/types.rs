@@ -1,5 +1,6 @@
 use super::Config;
 use frame_support::{pallet_prelude::*, traits::Time};
+pub(crate) use governance::Tally;
 use sp_core::{bounded::BoundedBTreeMap, H160, U256};
 
 pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -50,7 +51,7 @@ pub(crate) type VoteOf<T> = governance::Vote<
 	<T as Config>::MaxVotes,
 >;
 
-pub mod autopay {
+pub(crate) mod autopay {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -176,7 +177,7 @@ pub(crate) mod oracle {
 	}
 }
 
-mod governance {
+pub(crate) mod governance {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -191,19 +192,37 @@ mod governance {
 		pub(crate) disputed_reporter: AccountId,
 	}
 
+	#[derive(
+		Clone, Encode, Decode, Default, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+	)]
+	pub struct Tally<Number> {
+		/// Number of votes in favor.
+		pub(crate) does_support: Number,
+		/// Number of votes against.
+		pub(crate) against: Number,
+		/// Number of votes for invalid.
+		pub(crate) invalid_query: Number,
+	}
+
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxVotes))]
 	pub struct Vote<AccountId, Amount, BlockNumber, Timestamp, VoteId, MaxVotes: Get<u32>> {
 		/// Identifier of the vote.
 		pub(crate) identifier: VoteId,
 		/// The round of voting on a given dispute or proposal.
-		pub(crate) vote_round: u8,
+		pub(crate) vote_round: u32,
 		/// Timestamp of when vote was initiated.
 		pub(crate) start_date: Timestamp,
 		/// Block number of when vote was initiated.
 		pub(crate) block_number: BlockNumber,
 		/// Fee paid to initiate the vote round.
 		pub(crate) fee: Amount,
+		/// Timestamp of when the votes were tallied.
+		pub(crate) tally_date: Timestamp,
+		/// Vote tally of users.
+		pub(crate) users: Tally<Amount>,
+		/// Vote tally of reporters.
+		pub(crate) reporters: Tally<u128>,
 		/// Address which initiated dispute/proposal.
 		pub(crate) initiator: AccountId,
 		/// Mapping of accounts to whether they voted or not.

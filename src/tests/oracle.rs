@@ -499,7 +499,7 @@ fn submit_value() {
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(4_001));
 			assert_eq!(Tellor::get_reporter_by_timestamp(query_id, timestamp).unwrap(), reporter);
 			assert_eq!(Tellor::time_of_last_new_value().unwrap(), timestamp);
-			assert_eq!(Tellor::get_reports_submitted_by_address(reporter), 2);
+			assert_eq!(Tellor::get_reports_submitted_by_address(&reporter), 2);
 			assert_eq!(
 				Tellor::get_reports_submitted_by_address_and_query_id(reporter, query_id),
 				2
@@ -544,7 +544,7 @@ fn submit_value() {
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(4001));
 			assert_eq!(Tellor::get_reporter_by_timestamp(query_id, timestamp).unwrap(), reporter);
 			assert_eq!(Tellor::time_of_last_new_value().unwrap(), timestamp);
-			assert_eq!(Tellor::get_reports_submitted_by_address(reporter), 3);
+			assert_eq!(Tellor::get_reports_submitted_by_address(&reporter), 3);
 			assert_eq!(
 				Tellor::get_reports_submitted_by_address_and_query_id(reporter, query_id),
 				3
@@ -907,7 +907,7 @@ fn get_reports_submitted_by_address() {
 				0,
 				query_data.clone(),
 			));
-			assert_eq!(Tellor::get_reports_submitted_by_address(reporter), 2)
+			assert_eq!(Tellor::get_reports_submitted_by_address(&reporter), 2)
 		})
 	});
 }

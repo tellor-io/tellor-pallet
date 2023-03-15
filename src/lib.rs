@@ -308,6 +308,9 @@ pub mod pallet {
 		VoteIdOf<T>,
 		BoundedVec<DisputeIdOf<T>, <T as Config>::MaxVoteRounds>,
 	>;
+	#[pallet::storage]
+	pub type VoteTallyByAddress<T> =
+		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
 	// Query Data
 	#[pallet::storage]
 	pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, QueryDataOf<T>>;
@@ -481,16 +484,24 @@ pub mod pallet {
 		WithdrawalPeriodPending,
 
 		// Governance
+		/// Voter has already voted.
+		AlreadyVoted,
 		/// Dispute must be started within reporting lock time.
 		DisputeReportingPeriodExpired,
+		/// Vote does not exist.
+		InvalidVote,
 		/// The maximum number of disputes has been reached.
 		MaxDisputesReached,
 		/// The maximum number of vote rounds has been reached.
 		MaxVoteRoundsReached,
+		/// The maximum number of votes has been reached.
+		MaxVotesReached,
 		/// Dispute initiator is not a reporter.
 		NotReporter,
 		/// No value exists at given timestamp.
 		NoValueExists,
+		/// Vote has already been tallied.
+		VoteAlreadyTallied,
 
 		// Registration
 		NotRegistered,
@@ -1121,11 +1132,13 @@ pub mod pallet {
 			// Create new vote and dispute
 			let _vote = <VoteInfo<T>>::get(dispute_id).unwrap_or_else(|| VoteOf::<T> {
 				identifier: vote_id,
-				// todo: improve to u32?
-				vote_round: vote_rounds as u8,
+				vote_round: vote_rounds as u32,
 				start_date: T::Time::now(),
 				block_number: frame_system::Pallet::<T>::block_number(),
 				fee: Self::get_dispute_fee(),
+				tally_date: <TimestampOf<T>>::default(),
+				users: Tally::default(),
+				reporters: Tally::default(),
 				initiator: dispute_initiator.clone(),
 				voted: BoundedBTreeMap::default(),
 			});
@@ -1233,10 +1246,52 @@ pub mod pallet {
 		#[pallet::call_index(9)]
 		pub fn vote(
 			origin: OriginFor<T>,
-			_dispute_id: DisputeIdOf<T>,
-			_supports: Option<bool>,
+			dispute_id: DisputeIdOf<T>,
+			supports: Option<bool>,
 		) -> DispatchResult {
-			let _voter = ensure_signed(origin)?;
+			let voter = ensure_signed(origin)?;
+
+			// Ensure that dispute has not been executed and that vote does not exist and is not tallied
+			ensure!(
+				dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),
+				Error::<T>::InvalidVote
+			);
+			<VoteInfo<T>>::try_mutate(dispute_id, |maybe| -> DispatchResult {
+				match maybe {
+					None => Err(Error::<T>::InvalidVote.into()),
+					Some(vote) => {
+						ensure!(
+							vote.tally_date == <TimestampOf<T>>::default(),
+							Error::<T>::VoteAlreadyTallied
+						);
+						ensure!(!vote.voted.contains_key(&voter), Error::<T>::AlreadyVoted);
+						// Update voting status and increment total queries for support, invalid, or against based on vote
+						vote.voted
+							.try_insert(voter.clone(), true)
+							.map_err(|_| Error::<T>::MaxVotesReached)?;
+						let reports = Self::get_reports_submitted_by_address(&voter);
+						let user_tips = Self::get_tips_by_address(&voter);
+						match supports {
+							// Invalid
+							None => {
+								vote.reporters.invalid_query.saturating_accrue(reports);
+								vote.users.invalid_query.saturating_accrue(user_tips);
+							},
+							Some(supports) =>
+								if supports {
+									vote.reporters.does_support.saturating_accrue(reports);
+									vote.users.does_support.saturating_accrue(user_tips);
+								} else {
+									vote.reporters.against.saturating_accrue(reports);
+									vote.users.against.saturating_accrue(user_tips);
+								},
+						};
+						Ok(())
+					},
+				}
+			})?;
+			<VoteTallyByAddress<T>>::mutate(&voter, |total| total.saturating_inc());
+			Self::deposit_event(Event::Voted { dispute_id, supports, voter });
 			Ok(())
 		}
 

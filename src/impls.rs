@@ -524,7 +524,7 @@ impl<T: Config> Pallet<T> {
 	/// * `reporter` - The identifier of the reporter.
 	/// # Returns
 	/// The number of values submitted by the given reporter.
-	pub fn get_reports_submitted_by_address(reporter: AccountIdOf<T>) -> u128 {
+	pub fn get_reports_submitted_by_address(reporter: &AccountIdOf<T>) -> u128 {
 		<StakerDetails<T>>::get(reporter)
 			.map(|stake_info| stake_info.reports_submitted)
 			.unwrap_or_default()
@@ -729,7 +729,7 @@ impl<T: Config> Pallet<T> {
 	/// * `user` - Address of user to query.
 	/// # Returns
 	/// Total amount of tips paid by a user.
-	pub fn get_tips_by_address(user: AccountIdOf<T>) -> AmountOf<T> {
+	pub fn get_tips_by_address(user: &AccountIdOf<T>) -> AmountOf<T> {
 		<UserTipsTotal<T>>::get(user)
 	}
 

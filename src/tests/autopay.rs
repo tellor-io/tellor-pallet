@@ -1947,7 +1947,7 @@ fn get_tips_by_address() {
 				token(10),
 				query_data.clone()
 			));
-			assert_eq!(Tellor::get_tips_by_address(tipper), token(10));
+			assert_eq!(Tellor::get_tips_by_address(&tipper), token(10));
 
 			create_feed(
 				tipper,
@@ -1961,7 +1961,7 @@ fn get_tips_by_address() {
 				query_data.clone(),
 				token(99),
 			);
-			assert_eq!(Tellor::get_tips_by_address(tipper), token(109));
+			assert_eq!(Tellor::get_tips_by_address(&tipper), token(109));
 		});
 	});
 }
