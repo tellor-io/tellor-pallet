@@ -22,6 +22,34 @@ pub(crate) fn begin_parachain_dispute(
 		.encode()
 }
 
+pub(crate) fn vote(
+	para_id: ParaId,
+	query_id: &[u8],
+	timestamp: impl Into<U256>,
+	total_tips_for: impl Into<U256>,
+	total_tips_against: impl Into<U256>,
+	total_tips_invalid: impl Into<U256>,
+	total_reports_for: impl Into<U256>,
+	total_reports_against: impl Into<U256>,
+	total_reports_invalid: impl Into<U256>,
+) -> Vec<u8> {
+	const FUNCTION: [u8; 4] = [61, 181, 167, 166];
+
+	let dispute_id = sp_core::keccak_256(
+		&Abi::default().uint(para_id).fixed_bytes(query_id).uint(timestamp).encode(),
+	);
+
+	Call::new(&FUNCTION)
+		.fixed_bytes(&dispute_id)
+		.uint(total_tips_for)
+		.uint(total_tips_against)
+		.uint(total_tips_invalid)
+		.uint(total_reports_for)
+		.uint(total_reports_against)
+		.uint(total_reports_invalid)
+		.encode()
+}
+
 #[cfg(test)]
 mod tests {
 	use super::{super::tests::*, *};
@@ -50,7 +78,7 @@ mod tests {
 
 	#[test]
 	#[ignore]
-	fn function_selector() {
+	fn begin_parachain_dispute_function_selector() {
 		// Short signature bytes used for FUNCTION const
 		let function = begin_parachain_dispute();
 		println!("{} {:?}", function.signature(), function.short_signature());
@@ -92,6 +120,61 @@ mod tests {
 				disputed_reporter,
 				dispute_initiator
 			)[..]
+		)
+	}
+
+	#[allow(deprecated)]
+	fn vote() -> Function {
+		// voteParachain(bytes32,uint256,uint256,uint256,uint256,uint256,uint256)
+		Function {
+			name: "voteParachain".to_string(),
+			inputs: vec![
+				param("_disputeId", ParamType::FixedBytes(32)),
+				param("_totalTipsFor", ParamType::Uint(256)),
+				param("_totalTipsAgainst", ParamType::Uint(256)),
+				param("_totalTipsInvalid", ParamType::Uint(256)),
+				param("_totalReportsFor", ParamType::Uint(256)),
+				param("_totalReportsAgainst", ParamType::Uint(256)),
+				param("_totalReportsInvalid", ParamType::Uint(256)),
+			],
+			outputs: vec![],
+			constant: None,
+			state_mutability: Default::default(),
+		}
+	}
+
+	#[test]
+	#[ignore]
+	fn vote_function_selector() {
+		// Short signature bytes used for FUNCTION const
+		let function = vote();
+		println!("{} {:?}", function.signature(), function.short_signature());
+	}
+
+	#[test]
+	fn encodes_vote_call() {
+		let para_id = 3000;
+		let query_id = keccak_256("my_query".as_bytes());
+		let timestamp = 1675711956967u64;
+		let dispute_id = keccak_256(&ethabi::encode(&vec![
+			Token::Uint(para_id.into()),
+			Token::FixedBytes(query_id.into()).into(),
+			Token::Uint(timestamp.into()),
+		]));
+
+		assert_eq!(
+			vote()
+				.encode_input(&vec![
+					Token::FixedBytes(dispute_id.into()),
+					Token::Uint(1.into()),
+					Token::Uint(2.into()),
+					Token::Uint(3.into()),
+					Token::Uint(4.into()),
+					Token::Uint(5.into()),
+					Token::Uint(6.into()),
+				])
+				.unwrap()[..],
+			super::vote(para_id, &query_id, timestamp, 1, 2, 3, 4, 5, 6)[..]
 		)
 	}
 }
