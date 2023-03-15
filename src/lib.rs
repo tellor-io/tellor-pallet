@@ -401,6 +401,11 @@ pub mod pallet {
 			supports: Option<bool>,
 			voter: AccountIdOf<T>,
 		},
+		VoteTallied {
+			dispute_id: DisputeIdOf<T>,
+			initiator: AccountIdOf<T>,
+			reporter: AccountIdOf<T>,
+		},
 		// Query Data
 		QueryDataStored {
 			query_id: QueryIdOf<T>,
@@ -512,6 +517,8 @@ pub mod pallet {
 		NoValueExists,
 		/// Vote has already been tallied.
 		VoteAlreadyTallied,
+		/// Time for voting has not elapsed.
+		VotingPeriodActive,
 
 		// Registration
 		NotRegistered,
@@ -1109,6 +1116,7 @@ pub mod pallet {
 			);
 			let vote_id: VoteIdOf<T> = HasherOf::<T>::hash(
 				&contracts::Abi::default()
+					.uint(T::ParachainId::get())
 					.fixed_bytes(query_id.as_ref())
 					.uint(timestamp.saturated_into::<u128>())
 					.encode(),
@@ -1200,6 +1208,7 @@ pub mod pallet {
 			// 	token.transferFrom(msg.sender, address(this), _disputeFee),
 			// 	"Fee must be paid"
 			// ); // This is the dispute fee. Returned if dispute passes
+			let dispute_fee = vote.fee;
 			<VoteInfo<T>>::insert(dispute_id, vote);
 			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {
@@ -1227,13 +1236,13 @@ pub mod pallet {
 					ethereum_xcm::transact(
 						governance_contract.address,
 						governance::begin_parachain_dispute(
-							T::ParachainId::get(),
 							query_id.as_ref(),
 							timestamp.saturated_into::<u128>(),
-							dispute_id,
 							&dispute.value,
 							disputed_reporter,
 							dispute_initiator,
+							dispute_fee,
+							<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
 						)
 						.try_into()
 						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
@@ -1478,7 +1487,7 @@ pub mod pallet {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 
-			// todo: reconsider amount and accountidof<t> parameters
+			// todo: reconsider amount and AccountIdOf<T> parameters
 			// todo: update vote result
 
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {

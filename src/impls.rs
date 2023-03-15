@@ -80,7 +80,6 @@ impl<T: Config> Pallet<T> {
 			feed_funder,
 			feed_details,
 		});
-
 		Ok(())
 	}
 
@@ -884,6 +883,43 @@ impl<T: Config> Pallet<T> {
 		Self::deposit_event(Event::QueryDataStored { query_id });
 	}
 
+	/// Tallies the votes and begins the challenge period.
+	/// # Arguments
+	/// * `dispute_id` - The dispute identifier.
+	pub(crate) fn tally_votes(dispute_id: DisputeIdOf<T>) -> DispatchResult {
+		// Ensure vote has not been executed and that vote has not been tallied
+		let initiator = <VoteInfo<T>>::try_mutate(dispute_id, |maybe| match maybe {
+			None => Err(Error::<T>::InvalidVote),
+			Some(vote) => {
+				ensure!(vote.tally_date == TimestampOf::<T>::default(), Error::VoteAlreadyTallied);
+				ensure!(
+					dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),
+					Error::InvalidVote
+				);
+				// Determine appropriate vote duration dispute round
+				// Vote time increases as rounds increase but only up to withdrawal period
+				// todo: safe math
+				ensure!(
+					T::Time::now() - vote.start_date >=
+						T::DisputeRoundReportingPeriod::get() * vote.vote_round.into() ||
+						T::Time::now() - vote.start_date >= T::WithdrawalPeriod::get(),
+					Error::VotingPeriodActive
+				);
+				// Note: remainder of tallying functionality takes place within governance controller contract
+				vote.tally_date = T::Time::now(); // Update time vote was tallied
+				Ok(vote.initiator.clone())
+			},
+		})?;
+		Self::deposit_event(Event::VoteTallied {
+			dispute_id,
+			initiator,
+			reporter: <DisputeInfo<T>>::get(dispute_id)
+				.ok_or(Error::<T>::InvalidDispute)?
+				.disputed_reporter,
+		});
+		Ok(())
+	}
+
 	pub(super) fn update_stake_and_pay_rewards(
 		staker: &mut StakeInfoOf<T>,
 		new_staked_balance: AmountOf<T>,
@@ -891,6 +927,7 @@ impl<T: Config> Pallet<T> {
 		// todo: complete implementation
 		// _updateRewards();
 		if staker.staked_balance > <AmountOf<T>>::default() {
+			// todo
 			// if address already has a staked balance, calculate and transfer pending rewards
 			// 	uint256 _pendingReward = (_staker.stakedBalance *
 			// 		accumulatedRewardPerShare) /
@@ -943,12 +980,14 @@ impl<T: Config> Pallet<T> {
 			}
 			Ok(())
 		})?;
+		// todo
 		// // tracks rewards accumulated before stake amount updated
 		// _staker.rewardDebt =
 		// 	(_staker.stakedBalance * accumulatedRewardPerShare) /
 		// 		1e18;
 		// totalRewardDebt += _staker.rewardDebt;
 		<TotalStakeAmount<T>>::mutate(|total| total.saturating_accrue(staker.staked_balance));
+		// todo
 		// // update reward rate if staking rewards are available given staker's updated parameters
 		// if(rewardRate == 0) {
 		// 	rewardRate =

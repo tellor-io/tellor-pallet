@@ -72,12 +72,12 @@ License: Unlicense
 
 | Dispatchable Function              |    Functional Test     | Notes           |
 |------------------------------------|:----------------------:|-----------------|
-| :heavy_check_mark: `begin_dispute` | :white_square_button:  | 99% implemented |
+| :heavy_check_mark: `begin_dispute` | :white_square_button:  | 90% implemented |
 | :white_check_mark: `vote`          | :white_square_button:  |                 |
 
 | Runtime API                                     |    Functional Test    | Notes |
 |-------------------------------------------------|:---------------------:|-------|
-| :white_check_mark: `did_vote`                   | :white_square_button: |       |
+| :white_check_mark: `did_vote`                   |  :heavy_check_mark:   |       |
 | :white_check_mark: `get_dispute_fee`            | :white_square_button: |       |
 | :white_check_mark: `get_disputes_by_reporter`   | :white_square_button: |       |
 | :white_check_mark: `get_dispute_info`           | :white_square_button: |       |

@@ -1,31 +1,29 @@
 use super::*;
 
 pub(crate) fn begin_parachain_dispute(
-	para_id: ParaId,
 	query_id: &[u8],
 	timestamp: impl Into<U256>,
-	dispute_id: impl Into<U256>,
 	value: &[u8],
 	disputed_reporter: Address,
 	dispute_initiator: Address,
+	dispute_fee: impl Into<U256>,
+	slash_amount: impl Into<U256>,
 ) -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [40, 254, 222, 231];
+	const FUNCTION: [u8; 4] = [186, 124, 60, 48];
 
 	Call::new(&FUNCTION)
-		.uint(para_id)
 		.fixed_bytes(query_id)
 		.uint(timestamp)
-		.uint(dispute_id)
 		.bytes(value)
 		.address(disputed_reporter)
 		.address(dispute_initiator)
+		.uint(dispute_fee)
+		.uint(slash_amount)
 		.encode()
 }
 
 pub(crate) fn vote(
-	para_id: ParaId,
-	query_id: &[u8],
-	timestamp: impl Into<U256>,
+	dispute_id: &[u8],
 	total_tips_for: impl Into<U256>,
 	total_tips_against: impl Into<U256>,
 	total_tips_invalid: impl Into<U256>,
@@ -35,12 +33,8 @@ pub(crate) fn vote(
 ) -> Vec<u8> {
 	const FUNCTION: [u8; 4] = [61, 181, 167, 166];
 
-	let dispute_id = sp_core::keccak_256(
-		&Abi::default().uint(para_id).fixed_bytes(query_id).uint(timestamp).encode(),
-	);
-
 	Call::new(&FUNCTION)
-		.fixed_bytes(&dispute_id)
+		.fixed_bytes(dispute_id)
 		.uint(total_tips_for)
 		.uint(total_tips_against)
 		.uint(total_tips_invalid)
@@ -58,17 +52,17 @@ mod tests {
 
 	#[allow(deprecated)]
 	fn begin_parachain_dispute() -> Function {
-		// beginParachainDispute(uint32,bytes32,uint256,uint256,bytes,address,address)
+		// beginParachainDispute(bytes32,uint256,bytes,address,address,uint256,uint256)
 		Function {
 			name: "beginParachainDispute".to_string(),
 			inputs: vec![
-				param("_paraId", ParamType::Uint(32)),
 				param("_queryId", ParamType::FixedBytes(32)),
 				param("_timestamp", ParamType::Uint(256)),
-				param("_disputeId", ParamType::Uint(256)),
 				param("_value", ParamType::Bytes),
 				param("_disputedReporter", ParamType::Address),
 				param("_disputeInitiator", ParamType::Address),
+				param("_disputeFee", ParamType::Uint(256)),
+				param("_slashAmount", ParamType::Uint(256)),
 			],
 			outputs: vec![],
 			constant: None,
@@ -86,10 +80,8 @@ mod tests {
 
 	#[test]
 	fn encodes_begin_parachain_dispute_call() {
-		let para_id = 3000;
 		let query_id = keccak_256("my_query".as_bytes());
 		let timestamp = 1675711956967u64;
-		let dispute_id = 1;
 		let value = [
 			0u8, 65, 242, 124, 97, 37, 67, 41, 189, 109, 132, 185, 252, 136, 215, 37, 101, 25, 113,
 			126, 143, 68, 226, 21, 52, 30, 20, 190, 109, 250, 166, 10, 71, 121, 118, 208, 186, 68,
@@ -98,27 +90,29 @@ mod tests {
 		];
 		let disputed_reporter = Address::random();
 		let dispute_initiator = Address::random();
+		let dispute_fee = 12345;
+		let slash_amount = 54321;
 
 		assert_eq!(
 			begin_parachain_dispute()
 				.encode_input(&vec![
-					Token::Uint(para_id.into()),
 					Token::FixedBytes(query_id.into()),
 					Token::Uint(timestamp.into()),
-					Token::Uint(dispute_id.into()),
 					Token::Bytes(value.into()),
 					Token::Address(disputed_reporter),
-					Token::Address(dispute_initiator)
+					Token::Address(dispute_initiator),
+					Token::Uint(dispute_fee.into()),
+					Token::Uint(slash_amount.into()),
 				])
 				.unwrap()[..],
 			super::begin_parachain_dispute(
-				para_id,
 				&query_id,
 				timestamp,
-				1,
 				&value,
 				disputed_reporter,
-				dispute_initiator
+				dispute_initiator,
+				dispute_fee,
+				slash_amount
 			)[..]
 		)
 	}
@@ -174,7 +168,7 @@ mod tests {
 					Token::Uint(6.into()),
 				])
 				.unwrap()[..],
-			super::vote(para_id, &query_id, timestamp, 1, 2, 3, 4, 5, 6)[..]
+			super::vote(&dispute_id, 1, 2, 3, 4, 5, 6)[..]
 		)
 	}
 }
