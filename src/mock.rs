@@ -104,6 +104,7 @@ impl tellor::Config for Test {
 	type ClaimBuffer = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type ClaimPeriod = ConstU64<{ 4 * WEEK_IN_MILLISECONDS }>;
 	type DisputeId = u32;
+	type DisputeRoundReportingPeriod = ConstU64<{ 1 * DAY_IN_MILLISECONDS }>;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;

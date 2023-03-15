@@ -115,6 +115,10 @@ pub mod pallet {
 			+ MaxEncodedLen
 			+ Into<U256>;
 
+		/// The dispute round reporting period.
+		#[pallet::constant]
+		type DisputeRoundReportingPeriod: Get<<Self::Time as Time>::Moment>;
+
 		/// Percentage, 1000 is 100%, 50 is 5%, etc
 		#[pallet::constant]
 		type Fee: Get<u16>;
@@ -307,6 +311,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		VoteIdOf<T>,
 		BoundedVec<DisputeIdOf<T>, <T as Config>::MaxVoteRounds>,
+		ValueQuery,
 	>;
 	#[pallet::storage]
 	pub type VoteTallyByAddress<T> =
@@ -488,6 +493,10 @@ pub mod pallet {
 		AlreadyVoted,
 		/// Dispute must be started within reporting lock time.
 		DisputeReportingPeriodExpired,
+		/// New dispute round must be started within the dispute round reporting time.
+		DisputeRoundReportingPeriodExpired,
+		/// Dispute does not exist.
+		InvalidDispute,
 		/// Vote does not exist.
 		InvalidVote,
 		/// The maximum number of disputes has been reached.
@@ -820,9 +829,10 @@ pub mod pallet {
 			<CurrentFeeds<T>>::try_mutate(query_id, |maybe| -> DispatchResult {
 				match maybe {
 					None => {
-						let mut feeds = BoundedVec::default();
-						feeds.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-						*maybe = Some(feeds);
+						*maybe = Some(
+							BoundedVec::try_from(vec![feed_id])
+								.map_err(|_| Error::<T>::MaxFeedsFunded)?,
+						);
 					},
 					Some(feeds) => {
 						feeds.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
@@ -1088,8 +1098,6 @@ pub mod pallet {
 			query_id: QueryIdOf<T>,
 			timestamp: TimestampOf<T>,
 		) -> DispatchResult {
-			// todo: complete implementation
-			// todo: ensure registered
 			let dispute_initiator = ensure_signed(origin)?;
 			// Only reporters can begin disputes due to requiring an account on staking chain to potentially receive slash amount if dispute successful
 			ensure!(<StakerDetails<T>>::contains_key(&dispute_initiator), Error::<T>::NotReporter);
@@ -1108,31 +1116,20 @@ pub mod pallet {
 			let dispute_id = <VoteCount<T>>::get()
 				.checked_add(&1u8.into())
 				.ok_or(Error::<T>::MaxDisputesReached)?;
-			let vote_rounds =
-				<VoteRounds<T>>::try_mutate(vote_id, |maybe| -> Result<usize, DispatchError> {
-					match maybe {
-						None => {
-							let mut vote_rounds = BoundedVec::default();
-							vote_rounds
-								.try_push(dispute_id)
-								.map_err(|_| Error::<T>::MaxVoteRoundsReached)?;
-							let len = vote_rounds.len();
-							*maybe = Some(vote_rounds);
-							Ok(len)
-						},
-						Some(vote_rounds) => {
-							vote_rounds
-								.try_push(dispute_id)
-								.map_err(|_| Error::<T>::MaxVoteRoundsReached)?;
-							Ok(vote_rounds.len())
-						},
-					}
-				})?;
+			let vote_rounds = <VoteRounds<T>>::try_mutate(
+				vote_id,
+				|vote_rounds| -> Result<Vec<DisputeIdOf<T>>, DispatchError> {
+					vote_rounds
+						.try_push(dispute_id)
+						.map_err(|_| Error::<T>::MaxVoteRoundsReached)?;
+					Ok(vote_rounds.to_vec())
+				},
+			)?;
 
 			// Create new vote and dispute
-			let _vote = <VoteInfo<T>>::get(dispute_id).unwrap_or_else(|| VoteOf::<T> {
+			let mut vote = VoteOf::<T> {
 				identifier: vote_id,
-				vote_round: vote_rounds as u32,
+				vote_round: vote_rounds.len() as u32,
 				start_date: T::Time::now(),
 				block_number: frame_system::Pallet::<T>::block_number(),
 				fee: Self::get_dispute_fee(),
@@ -1141,23 +1138,16 @@ pub mod pallet {
 				reporters: Tally::default(),
 				initiator: dispute_initiator.clone(),
 				voted: BoundedBTreeMap::default(),
-			});
-			let dispute = <DisputeInfo<T>>::get(dispute_id).map_or_else(
-				|| -> Result<DisputeOf<T>, DispatchError> {
-					let disputed_reporter = Self::get_reporter_by_timestamp(query_id, timestamp)
-						.ok_or(Error::<T>::NoValueExists)?;
-					Ok(DisputeOf::<T> {
-						query_id,
-						timestamp,
-						value: <ValueOf<T>>::default(),
-						disputed_reporter,
-					})
-				},
-				Ok,
-			)?;
-			// disputeIdsByReporter[_thisDispute.disputedReporter].push(_disputeId);
-			// uint256 _disputeFee = getDisputeFee();
-			if vote_rounds == 1 {
+			};
+			let mut dispute = DisputeOf::<T> {
+				query_id,
+				timestamp,
+				value: <ValueOf<T>>::default(),
+				disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp)
+					.ok_or(Error::<T>::NoValueExists)?,
+			};
+			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
+			if vote_rounds.len() == 1 {
 				ensure!(
 					T::Time::now().saturating_sub(timestamp) < T::ReportingLock::get(),
 					Error::<T>::DisputeReportingPeriodExpired
@@ -1166,33 +1156,49 @@ pub mod pallet {
 					*open_disputes =
 						Some(open_disputes.take().unwrap_or_default().saturating_add(1));
 				});
-				// todo:
-				// // calculate dispute fee based on number of open disputes on query ID
-				// _disputeFee = _disputeFee * 2**(openDisputesOnId[_queryId] - 1);
-				// // slash a single stakeAmount from reporter
-				// _thisDispute.slashedAmount = oracle.slashReporter(_thisDispute.disputedReporter, address(this));
-				// _thisDispute.value = oracle.retrieveData(_queryId, _timestamp);
+				// calculate dispute fee based on number of open disputes on query id
+				vote.fee = vote.fee.saturating_mul(
+					<AmountOf<T>>::from(2u8).saturating_pow(
+						<OpenDisputesOnId<T>>::get(query_id)
+							.ok_or(Error::<T>::InvalidIndex)?
+							.saturating_sub(1)
+							.saturated_into(),
+					),
+				);
+				dispute.value =
+					Self::retrieve_data(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
 				Self::_remove_value(query_id, timestamp)?;
 			} else {
-				// todo:
-				// uint256 _prevId = _voteRounds[_voteRounds.length - 2];
-				// require(
-				// 	block.timestamp - voteInfo[_prevId].tallyDate < 1 days,
-				// 	"New dispute round must be started within a day"
-				// );
-				// _disputeFee = _disputeFee * 2**(_voteRounds.length - 1);
-				// _thisDispute.slashedAmount = disputeInfo[_voteRounds[0]].slashedAmount;
-				// _thisDispute.value = disputeInfo[_voteRounds[0]].value;
+				// todo: safe math
+				let prev_id =
+					vote_rounds.get(vote_rounds.len() - 2).ok_or(Error::<T>::InvalidIndex)?;
+				ensure!(
+					T::Time::now() -
+						<VoteInfo<T>>::get(prev_id).ok_or(Error::<T>::InvalidVote)?.tally_date <
+						T::DisputeRoundReportingPeriod::get(),
+					Error::<T>::DisputeRoundReportingPeriodExpired
+				);
+				vote.fee = vote.fee.saturating_mul(
+					<AmountOf<T>>::from(2u8)
+						.saturating_pow(vote_rounds.len().saturating_sub(1).saturated_into()),
+				);
+				dispute.value =
+					<DisputeInfo<T>>::get(vote_rounds.first().ok_or(Error::<T>::InvalidDispute)?)
+						.ok_or(Error::<T>::InvalidDispute)?
+						.value;
 			}
-			// if (_disputeFee > oracle.getStakeAmount()) {
-			// 	_disputeFee = oracle.getStakeAmount();
-			// }
-			// _thisVote.fee = _disputeFee;
-			// voteCount++;
+			let stake_amount = <StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+			if vote.fee > stake_amount {
+				vote.fee = stake_amount;
+			}
+			<VoteCount<T>>::mutate(|count| count.saturating_inc());
+			// todo: confirm dispute fee handling with Tellor
 			// require(
 			// 	token.transferFrom(msg.sender, address(this), _disputeFee),
 			// 	"Fee must be paid"
 			// ); // This is the dispute fee. Returned if dispute passes
+			<VoteInfo<T>>::insert(dispute_id, vote);
+			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {
 				dispute_id,
 				query_id,
@@ -1205,7 +1211,7 @@ pub mod pallet {
 				let dispute_initiator = <StakerDetails<T>>::get(&dispute_initiator)
 					.ok_or(Error::<T>::NotReporter)?
 					.address;
-				let disputed_reporter = <StakerDetails<T>>::get(dispute.disputed_reporter)
+				let disputed_reporter = <StakerDetails<T>>::get(&dispute.disputed_reporter)
 					.ok_or(Error::<T>::NotReporter)?
 					.address;
 
@@ -1250,7 +1256,6 @@ pub mod pallet {
 			supports: Option<bool>,
 		) -> DispatchResult {
 			let voter = ensure_signed(origin)?;
-
 			// Ensure that dispute has not been executed and that vote does not exist and is not tallied
 			ensure!(
 				dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),

@@ -101,6 +101,7 @@ impl tellor::Config for Test {
 	type ClaimBuffer = ();
 	type ClaimPeriod = ();
 	type DisputeId = DisputeId;
+	type DisputeRoundReportingPeriod = ();
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
