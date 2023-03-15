@@ -92,3 +92,15 @@ License: Unlicense
 | :white_square_button: `report_invalid_dispute`       | :white_square_button: |                                                                |
 | :white_square_button: `slash_dispute_initiator`      | :white_square_button: |                                                                |
 | :white_square_button: `deregister`                   | :white_square_button: |                                                                |
+
+## Todo List
+- [ ] Pending todo's within code
+- [ ] Clarify outstanding items
+  - Dispute fees charged on parachain vs staking chain
+  - Time-based rewards required on parachain?
+- [ ] Implement XCM fees
+- [ ] Ensure test coverage
+- [ ] Benchmarking
+- [ ] Define invariants
+- [ ] Fuzzing
+- [ ] Complete integration tests
