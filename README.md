@@ -104,6 +104,7 @@ License: Unlicense
 - [ ] Pending todo's within code
 - [ ] Clarify outstanding items
   - Dispute fees charged on parachain vs staking chain
+  - Standardise on dispute_id being hash(para_id, query_id, timestamp)
   - Time-based rewards required on parachain?
 - [ ] Implement XCM fees
 - [ ] Ensure test coverage
