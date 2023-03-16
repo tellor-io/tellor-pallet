@@ -277,7 +277,7 @@ sp_api::decl_runtime_apis! {
 		/// * `voter` - The account of the voter to check.
 		/// # Returns
 		/// Whether or not the account voted for the specific dispute.
-		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> Option<bool>;
+		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> bool;
 
 		/// Get the latest dispute fee.
 		/// # Returns

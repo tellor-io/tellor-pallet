@@ -104,7 +104,6 @@ impl tellor::Config for Test {
 	type ClaimBuffer = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type ClaimPeriod = ConstU64<{ 4 * WEEK_IN_MILLISECONDS }>;
 	type DisputeId = u32;
-	type DisputeRoundReportingPeriod = ConstU64<{ 1 * DAY_IN_MILLISECONDS }>;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
@@ -119,7 +118,7 @@ impl tellor::Config for Test {
 	type MaxTimestamps = ConstU32<100>;
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so ValueConverter needs to handle conversion to price for threshold checks
-	type MaxVotes = ();
+	type MaxVotes = ConstU32<10>;
 	type MaxVoteRounds = ConstU32<10>;
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
@@ -132,6 +131,7 @@ impl tellor::Config for Test {
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ValueConverter;
+	type VoteRoundPeriod = ConstU64<{ 1 * DAY_IN_MILLISECONDS }>;
 	type VoteTallyDisputePeriod = ConstU64<{ 1 * DAY_IN_MILLISECONDS }>;
 	type WithdrawalPeriod = ConstU64<{ 7 * DAY_IN_MILLISECONDS }>;
 	type Xcm = TestSendXcm;

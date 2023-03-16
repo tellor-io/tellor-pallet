@@ -1,10 +1,10 @@
 use super::*;
-use crate::Config;
+use crate::{types::Tally, Config};
 use frame_support::{assert_noop, assert_ok};
 use sp_core::Get;
 use sp_runtime::traits::BadOrigin;
 
-type DisputeRoundReportingPeriod = <Test as Config>::DisputeRoundReportingPeriod;
+type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
 type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
 
 #[test]
@@ -85,7 +85,7 @@ fn begin_dispute() {
 			dispute_id
 		});
 
-		let dispute_period = DisputeRoundReportingPeriod::get();
+		let dispute_period = VoteRoundPeriod::get();
 		with_block_after(dispute_period, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
@@ -122,7 +122,7 @@ fn begin_dispute() {
 			Timestamp::get()
 		});
 
-		with_block_after(DisputeRoundReportingPeriod::get(), || {
+		with_block_after(VoteRoundPeriod::get(), || {
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
 				Error::DisputeReportingPeriodExpired
@@ -171,18 +171,146 @@ fn begins_dispute_xcm() {
 #[ignore]
 fn execute_vote() {
 	todo!()
+	// assert(voteInfo[3] == 1, "Vote result should change")
 }
 
 #[test]
-#[ignore]
 fn tally_votes() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L143
+	ext.execute_with(|| {
+		with_block(|| {
+			// 1) dispute could not have been tallied,
+			// 2) dispute does not exist,
+			// 3) cannot tally before the voting time has ended
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_noop!(Tellor::tally_votes(1), Error::InvalidDispute); // Cannot tally a dispute that does not exist
+
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(false)));
+			assert_noop!(Tellor::tally_votes(1), Error::VotingPeriodActive); // Time for voting has not elapsed
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+			assert_noop!(Tellor::tally_votes(1), Error::VoteAlreadyTallied); // cannot re-tally a dispute
+
+			let vote_info = Tellor::get_vote_info(1).unwrap();
+			assert_eq!(vote_info.tally_date, Timestamp::get(), "Tally date should be correct");
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn vote() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter_1 = 1;
+	let reporter_2 = 2;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L170
+	ext.execute_with(|| {
+		with_block(|| {
+			// 1 dispute must exist
+			// 2) cannot have been tallied
+			// 3) sender has already voted
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter_2,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_2),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter_2),
+				query_id,
+				Timestamp::get()
+			));
+			assert_noop!(
+				Tellor::vote(RuntimeOrigin::signed(reporter_2), 2, Some(false)),
+				Error::InvalidVote
+			); // Can't vote on dispute does not exist
+
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter_1), 1, Some(true)));
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter_2), 1, Some(false)));
+			assert_noop!(
+				Tellor::vote(RuntimeOrigin::signed(reporter_2), 1, Some(true)),
+				Error::AlreadyVoted
+			); // Sender has already voted
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+			assert_noop!(
+				Tellor::vote(RuntimeOrigin::signed(reporter_2), 1, Some(true)),
+				Error::VoteAlreadyTallied
+			); // Vote has already been tallied
+
+			let vote_info = Tellor::get_vote_info(1).unwrap();
+			assert_eq!(
+				vote_info.users,
+				Tally::<AmountOf<Test>>::default(),
+				"users tally should be correct"
+			);
+			assert_eq!(
+				vote_info.reporters.does_support, 0,
+				"reporters does_support tally should be correct"
+			);
+			assert_eq!(vote_info.reporters.against, 1, "reporters against tally should be correct");
+			assert_eq!(
+				vote_info.reporters.invalid_query, 0,
+				"reporters invalid tally should be correct"
+			);
+
+			assert!(Tellor::did_vote(1, reporter_2), "voter's voted status should be correct");
+			assert!(Tellor::did_vote(1, reporter_1), "voter's voted status should be correct");
+			assert!(!Tellor::did_vote(1, 3), "voter's voted status should be correct");
+
+			assert_eq!(
+				Tellor::get_vote_tally_by_address(reporter_2),
+				1,
+				"vote tally by address should be correct"
+			);
+			assert_eq!(
+				Tellor::get_vote_tally_by_address(reporter_1),
+				1,
+				"vote tally by address should be correct"
+			);
+		})
+	});
 }
 
 #[test]

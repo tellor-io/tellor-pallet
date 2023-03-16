@@ -22,8 +22,10 @@ impl<T: Config> Pallet<T> {
 	/// * `voter` - The account of the voter to check.
 	/// # Returns
 	/// Whether or not the account voted for the specific dispute.
-	pub fn did_vote(dispute_id: DisputeIdOf<T>, voter: AccountIdOf<T>) -> Option<bool> {
-		<VoteInfo<T>>::get(dispute_id).and_then(|v| v.voted.get(&voter).copied())
+	pub fn did_vote(dispute_id: DisputeIdOf<T>, voter: AccountIdOf<T>) -> bool {
+		<VoteInfo<T>>::get(dispute_id)
+			.and_then(|v| v.voted.get(&voter).copied())
+			.unwrap_or_default()
 	}
 
 	/// Executes the vote.
@@ -936,19 +938,19 @@ impl<T: Config> Pallet<T> {
 	pub(crate) fn tally_votes(dispute_id: DisputeIdOf<T>) -> DispatchResult {
 		// Ensure vote has not been executed and that vote has not been tallied
 		let initiator = <VoteInfo<T>>::try_mutate(dispute_id, |maybe| match maybe {
-			None => Err(Error::<T>::InvalidVote),
+			None => Err(Error::<T>::InvalidDispute),
 			Some(vote) => {
 				ensure!(vote.tally_date == TimestampOf::<T>::default(), Error::VoteAlreadyTallied);
 				ensure!(
 					dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),
-					Error::InvalidVote
+					Error::InvalidDispute
 				);
 				// Determine appropriate vote duration dispute round
 				// Vote time increases as rounds increase but only up to withdrawal period
 				// todo: safe math
 				ensure!(
 					T::Time::now() - vote.start_date >=
-						T::DisputeRoundReportingPeriod::get() * vote.vote_round.into() ||
+						T::VoteRoundPeriod::get() * vote.vote_round.into() ||
 						T::Time::now() - vote.start_date >= T::WithdrawalPeriod::get(),
 					Error::VotingPeriodActive
 				);

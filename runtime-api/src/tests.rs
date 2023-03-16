@@ -103,7 +103,6 @@ impl tellor::Config for Test {
 	type ClaimBuffer = ();
 	type ClaimPeriod = ();
 	type DisputeId = DisputeId;
-	type DisputeRoundReportingPeriod = ();
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
@@ -128,10 +127,11 @@ impl tellor::Config for Test {
 	type ReportingLock = ConstU64<42>;
 	type Staking = ();
 	type StakingOrigin = EnsureStaking;
-	type VoteTallyDisputePeriod = ();
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ();
+	type VoteRoundPeriod = ();
+	type VoteTallyDisputePeriod = ();
 	type WithdrawalPeriod = ();
 	type Xcm = TestSendXcm;
 }
@@ -305,7 +305,7 @@ mock_impl_runtime_apis! {
 	}
 
 	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, DisputeId, QueryId, Moment, Value, DisputeId, VoteId> for Test {
-		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> Option<bool>{
+		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> bool {
 			tellor::Pallet::<Test>::did_vote(dispute_id, voter)
 		}
 
@@ -697,10 +697,7 @@ mod governance {
 	#[test]
 	fn did_vote() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.did_vote(&BLOCKID, DisputeId::default(), AccountId::default()).unwrap(),
-				None
-			);
+			assert!(!Test.did_vote(&BLOCKID, DisputeId::default(), AccountId::default()).unwrap());
 		});
 	}
 

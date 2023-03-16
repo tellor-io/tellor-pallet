@@ -116,10 +116,6 @@ pub mod pallet {
 			+ MaxEncodedLen
 			+ Into<U256>;
 
-		/// The dispute round reporting period.
-		#[pallet::constant]
-		type DisputeRoundReportingPeriod: Get<<Self::Time as Time>::Moment>;
-
 		/// Percentage, 1000 is 100%, 50 is 5%, etc
 		#[pallet::constant]
 		type Fee: Get<u16>;
@@ -229,6 +225,10 @@ pub mod pallet {
 
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
+
+		/// The dispute period.
+		#[pallet::constant]
+		type VoteRoundPeriod: Get<<Self::Time as Time>::Moment>;
 
 		/// The dispute period after a vote has been tallied.
 		#[pallet::constant]
@@ -1188,7 +1188,7 @@ pub mod pallet {
 				ensure!(
 					T::Time::now() -
 						<VoteInfo<T>>::get(prev_id).ok_or(Error::<T>::InvalidVote)?.tally_date <
-						T::DisputeRoundReportingPeriod::get(),
+						T::VoteRoundPeriod::get(),
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
 				vote.fee = vote.fee.saturating_mul(

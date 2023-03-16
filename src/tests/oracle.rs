@@ -9,7 +9,7 @@ use sp_runtime::traits::BadOrigin;
 
 type BoundedReportsSubmittedByQueryId =
 	BoundedBTreeMap<QueryIdOf<Test>, u128, <Test as Config>::MaxQueriesPerReporter>;
-type DisputeRoundReportingPeriod = <Test as Config>::DisputeRoundReportingPeriod;
+type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
 type ReportingLock = <Test as Config>::ReportingLock;
 type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
 type WithdrawalPeriod = <Test as Config>::WithdrawalPeriod;
@@ -290,7 +290,7 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(DisputeRoundReportingPeriod::get(), || {
+		with_block_after(VoteRoundPeriod::get(), || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
@@ -332,7 +332,7 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(DisputeRoundReportingPeriod::get(), || {
+		with_block_after(VoteRoundPeriod::get(), || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
@@ -367,7 +367,7 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(DisputeRoundReportingPeriod::get(), || {
+		with_block_after(VoteRoundPeriod::get(), || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
@@ -427,7 +427,7 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data) // start dispute, required for slashing
 		});
 
-		with_block_after(DisputeRoundReportingPeriod::get(), || {
+		with_block_after(VoteRoundPeriod::get(), || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
