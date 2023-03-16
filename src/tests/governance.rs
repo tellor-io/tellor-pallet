@@ -1,5 +1,5 @@
 use super::*;
-use crate::{types::Tally, Config};
+use crate::{types::Tally, Config, VoteResult};
 use frame_support::{assert_noop, assert_ok};
 use sp_core::Get;
 use sp_runtime::traits::BadOrigin;
@@ -320,27 +320,209 @@ fn vote_on_multiple_disputes() {
 }
 
 #[test]
-#[ignore]
 fn did_vote() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L248
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			assert!(!Tellor::did_vote(1, reporter), "voter's voted status should be correct");
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(true)));
+			assert!(Tellor::did_vote(1, reporter), "voter's voted status should be correct");
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn get_dispute_info() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L260
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			let dispute_info = Tellor::get_dispute_info(1).unwrap();
+			assert_eq!(dispute_info.0, query_id, "disputed query id should be correct");
+			assert_eq!(dispute_info.1, Timestamp::get(), "disputed timestamp should be correct");
+			assert_eq!(dispute_info.2, uint_value(100), "disputed value should be correct");
+			assert_eq!(dispute_info.3, reporter, "disputed reporter should be correct");
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn get_open_disputes_on_id() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let another_reporter = 2;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L274
+	ext.execute_with(|| {
+		let timestamp = with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			Timestamp::get()
+		});
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				another_reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+
+			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 0);
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
+			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 1);
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 2);
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+		});
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
+		});
+
+		assert_eq!(Tellor::get_open_disputes_on_id(query_id), 1);
+	});
 }
 
 #[test]
-#[ignore]
 fn get_vote_count() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L298
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_eq!(Tellor::get_vote_count(), 0, "vote count should start at 0");
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			assert_eq!(Tellor::get_vote_count(), 1, "vote count should increment correctly");
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+		});
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
+			assert_eq!(
+				Tellor::get_vote_count(),
+				1,
+				"vote count should not change after vote execution"
+			);
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			assert_eq!(Tellor::get_vote_count(), 2, "vote count should increment correctly");
+		})
+	});
 }
 
 #[test]
