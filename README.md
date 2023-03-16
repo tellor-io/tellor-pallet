@@ -39,7 +39,6 @@ License: Unlicense
 
 | Dispatchable Function              |   Functional Test   | Notes                                                                                |
 |------------------------------------|:-------------------:|--------------------------------------------------------------------------------------|
-| :heavy_check_mark: `remove_value`  | :white_check_mark:  | Needs removing as dispatchable function as only called internally by `begin_dispute` |
 | :heavy_check_mark: `submit_value`  | :white_check_mark:  | Implemented apart from time-based rewards                                            |
 
 | Runtime API                                                        |    Functional Test    | Notes |
@@ -70,10 +69,10 @@ License: Unlicense
 
 ### Governance
 
-| Dispatchable Function              |    Functional Test    | Notes           |
-|------------------------------------|:---------------------:|-----------------|
-| :heavy_check_mark: `begin_dispute` |  :white_check_mark:   | 90% implemented |
-| :white_check_mark: `vote`          | :white_square_button: |                 |
+| Dispatchable Function              |   Functional Test   | Notes           |
+|------------------------------------|:-------------------:|-----------------|
+| :heavy_check_mark: `begin_dispute` | :white_check_mark:  | 98% implemented |
+| :white_check_mark: `vote`          | :white_check_mark:  |                 |
 
 | Runtime API                                     |    Functional Test    | Notes |
 |-------------------------------------------------|:---------------------:|-------|
@@ -94,10 +93,10 @@ License: Unlicense
 | :heavy_check_mark: `register`                        | :white_square_button: | Partially implemented                                          |
 | :heavy_check_mark: `report_stake_deposited`          |  :heavy_check_mark:   | Mostly implemented, `depositStake` functional test implemented |
 | :heavy_check_mark: `report_staking_withdraw_request` |  :white_check_mark:   | 99% implemented                                                |
-| :heavy_check_mark: `report_stake_withdrawal`         | :white_square_button: |                                                                |
+| :heavy_check_mark: `report_stake_withdrawal`         |  :white_check_mark:   |                                                                |
 | :heavy_check_mark: `report_slash`                    |  :heavy_check_mark:   | 99% implemented                                                |
-| :white_square_button: `report_invalid_dispute`       | :white_square_button: |                                                                |
-| :white_square_button: `slash_dispute_initiator`      | :white_square_button: |                                                                |
+| :heavy_check_mark: `report_invalid_dispute`          | :white_square_button: |                                                                |
+| :heavy_check_mark: `slash_dispute_initiator`         | :white_square_button: | Partially implemented, needs clarification on dispute fee      |
 | :white_square_button: `deregister`                   | :white_square_button: |                                                                |
 
 ## Todo List
