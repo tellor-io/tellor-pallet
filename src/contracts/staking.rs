@@ -1,12 +1,11 @@
 use super::*;
 
-fn confirm_parachain_staking_withdraw_request(
-	para_id: ParaId,
-	reporter: Address,
+pub(crate) fn confirm_parachain_stake_withdraw_request(
+	address: impl Into<Address>,
 	amount: impl Into<Amount>,
 ) -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [141, 45, 83, 196];
-	Call::new(&FUNCTION).uint(para_id).address(reporter).uint(amount).encode()
+	const FUNCTION: [u8; 4] = [116, 48, 87, 226];
+	Call::new(&FUNCTION).address(address.into()).uint(amount.into()).encode()
 }
 
 #[cfg(test)]
@@ -15,14 +14,13 @@ mod tests {
 	use ethabi::{Function, ParamType, Token};
 
 	#[allow(deprecated)]
-	fn confirm_parachain_staking_withdraw_request() -> Function {
-		// confirmParachainStakingWithdrawRequest(uint32,address,uint256)
+	fn confirm_parachain_stake_withdraw_request() -> Function {
+		// confirmParachainStakeWithdrawRequest(address,uint256)
 		Function {
-			name: "confirmParachainStakingWithdrawRequest".to_string(),
+			name: "confirmParachainStakeWithdrawRequest".to_string(),
 			inputs: vec![
-				param("_paraId", ParamType::Uint(32)),
-				param("_reporter", ParamType::Address),
-				param("_timestamp", ParamType::Uint(256)),
+				param("_staker", ParamType::Address),
+				param("_amount", ParamType::Uint(256)),
 			],
 			outputs: vec![],
 			constant: None,
@@ -32,27 +30,22 @@ mod tests {
 
 	#[test]
 	#[ignore]
-	fn function_selector() {
+	fn confirm_parachain_stake_withdraw_request_function_selector() {
 		// Short signature bytes used for FUNCTION const
-		let function = confirm_parachain_staking_withdraw_request();
+		let function = confirm_parachain_stake_withdraw_request();
 		println!("{} {:?}", function.signature(), function.short_signature());
 	}
 
 	#[test]
-	fn encodes_confirm_parachain_staking_withdraw_request() {
-		let para_id = 3000;
-		let reporter = Address::random();
+	fn encodes_confirm_parachain_stake_withdraw_request_call() {
+		let staker = Address::random();
 		let amount = 1675711956967u128;
 
 		assert_eq!(
-			confirm_parachain_staking_withdraw_request()
-				.encode_input(&vec![
-					Token::Uint(para_id.into()),
-					Token::Address(reporter),
-					Token::Uint(amount.into()),
-				])
+			confirm_parachain_stake_withdraw_request()
+				.encode_input(&vec![Token::Address(staker), Token::Uint(amount.into()),])
 				.unwrap()[..],
-			super::confirm_parachain_staking_withdraw_request(para_id, reporter, amount)[..]
+			super::confirm_parachain_stake_withdraw_request(staker, amount)[..]
 		)
 	}
 }

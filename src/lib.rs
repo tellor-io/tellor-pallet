@@ -50,7 +50,7 @@ pub mod pallet {
 		xcm::{self, ethereum_xcm},
 		*,
 	};
-	use crate::{types::oracle::Report, xcm::ContractLocation, Tip};
+	use crate::{contracts::staking, types::oracle::Report, xcm::ContractLocation, Tip};
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
@@ -1423,7 +1423,7 @@ pub mod pallet {
 			let message = xcm::transact_with_config(
 				ethereum_xcm::transact(
 					staking_contract.address,
-					registry::confirm_parachain_stake_withdraw_request(address, amount)
+					staking::confirm_parachain_stake_withdraw_request(address, amount)
 						.try_into()
 						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
 					config.gas_limit,
