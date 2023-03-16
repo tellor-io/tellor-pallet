@@ -332,6 +332,7 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		// AutoPay
+		/// Emitted when a data feed is funded.
 		DataFeedFunded {
 			query_id: QueryIdOf<T>,
 			feed_id: FeedIdOf<T>,
@@ -339,30 +340,32 @@ pub mod pallet {
 			feed_funder: AccountIdOf<T>,
 			feed_details: FeedDetailsOf<T>,
 		},
+		/// Emitted when a data feed is set up.
 		NewDataFeed {
 			query_id: QueryIdOf<T>,
 			feed_id: FeedIdOf<T>,
 			query_data: QueryDataOf<T>,
 			feed_creator: AccountIdOf<T>,
 		},
-		OneTimeTipClaimed {
-			query_id: QueryIdOf<T>,
-			amount: AmountOf<T>,
-			reporter: AccountIdOf<T>,
-		},
+		/// Emitted when a onetime tip is claimed.
+		OneTimeTipClaimed { query_id: QueryIdOf<T>, amount: AmountOf<T>, reporter: AccountIdOf<T> },
+		/// Emitted when a tip is added.
 		TipAdded {
 			query_id: QueryIdOf<T>,
 			amount: AmountOf<T>,
 			query_data: QueryDataOf<T>,
 			tipper: AccountIdOf<T>,
 		},
+		/// Emitted when a tip is claimed.
 		TipClaimed {
 			feed_id: FeedIdOf<T>,
 			query_id: QueryIdOf<T>,
 			amount: AmountOf<T>,
 			reporter: AccountIdOf<T>,
 		},
+
 		// Oracle
+		/// Emitted when a new value is submitted.
 		NewReport {
 			query_id: QueryIdOf<T>,
 			time: TimestampOf<T>,
@@ -371,28 +374,21 @@ pub mod pallet {
 			query_data: QueryDataOf<T>,
 			reporter: AccountIdOf<T>,
 		},
-		NewStakerReported {
-			staker: AccountIdOf<T>,
-			amount: AmountOf<T>,
-			address: Address,
-		},
-		SlashReported {
-			reporter: AccountIdOf<T>,
-			recipient: AccountIdOf<T>,
-			amount: AmountOf<T>,
-		},
-		StakeWithdrawnReported {
-			staker: AccountIdOf<T>,
-		},
+		/// Emitted when a new staker is reported.
+		NewStakerReported { staker: AccountIdOf<T>, amount: AmountOf<T>, address: Address },
+		/// Emitted when a stake slash is reported.
+		SlashReported { reporter: AccountIdOf<T>, recipient: AccountIdOf<T>, amount: AmountOf<T> },
+		/// Emitted when a stake withdrawal is reported.
+		StakeWithdrawnReported { staker: AccountIdOf<T> },
+		/// Emitted when a stake withdrawal request is reported.
 		StakeWithdrawRequestReported {
 			reporter: AccountIdOf<T>,
 			amount: AmountOf<T>,
 			address: Address,
 		},
-		ValueRemoved {
-			query_id: QueryIdOf<T>,
-			timestamp: TimestampOf<T>,
-		},
+		/// Emitted when a value is removed (via governance).
+		ValueRemoved { query_id: QueryIdOf<T>, timestamp: TimestampOf<T> },
+
 		// Governance
 		/// Emitted when a new dispute is opened.
 		NewDispute {
@@ -402,11 +398,7 @@ pub mod pallet {
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when an address casts their vote.
-		Voted {
-			dispute_id: DisputeIdOf<T>,
-			supports: Option<bool>,
-			voter: AccountIdOf<T>,
-		},
+		Voted { dispute_id: DisputeIdOf<T>, supports: Option<bool>, voter: AccountIdOf<T> },
 		/// Emitted when all casting for a vote is tallied.
 		VoteTallied {
 			dispute_id: DisputeIdOf<T>,
@@ -414,22 +406,17 @@ pub mod pallet {
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when a vote is executed.
-		VoteExecuted {
-			dispute_id: DisputeIdOf<T>,
-			result: VoteResult,
-		},
+		VoteExecuted { dispute_id: DisputeIdOf<T>, result: VoteResult },
+
 		// Query Data
-		QueryDataStored {
-			query_id: QueryIdOf<T>,
-		},
+		/// Emitted when query data is stored.
+		QueryDataStored { query_id: QueryIdOf<T> },
+
 		// Registration
-		Configured {
-			stake_amount: AmountOf<T>,
-		},
-		RegistrationAttempted {
-			para_id: u32,
-			contract_address: Address,
-		},
+		/// Emitted when the pallet is (re-)configured.
+		Configured { stake_amount: AmountOf<T> },
+		/// Emitted when registration with the controller contracts is attempted.
+		RegistrationAttempted { para_id: u32, contract_address: Address },
 	}
 
 	#[pallet::error]
