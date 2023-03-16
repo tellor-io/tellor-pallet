@@ -6,7 +6,7 @@ pub struct VoteInfo<Amount, BlockNumber, Timestamp> {
 	pub start_date: Timestamp,
 	pub block_number: BlockNumber,
 	pub fee: Amount,
-	pub tally_date: BlockNumber,
+	pub tally_date: Timestamp,
 	pub users_does_support: Amount,
 	pub users_against: Amount,
 	pub users_invalid_query: Amount,
