@@ -128,7 +128,7 @@ fn remove_value() {
 			));
 
 			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 1);
-			assert_noop!(Tellor::_remove_value(query_id, 500), Error::InvalidTimestamp);
+			assert_noop!(Tellor::remove_value(query_id, 500), Error::InvalidTimestamp);
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(100));
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
 
@@ -141,11 +141,11 @@ fn remove_value() {
 			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 1);
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp), None);
 			assert!(Tellor::is_in_dispute(query_id, timestamp));
-			assert_noop!(Tellor::_remove_value(query_id, timestamp), Error::ValueDisputed);
+			assert_noop!(Tellor::remove_value(query_id, timestamp), Error::ValueDisputed);
 
 			// Test min/max values for timestamp argument
-			assert_noop!(Tellor::_remove_value(query_id, 0), Error::InvalidTimestamp);
-			assert_noop!(Tellor::_remove_value(query_id, u64::MAX), Error::InvalidTimestamp);
+			assert_noop!(Tellor::remove_value(query_id, 0), Error::InvalidTimestamp);
+			assert_noop!(Tellor::remove_value(query_id, u64::MAX), Error::InvalidTimestamp);
 		});
 	});
 }
@@ -789,7 +789,7 @@ fn get_report_details() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::_remove_value(query_id, Timestamp::get()));
+			assert_ok!(Tellor::remove_value(query_id, Timestamp::get()));
 		});
 
 		assert_eq!(Tellor::get_report_details(query_id, timestamp_1).unwrap(), (reporter, false));
@@ -1351,21 +1351,21 @@ fn get_index_for_data_before() {
 
 		// test last value disputed
 		with_block(|| {
-			assert_ok!(Tellor::_remove_value(query_id, timestamp_52));
+			assert_ok!(Tellor::remove_value(query_id, timestamp_52));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_52), Some(51));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), Some(2));
 
 			// remove value at index 2
-			assert_ok!(Tellor::_remove_value(query_id, timestamp_2));
+			assert_ok!(Tellor::remove_value(query_id, timestamp_2));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), Some(1));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), Some(1));
 
-			assert_ok!(Tellor::_remove_value(query_id, timestamp_1));
+			assert_ok!(Tellor::remove_value(query_id, timestamp_1));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 - 1), Some(0));
 
-			assert_ok!(Tellor::_remove_value(query_id, timestamp_0));
+			assert_ok!(Tellor::remove_value(query_id, timestamp_0));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 - 1), None);
 		});
 
@@ -1390,8 +1390,8 @@ fn get_index_for_data_before() {
 				query_data.clone(),
 			));
 
-			assert_ok!(Tellor::_remove_value(query_id, timestamp_0));
-			assert_ok!(Tellor::_remove_value(query_id, Timestamp::get()));
+			assert_ok!(Tellor::remove_value(query_id, timestamp_0));
+			assert_ok!(Tellor::remove_value(query_id, Timestamp::get()));
 		});
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), None);
@@ -1416,7 +1416,7 @@ fn get_index_for_data_before() {
 				query_data.clone(),
 			));
 
-			assert_ok!(Tellor::_remove_value(query_id, timestamp_2));
+			assert_ok!(Tellor::remove_value(query_id, timestamp_2));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), None);
 		});
 	});

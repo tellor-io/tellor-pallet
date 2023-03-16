@@ -837,7 +837,7 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
-	pub(super) fn _remove_value(
+	pub(super) fn remove_value(
 		query_id: QueryIdOf<T>,
 		timestamp: TimestampOf<T>,
 	) -> DispatchResult {
