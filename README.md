@@ -107,6 +107,9 @@ License: Unlicense
   - Time-based rewards required on parachain?
 - [ ] Implement XCM fees
 - [ ] Ensure test coverage
+- [ ] Additional Features
+  - [ ] Support `assets` pallet
+  - [ ] Add dispatchable function for a verified oracle user to flag a value for dispute
 - [ ] Benchmarking
 - [ ] Define invariants
 - [ ] Fuzzing
