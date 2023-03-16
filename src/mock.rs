@@ -182,15 +182,12 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 /// Starts a new block, executing the supplied closure thereafter.
-pub(crate) fn with_block<R>(execute: impl FnOnce() -> R) -> (MomentOf<Test>, R) {
+pub(crate) fn with_block<R>(execute: impl FnOnce() -> R) -> R {
 	with_block_after(0, execute)
 }
 
 /// Starts a new block after some time, executing the supplied closure thereafter.
-pub(crate) fn with_block_after<R>(
-	time: MomentOf<Test>,
-	execute: impl FnOnce() -> R,
-) -> (MomentOf<Test>, R) {
+pub(crate) fn with_block_after<R>(time: MomentOf<Test>, execute: impl FnOnce() -> R) -> R {
 	let block = System::block_number();
 	match block {
 		0 => {
@@ -209,5 +206,5 @@ pub(crate) fn with_block_after<R>(
 			assert_ok!(Timestamp::set(RuntimeOrigin::none(), Timestamp::get() + 1 + time));
 		},
 	}
-	(Timestamp::get(), execute())
+	execute()
 }

@@ -274,7 +274,7 @@ fn slash_reporter() {
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
 	ext.execute_with(|| {
-		let (_, dispute_id) = with_block(|| {
+		let dispute_id = with_block(|| {
 			assert_noop!(
 				Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, 0, STAKE_AMOUNT.into()),
 				BadOrigin
@@ -294,7 +294,7 @@ fn slash_reporter() {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		let (_, dispute_id) = with_block_after(VoteTallyDisputePeriod::get(), || {
+		let dispute_id = with_block_after(VoteTallyDisputePeriod::get(), || {
 			// Slash when locked balance = 0
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, amount);
@@ -336,7 +336,7 @@ fn slash_reporter() {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		let (_, dispute_id) = with_block_after(VoteTallyDisputePeriod::get(), || {
+		let dispute_id = with_block_after(VoteTallyDisputePeriod::get(), || {
 			// Slash when lockedBalance >= stakeAmount
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
@@ -411,7 +411,7 @@ fn slash_reporter() {
 			assert_eq!(Tellor::get_total_stake_amount(), token(75));
 		});
 
-		let (_, dispute_id) = with_block_after(WithdrawalPeriod::get(), || {
+		let dispute_id = with_block_after(WithdrawalPeriod::get(), || {
 			assert_ok!(Tellor::report_stake_withdrawal(
 				Origin::Staking.into(),
 				reporter,
@@ -808,7 +808,7 @@ fn get_report_details() {
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L372
 	ext.execute_with(|| {
-		let (timestamp_1, _) = with_block(|| {
+		let timestamp_1 = with_block(|| {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
@@ -822,9 +822,10 @@ fn get_report_details() {
 				0,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
 
-		let (timestamp_2, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -832,9 +833,10 @@ fn get_report_details() {
 				0,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
 
-		let (timestamp_3, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_3 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -843,6 +845,7 @@ fn get_report_details() {
 				query_data.clone(),
 			));
 			assert_ok!(Tellor::remove_value(query_id, Timestamp::get()));
+			Timestamp::get()
 		});
 
 		assert_eq!(Tellor::get_report_details(query_id, timestamp_1).unwrap(), (reporter, false));
@@ -1346,7 +1349,7 @@ fn get_index_for_data_before() {
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L519
 	ext.execute_with(|| {
-		let (timestamp_0, _) = with_block(|| {
+		let timestamp_0 = with_block(|| {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
@@ -1360,8 +1363,9 @@ fn get_index_for_data_before() {
 				0,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
-		let (timestamp_1, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_1 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1369,8 +1373,9 @@ fn get_index_for_data_before() {
 				1,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
-		let (timestamp_2, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1378,6 +1383,7 @@ fn get_index_for_data_before() {
 				2,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
@@ -1425,7 +1431,7 @@ fn get_index_for_data_before() {
 		let query_data: QueryDataOf<Test> = spot_price("ksm", "usd").try_into().unwrap();
 		let query_id = keccak_256(query_data.as_ref()).into();
 
-		let (timestamp_0, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_0 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1433,8 +1439,9 @@ fn get_index_for_data_before() {
 				0,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
-		let (timestamp_1, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_1 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1445,12 +1452,13 @@ fn get_index_for_data_before() {
 
 			assert_ok!(Tellor::remove_value(query_id, timestamp_0));
 			assert_ok!(Tellor::remove_value(query_id, Timestamp::get()));
+			Timestamp::get()
 		});
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), None);
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_0 + 1), None);
 
-		let (timestamp_2, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1458,6 +1466,7 @@ fn get_index_for_data_before() {
 				0,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
 
 		with_block_after(ReportingLock::get(), || {
@@ -1487,7 +1496,7 @@ fn get_data_before() {
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L697
 	ext.execute_with(|| {
-		let (timestamp_1, _) = with_block(|| {
+		let timestamp_1 = with_block(|| {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
@@ -1501,8 +1510,9 @@ fn get_data_before() {
 				0,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
-		let (timestamp_2, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1510,8 +1520,9 @@ fn get_data_before() {
 				1,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
-		let (timestamp_3, _) = with_block_after(ReportingLock::get(), || {
+		let timestamp_3 = with_block_after(ReportingLock::get(), || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1519,6 +1530,7 @@ fn get_data_before() {
 				2,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
 
 		assert_eq!(

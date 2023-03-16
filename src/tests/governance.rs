@@ -25,7 +25,7 @@ fn begin_dispute() {
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L43
 	ext.execute_with(|| {
-		let (timestamp, _) = with_block(|| {
+		let timestamp = with_block(|| {
 			assert_noop!(Tellor::begin_dispute(RuntimeOrigin::root(), query_id, 0), BadOrigin);
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, 0),
@@ -49,9 +49,10 @@ fn begin_dispute() {
 				0,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
 
-		let (_, dispute_id) = with_block(|| {
+		let dispute_id = with_block(|| {
 			// todo:
 			// await h.expectThrow(gov.connect(accounts[4]).beginDispute(ETH_QUERY_ID, blocky.timestamp)) // must have tokens to pay/begin dispute
 			assert_ok!(Tellor::begin_dispute(
@@ -99,7 +100,7 @@ fn begin_dispute() {
 			));
 		});
 
-		let (timestamp, _) = with_block_after(dispute_period * 2, || {
+		let timestamp = with_block_after(dispute_period * 2, || {
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
 				Error::DisputeRoundReportingPeriodExpired
@@ -118,6 +119,7 @@ fn begin_dispute() {
 				0,
 				query_data.clone(),
 			));
+			Timestamp::get()
 		});
 
 		with_block_after(DisputeRoundReportingPeriod::get(), || {
