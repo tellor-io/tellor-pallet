@@ -230,6 +230,10 @@ pub mod pallet {
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
 
+		/// The dispute period after a vote has been tallied.
+		#[pallet::constant]
+		type VoteTallyDisputePeriod: Get<<Self::Time as Time>::Moment>;
+
 		/// The withdrawal period.
 		#[pallet::constant]
 		type WithdrawalPeriod: Get<<Self::Time as Time>::Moment>;
@@ -390,21 +394,29 @@ pub mod pallet {
 			timestamp: TimestampOf<T>,
 		},
 		// Governance
+		/// Emitted when a new dispute is opened.
 		NewDispute {
 			dispute_id: DisputeIdOf<T>,
 			query_id: QueryIdOf<T>,
 			timestamp: TimestampOf<T>,
 			reporter: AccountIdOf<T>,
 		},
+		/// Emitted when an address casts their vote.
 		Voted {
 			dispute_id: DisputeIdOf<T>,
 			supports: Option<bool>,
 			voter: AccountIdOf<T>,
 		},
+		/// Emitted when all casting for a vote is tallied.
 		VoteTallied {
 			dispute_id: DisputeIdOf<T>,
 			initiator: AccountIdOf<T>,
 			reporter: AccountIdOf<T>,
+		},
+		/// Emitted when a vote is executed.
+		VoteExecuted {
+			dispute_id: DisputeIdOf<T>,
+			result: VoteResult,
 		},
 		// Query Data
 		QueryDataStored {
@@ -515,8 +527,16 @@ pub mod pallet {
 		NotReporter,
 		/// No value exists at given timestamp.
 		NoValueExists,
+		/// Sufficient time has to pass after tally to allow for disputes.
+		TallyDisputePeriodActive,
+		/// Vote has already been executed.
+		VoteAlreadyExecuted,
 		/// Vote has already been tallied.
 		VoteAlreadyTallied,
+		/// Must be the final vote.
+		VoteNotFinal,
+		/// Vote must be tallied.
+		VoteNotTallied,
 		/// Time for voting has not elapsed.
 		VotingPeriodActive,
 
@@ -1469,21 +1489,27 @@ pub mod pallet {
 
 		/// Reports a slashing of a reporter.
 		///
+		/// - `dispute_id`: The dispute identifier which resulted in the slashing.
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
 		#[pallet::call_index(12)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
+			dispute_id: DisputeIdOf<T>,
 			reporter: AccountIdOf<T>,
 			recipient: AccountIdOf<T>,
-			amount: AmountOf<T>,
+			amount: Amount,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 
-			// todo: reconsider amount and AccountIdOf<T> parameters
-			// todo: update vote result
+			let amount = amount
+				.saturated_into::<u128>() // todo: handle in single call skipping u128
+				.saturated_into::<AmountOf<T>>();
+
+			// execute vote, inferring result based on function called
+			Self::execute_vote(dispute_id, VoteResult::Passed)?;
 
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
@@ -1496,19 +1522,17 @@ pub mod pallet {
 								<AmountOf<T>>::default(),
 							Error::<T>::InsufficientStake
 						);
-						let stake_amount =
-							<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?;
-						if locked_balance >= stake_amount {
+						if locked_balance >= amount {
 							// if locked balance is at least stakeAmount, slash from locked balance
-							staker.locked_balance.saturating_reduce(stake_amount);
+							staker.locked_balance.saturating_reduce(amount);
 						// 	toWithdraw -= stakeAmount;  // todo: required?
-						} else if locked_balance.saturating_add(staked_balance) >= stake_amount {
+						} else if locked_balance.saturating_add(staked_balance) >= amount {
 							// if locked balance + staked balance is at least stake amount,
 							// slash from locked balance and slash remainder from staked balance
 							Self::update_stake_and_pay_rewards(
 								staker,
 								staked_balance
-									.saturating_sub(stake_amount.saturating_sub(locked_balance)),
+									.saturating_sub(amount.saturating_sub(locked_balance)),
 							)?;
 							// 	toWithdraw -= _lockedBalance; // todo: required?
 							staker.locked_balance = <AmountOf<T>>::default();
@@ -1529,22 +1553,25 @@ pub mod pallet {
 		#[pallet::call_index(13)]
 		pub fn report_invalid_dispute(
 			origin: OriginFor<T>,
-			_dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeIdOf<T>,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
-			// todo: update vote result
+			// execute vote, inferring result based on function called
+			Self::execute_vote(dispute_id, VoteResult::Invalid)?;
 			Ok(())
 		}
 
 		#[pallet::call_index(14)]
 		pub fn slash_dispute_initiator(
 			origin: OriginFor<T>,
-			_dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeIdOf<T>,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
-			// todo: update vote result
+			// execute vote, inferring result based on function called
+			Self::execute_vote(dispute_id, VoteResult::Failed)?;
+			// todo: slash dispute initiator
 			Ok(())
 		}
 

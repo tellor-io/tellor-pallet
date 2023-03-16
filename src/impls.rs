@@ -1,6 +1,17 @@
 use super::*;
 
 impl<T: Config> Pallet<T> {
+	pub(super) fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
+		let pallet_id = T::PalletId::get();
+		T::Token::transfer(
+			&pallet_id.into_account_truncating(),
+			&pallet_id.into_sub_account_truncating(b"staking"),
+			amount,
+			false,
+		)?;
+		Ok(())
+	}
+
 	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, Error<T>> {
 		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
 	}
@@ -15,28 +26,45 @@ impl<T: Config> Pallet<T> {
 		<VoteInfo<T>>::get(dispute_id).and_then(|v| v.voted.get(&voter).copied())
 	}
 
-	/// Returns the block number at a given timestamp.
+	/// Executes the vote.
 	/// # Arguments
-	/// * `query_id` - The identifier of the specific data feed.
-	/// * `timestamp` - The timestamp to find the corresponding block number for.
-	/// # Returns
-	/// Block number of the timestamp for the given query identifier and timestamp, if found.
-	pub fn get_block_number_by_timestamp(
-		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
-	) -> Option<BlockNumberOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|r| r.timestamp_to_block_number.get(&timestamp).copied())
-	}
-
-	pub(super) fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
-		let pallet_id = T::PalletId::get();
-		T::Token::transfer(
-			&pallet_id.into_account_truncating(),
-			&pallet_id.into_sub_account_truncating(b"staking"),
-			amount,
-			false,
-		)?;
+	/// * `dispute_id` - The identifier of the dispute.
+	/// * `result` - The result of the dispute, as determined by governance.
+	pub(super) fn execute_vote(dispute_id: DisputeIdOf<T>, result: VoteResult) -> DispatchResult {
+		// Ensure validity of id
+		ensure!(
+			dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),
+			Error::<T>::InvalidDispute
+		);
+		<VoteInfo<T>>::try_mutate(dispute_id, |maybe| match maybe {
+			None => Err(Error::<T>::InvalidVote),
+			Some(vote) => {
+				// Ensure vote has not already been executed, and vote must be tallied
+				ensure!(!vote.executed, Error::<T>::VoteAlreadyExecuted);
+				ensure!(vote.tally_date > <TimestampOf<T>>::default(), Error::<T>::VoteNotTallied);
+				// Ensure vote must be final vote and that time has to be pass after the vote is tallied
+				ensure!(
+					<VoteRounds<T>>::get(vote.identifier).len() == vote.vote_round as usize,
+					Error::VoteNotFinal
+				);
+				ensure!(
+					T::Time::now().saturating_sub(vote.tally_date) >=
+						T::VoteTallyDisputePeriod::get(),
+					Error::<T>::TallyDisputePeriodActive
+				);
+				vote.executed = true;
+				let dispute =
+					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?;
+				<OpenDisputesOnId<T>>::mutate(dispute.query_id, |maybe| {
+					if let Some(disputes) = maybe {
+						disputes.saturating_dec();
+					}
+				});
+				vote.result = Some(result.clone());
+				Ok(())
+			},
+		})?;
+		Self::deposit_event(Event::VoteExecuted { dispute_id, result });
 		Ok(())
 	}
 
@@ -47,8 +75,8 @@ impl<T: Config> Pallet<T> {
 		amount: AmountOf<T>,
 	) -> DispatchResult {
 		let Some(mut feed) = <DataFeeds<T>>::get(query_id, feed_id) else {
-            return Err(Error::<T>::InvalidFeed.into());
-        };
+			return Err(Error::<T>::InvalidFeed.into());
+		};
 
 		ensure!(amount > <AmountOf<T>>::default(), Error::<T>::InvalidAmount);
 		feed.details.balance.saturating_accrue(amount);
@@ -81,6 +109,20 @@ impl<T: Config> Pallet<T> {
 			feed_details,
 		});
 		Ok(())
+	}
+
+	/// Returns the block number at a given timestamp.
+	/// # Arguments
+	/// * `query_id` - The identifier of the specific data feed.
+	/// * `timestamp` - The timestamp to find the corresponding block number for.
+	/// # Returns
+	/// Block number of the timestamp for the given query identifier and timestamp, if found.
+	pub fn get_block_number_by_timestamp(
+		query_id: QueryIdOf<T>,
+		timestamp: TimestampOf<T>,
+	) -> Option<BlockNumberOf<T>> {
+		<Reports<T>>::get(query_id)
+			.and_then(|r| r.timestamp_to_block_number.get(&timestamp).copied())
 	}
 
 	/// Read current data feeds.
@@ -140,6 +182,11 @@ impl<T: Config> Pallet<T> {
 		None
 	}
 
+	/// Returns the current value of a data feed given a specific identifier.
+	/// # Arguments
+	/// * `query_id` - The identifier of the specific data feed.
+	/// # Returns
+	/// The latest submitted value for the given identifier.
 	pub fn get_current_value(query_id: QueryIdOf<T>) -> Option<ValueOf<T>> {
 		// todo: implement properly
 		<Reports<T>>::get(query_id)

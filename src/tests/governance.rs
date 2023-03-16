@@ -5,6 +5,7 @@ use sp_core::Get;
 use sp_runtime::traits::BadOrigin;
 
 type DisputeRoundReportingPeriod = <Test as Config>::DisputeRoundReportingPeriod;
+type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
 
 #[test]
 fn begin_dispute() {
@@ -86,26 +87,81 @@ fn begin_dispute() {
 		let dispute_period = DisputeRoundReportingPeriod::get();
 		with_block_after(dispute_period, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
-			// todo: report slash
-			// await h.advanceTime(86400 * 2);
-			// await gov.executeVote(1)
 		});
 
-		with_block_after(dispute_period * 2, || {
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::report_slash(
+				Origin::Governance.into(),
+				dispute_id,
+				reporter,
+				another_reporter,
+				STAKE_AMOUNT.into()
+			));
+		});
+
+		let (timestamp, _) = with_block_after(dispute_period * 2, || {
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
 				Error::DisputeRoundReportingPeriodExpired
 			); //assert second dispute started within a day
 
-			// todo: implement after report slash completed
-			// await token.connect(accounts[3]).approve(flex.address, web3.utils.toWei("1000"))
-			// await flex.connect(accounts[3]).depositStake(web3.utils.toWei("10"))
-			// await flex.connect(accounts[3]).submitValue(ETH_QUERY_ID, h.bytes(100), 0, ETH_QUERY_DATA)
-			// blocky = await h.getBlock()
-			// await h.advanceTime(86400 + 10)
-			// await token.connect(accounts[2]).approve(gov.address, web3.utils.toWei("10"))
-			// await h.expectThrow(gov.connect(accounts[2]).beginDispute(ETH_QUERY_ID, blocky.timestamp)) //dispute must be started within timeframe
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				3,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(3),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+		});
+
+		with_block_after(DisputeRoundReportingPeriod::get(), || {
+			assert_noop!(
+				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
+				Error::DisputeReportingPeriodExpired
+			); //dispute must be started within timeframe
 		})
+	});
+}
+
+#[test]
+fn begins_dispute_xcm() {
+	new_test_ext().execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+
+			let reporter = 1;
+			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+
+			let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+			let query_id = keccak_256(query_data.as_ref()).into();
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(123),
+				0,
+				query_data
+			));
+
+			let timestamp = Timestamp::now();
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
+
+			let sent_messages = sent_xcm();
+			let (_, sent_message) = sent_messages.first().unwrap();
+			assert!(sent_message
+				.0
+				.contains(&DescendOrigin(X1(PalletInstance(Tellor::index() as u8)))));
+			// todo: check remaining instructions
+
+			System::assert_last_event(
+				Event::NewDispute { dispute_id: 1, query_id, timestamp, reporter }.into(),
+			);
+		});
 	});
 }
 

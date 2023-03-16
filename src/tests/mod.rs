@@ -1,6 +1,6 @@
 use crate::{
 	mock::*,
-	types::{AccountIdOf, Address, Amount, AmountOf, QueryDataOf, ValueOf},
+	types::{AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryIdOf, ValueOf},
 	Event, Origin,
 };
 use ethabi::{Bytes, Token, Uint};
@@ -14,40 +14,24 @@ mod oracle;
 
 type Error = crate::Error<Test>;
 
-#[test]
-fn begins_dispute() {
-	new_test_ext().execute_with(|| {
-		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
+fn submit_value_and_begin_dispute(
+	reporter: AccountIdOf<Test>,
+	query_id: QueryIdOf<Test>,
+	query_data: QueryDataOf<Test>,
+) -> DisputeIdOf<Test> {
+	assert_ok!(Tellor::submit_value(
+		RuntimeOrigin::signed(reporter),
+		query_id,
+		uint_value(10),
+		0,
+		query_data
+	));
+	assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, Timestamp::get()));
 
-			let reporter = 1;
-			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
-
-			let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
-			let query_id = keccak_256(query_data.as_ref()).into();
-			assert_ok!(Tellor::submit_value(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				uint_value(123),
-				0,
-				query_data
-			));
-
-			let timestamp = Timestamp::now();
-			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
-
-			let sent_messages = sent_xcm();
-			let (_, sent_message) = sent_messages.first().unwrap();
-			assert!(sent_message
-				.0
-				.contains(&DescendOrigin(X1(PalletInstance(Tellor::index() as u8)))));
-			// todo: check remaining instructions
-
-			System::assert_last_event(
-				Event::NewDispute { dispute_id: 1, query_id, timestamp, reporter }.into(),
-			);
-		});
-	});
+	match System::events().last().unwrap().event {
+		RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) => dispute_id,
+		_ => panic!(),
+	}
 }
 
 fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address: Address) {

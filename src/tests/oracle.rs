@@ -7,10 +7,12 @@ use frame_support::{assert_noop, assert_ok};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, Get, U256};
 use sp_runtime::traits::BadOrigin;
 
-type ReportingLock = <Test as Config>::ReportingLock;
-type WithdrawalPeriod = <Test as Config>::WithdrawalPeriod;
 type BoundedReportsSubmittedByQueryId =
 	BoundedBTreeMap<QueryIdOf<Test>, u128, <Test as Config>::MaxQueriesPerReporter>;
+type DisputeRoundReportingPeriod = <Test as Config>::DisputeRoundReportingPeriod;
+type ReportingLock = <Test as Config>::ReportingLock;
+type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
+type WithdrawalPeriod = <Test as Config>::WithdrawalPeriod;
 
 #[test]
 fn deposit_stake() {
@@ -259,6 +261,8 @@ fn request_stake_withdraw() {
 
 #[test]
 fn slash_reporter() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let recipient = 2;
 	let amount = token(1_000);
@@ -270,11 +274,10 @@ fn slash_reporter() {
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
 	ext.execute_with(|| {
-		with_block(|| {
-			assert_noop!(Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, 0), BadOrigin);
+		let (_, dispute_id) = with_block(|| {
 			assert_noop!(
-				Tellor::report_slash(Origin::Governance.into(), 0, 0, 0),
-				Error::InsufficientStake
+				Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, 0, STAKE_AMOUNT.into()),
+				BadOrigin
 			);
 
 			assert_ok!(Tellor::report_stake_deposited(
@@ -284,17 +287,37 @@ fn slash_reporter() {
 				address
 			));
 
+			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
+		});
+
+		with_block_after(DisputeRoundReportingPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(dispute_id));
+		});
+
+		let (_, dispute_id) = with_block_after(VoteTallyDisputePeriod::get(), || {
 			// Slash when locked balance = 0
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, amount);
 			assert_eq!(staker_details.locked_balance, 0);
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
+			assert_noop!(
+				Tellor::report_slash(
+					Origin::Governance.into(),
+					dispute_id,
+					0,
+					0,
+					(STAKE_AMOUNT + 1).into()
+				),
+				Error::InsufficientStake
+			);
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
+				dispute_id,
 				reporter,
 				recipient,
-				STAKE_AMOUNT
+				STAKE_AMOUNT.into()
 			));
+
 			// todo?
 			// blocky0 = await h.getBlock()
 			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky0.timestamp)
@@ -306,6 +329,14 @@ fn slash_reporter() {
 			assert_eq!(Tellor::get_total_stakers(), 1); // Still one staker as reporter has 900 staked & stake amount is 100
 			assert_eq!(Tellor::get_total_stake_amount(), token(900));
 
+			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
+		});
+
+		with_block_after(DisputeRoundReportingPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(dispute_id));
+		});
+
+		let (_, dispute_id) = with_block_after(VoteTallyDisputePeriod::get(), || {
 			// Slash when lockedBalance >= stakeAmount
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
@@ -319,9 +350,10 @@ fn slash_reporter() {
 			assert!(staker_details.staked);
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
+				dispute_id,
 				reporter,
 				recipient,
-				STAKE_AMOUNT
+				STAKE_AMOUNT.into()
 			));
 			// todo?
 			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky1.timestamp)
@@ -332,6 +364,14 @@ fn slash_reporter() {
 			assert!(staker_details.staked);
 			assert_eq!(Tellor::get_total_stake_amount(), token(800));
 
+			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
+		});
+
+		with_block_after(DisputeRoundReportingPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(dispute_id));
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
 			// Slash when 0 < locked balance < stake amount
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
@@ -345,9 +385,10 @@ fn slash_reporter() {
 			assert_eq!(Tellor::get_total_stake_amount(), token(795));
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
+				dispute_id,
 				reporter,
 				recipient,
-				STAKE_AMOUNT
+				STAKE_AMOUNT.into()
 			));
 			// todo?
 			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky2.timestamp)
@@ -370,7 +411,7 @@ fn slash_reporter() {
 			assert_eq!(Tellor::get_total_stake_amount(), token(75));
 		});
 
-		with_block_after(WithdrawalPeriod::get(), || {
+		let (_, dispute_id) = with_block_after(WithdrawalPeriod::get(), || {
 			assert_ok!(Tellor::report_stake_withdrawal(
 				Origin::Staking.into(),
 				reporter,
@@ -380,11 +421,23 @@ fn slash_reporter() {
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, token(75));
 			assert_eq!(staker_details.locked_balance, token(0));
+
+			// reporter now has insufficient stake for another submission, so top up stake before final dispute/slash
+			super::deposit_stake(reporter, STAKE_AMOUNT - token(75), address);
+			submit_value_and_begin_dispute(reporter, query_id, query_data) // start dispute, required for slashing
+		});
+
+		with_block_after(DisputeRoundReportingPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(dispute_id));
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
+				dispute_id,
 				reporter,
 				recipient,
-				STAKE_AMOUNT
+				STAKE_AMOUNT.into()
 			));
 			// todo?
 			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky.timestamp)

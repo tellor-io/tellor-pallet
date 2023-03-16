@@ -74,7 +74,7 @@ impl frame_system::Config for Test {
 	type SystemWeightInfo = ();
 	type SS58Prefix = ConstU16<42>;
 	type OnSetCode = ();
-	type MaxConsumers = frame_support::traits::ConstU32<16>;
+	type MaxConsumers = ConstU32<16>;
 }
 impl pallet_balances::Config for Test {
 	type Balance = u64;
@@ -128,6 +128,7 @@ impl tellor::Config for Test {
 	type ReportingLock = ConstU64<42>;
 	type Staking = ();
 	type StakingOrigin = EnsureStaking;
+	type VoteTallyDisputePeriod = ();
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ();
@@ -774,6 +775,9 @@ fn state_call_encoding() {
 	let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
 	// Example encoding of runtime-api calls via state.call rpc
+	const AUTOPAY: &str = "TellorAutoPay";
+	const GOVERNANCE: &str = "TellorGovernance";
+
 	const ORACLE: &str = "TellorOracle";
 	call(ORACLE, "get_block_number_by_timestamp", &(query_id, timestamp).encode());
 	call(ORACLE, "get_current_value", &query_id.encode());

@@ -70,10 +70,10 @@ License: Unlicense
 
 ### Governance
 
-| Dispatchable Function              |    Functional Test     | Notes           |
-|------------------------------------|:----------------------:|-----------------|
-| :heavy_check_mark: `begin_dispute` | :white_square_button:  | 90% implemented |
-| :white_check_mark: `vote`          | :white_square_button:  |                 |
+| Dispatchable Function              |    Functional Test    | Notes           |
+|------------------------------------|:---------------------:|-----------------|
+| :heavy_check_mark: `begin_dispute` |  :white_check_mark:   | 90% implemented |
+| :white_check_mark: `vote`          | :white_square_button: |                 |
 
 | Runtime API                                     |    Functional Test    | Notes |
 |-------------------------------------------------|:---------------------:|-------|

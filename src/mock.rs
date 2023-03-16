@@ -132,6 +132,7 @@ impl tellor::Config for Test {
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ValueConverter;
+	type VoteTallyDisputePeriod = ConstU64<{ 1 * DAY_IN_MILLISECONDS }>;
 	type WithdrawalPeriod = ConstU64<{ 7 * DAY_IN_MILLISECONDS }>;
 	type Xcm = TestSendXcm;
 }
