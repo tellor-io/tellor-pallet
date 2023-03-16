@@ -114,4 +114,5 @@ License: Unlicense
 - [ ] Define invariants
 - [ ] Fuzzing
 - [ ] Complete integration tests
+- [ ] Update license as applicable, including source files
 - [ ] Move repository
