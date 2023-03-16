@@ -13,6 +13,11 @@ pub(crate) fn register(
 		.encode()
 }
 
+pub(crate) fn deregister() -> Vec<u8> {
+	const FUNCTION: [u8; 4] = [175, 245, 237, 177];
+	FUNCTION.to_vec()
+}
+
 pub(crate) fn confirm_parachain_stake_withdraw_request(
 	address: impl Into<Address>,
 	amount: impl Into<Amount>,
@@ -67,6 +72,31 @@ mod tests {
 				.unwrap()[..],
 			super::register(para_id, pallet_index, stake_amount)[..]
 		)
+	}
+
+	#[allow(deprecated)]
+	fn deregister() -> Function {
+		// deregister()
+		Function {
+			name: "deregister".to_string(),
+			inputs: vec![],
+			outputs: vec![],
+			constant: None,
+			state_mutability: Default::default(),
+		}
+	}
+
+	#[test]
+	#[ignore]
+	fn deregister_function_selector() {
+		// Short signature bytes used for FUNCTION const
+		let function = deregister();
+		println!("{} {:?}", function.signature(), function.short_signature());
+	}
+
+	#[test]
+	fn encodes_deregister_call() {
+		assert_eq!(deregister().encode_input(&vec![]).unwrap()[..], super::deregister()[..])
 	}
 
 	#[allow(deprecated)]
