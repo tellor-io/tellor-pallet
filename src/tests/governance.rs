@@ -635,7 +635,6 @@ fn get_vote_rounds() {
 				query_id,
 				Timestamp::get()
 			));
-			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(true)));
 			let parachain_id: u32 = ParachainId::get();
 			let identifier = keccak_256(&ethabi::encode(&vec![
 				Token::Uint(parachain_id.into()),
@@ -656,9 +655,78 @@ fn get_vote_rounds() {
 }
 
 #[test]
-#[ignore]
 fn get_vote_tally_by_address() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let another_reporter = 2;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L383
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+		});
+
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				another_reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+
+			assert_eq!(
+				Tellor::get_vote_tally_by_address(reporter),
+				0,
+				"vote tally should be correct"
+			);
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(false)));
+			assert_eq!(
+				Tellor::get_vote_tally_by_address(reporter),
+				1,
+				"vote tally should be correct"
+			);
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 2, Some(false)));
+			assert_eq!(
+				Tellor::get_vote_tally_by_address(reporter),
+				2,
+				"vote tally should be correct"
+			);
+		});
+	});
 }
 
 #[test]

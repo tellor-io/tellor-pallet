@@ -84,7 +84,7 @@ License: Unlicense
 | :white_check_mark: `get_vote_count`             |  :white_check_mark:   |       |
 | :white_check_mark: `get_vote_info`              |  :white_check_mark:   |       |
 | :white_check_mark: `get_vote_rounds`            |  :white_check_mark:   |       |
-| :white_check_mark: `get_vote_tally_by_address`  | :white_square_button: |       |
+| :white_check_mark: `get_vote_tally_by_address`  |  :white_check_mark:   |       |
 
 ## Controller Contract Integration
 
