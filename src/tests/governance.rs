@@ -6,6 +6,7 @@ use sp_runtime::traits::BadOrigin;
 
 type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
 type ParachainId = <Test as Config>::ParachainId;
+type ReportingLock = <Test as Config>::ReportingLock;
 type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
 type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
 
@@ -529,6 +530,75 @@ fn get_dispute_info() {
 			assert_eq!(dispute_info.2, uint_value(100), "disputed value should be correct");
 			assert_eq!(dispute_info.3, reporter, "disputed reporter should be correct");
 		});
+	});
+}
+
+#[test]
+fn get_disputes_by_reporter() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let dispute_initiator = 2;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			deposit_stake(dispute_initiator, STAKE_AMOUNT, Address::random())
+		})
+	});
+
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_eq!(Tellor::get_disputes_by_reporter(reporter), Vec::<u32>::new());
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(dispute_initiator),
+				query_id,
+				Timestamp::get()
+			));
+			Timestamp::get()
+		});
+
+		with_block_after(ReportingLock::get(), || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+
+			assert_eq!(Tellor::get_disputes_by_reporter(reporter), vec![1]);
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(dispute_initiator),
+				query_id,
+				Timestamp::get()
+			));
+			assert_eq!(Tellor::get_disputes_by_reporter(reporter), vec![2, 1]);
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+		});
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
+		});
+
+		assert_eq!(Tellor::get_disputes_by_reporter(reporter), vec![2, 1]);
 	});
 }
 

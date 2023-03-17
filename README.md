@@ -74,17 +74,17 @@ License: Unlicense
 | :heavy_check_mark: `begin_dispute` | :white_check_mark:  | 98% implemented |
 | :white_check_mark: `vote`          | :white_check_mark:  |                 |
 
-| Runtime API                                     |    Functional Test    | Notes |
-|-------------------------------------------------|:---------------------:|-------|
-| :white_check_mark: `did_vote`                   |  :white_check_mark:   |       |
-| :white_check_mark: `get_dispute_fee`            |  :white_check_mark:   |       |
-| :white_check_mark: `get_disputes_by_reporter`   | :white_square_button: |       |
-| :white_check_mark: `get_dispute_info`           | :white_square_button: |       |
-| :white_check_mark: `get_open_disputes_on_id`    |  :white_check_mark:   |       |
-| :white_check_mark: `get_vote_count`             |  :white_check_mark:   |       |
-| :white_check_mark: `get_vote_info`              |  :white_check_mark:   |       |
-| :white_check_mark: `get_vote_rounds`            |  :white_check_mark:   |       |
-| :white_check_mark: `get_vote_tally_by_address`  |  :white_check_mark:   |       |
+| Runtime API                                     |   Functional Test   | Notes |
+|-------------------------------------------------|:-------------------:|-------|
+| :white_check_mark: `did_vote`                   | :white_check_mark:  |       |
+| :white_check_mark: `get_dispute_fee`            | :white_check_mark:  |       |
+| :white_check_mark: `get_disputes_by_reporter`   | :white_check_mark:  |       |
+| :white_check_mark: `get_dispute_info`           | :white_check_mark:  |       |
+| :white_check_mark: `get_open_disputes_on_id`    | :white_check_mark:  |       |
+| :white_check_mark: `get_vote_count`             | :white_check_mark:  |       |
+| :white_check_mark: `get_vote_info`              | :white_check_mark:  |       |
+| :white_check_mark: `get_vote_rounds`            | :white_check_mark:  |       |
+| :white_check_mark: `get_vote_tally_by_address`  | :white_check_mark:  |       |
 
 ## Controller Contract Integration
 
