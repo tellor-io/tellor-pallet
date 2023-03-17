@@ -234,7 +234,7 @@ pub(crate) mod governance {
 	}
 
 	/// The status of a potential vote.
-	#[derive(Clone, Encode, Debug, Decode, Eq, PartialEq, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Copy, Encode, Debug, Decode, Eq, PartialEq, TypeInfo, MaxEncodedLen)]
 	pub enum VoteResult {
 		Failed,
 		Passed,

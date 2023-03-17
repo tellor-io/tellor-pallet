@@ -1,6 +1,9 @@
 use super::*;
 use crate::{mock::AccountId, types::Tally, Config, VoteResult};
-use frame_support::{assert_noop, assert_ok, traits::Currency};
+use frame_support::{
+	assert_noop, assert_ok,
+	traits::{fungible::Inspect, Currency},
+};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, Get};
 use sp_runtime::traits::BadOrigin;
 
@@ -170,10 +173,143 @@ fn begins_dispute_xcm() {
 }
 
 #[test]
-#[ignore]
 fn execute_vote() {
-	todo!()
-	// assert(voteInfo[3] == 1, "Vote result should change")
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter_1 = 1;
+	let dispute_reporter = 2;
+	let reporter_3 = 3;
+	let result = VoteResult::Passed;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			deposit_stake(dispute_reporter, STAKE_AMOUNT, Address::random())
+		})
+	});
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L85
+	ext.execute_with(|| {
+		let (timestamp, identifier) = with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter_1,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			//let balance_1 = Balances::balance(&dispute_reporter);
+			assert_noop!(Tellor::execute_vote(1, result), Error::InvalidDispute); // vote id must be valid
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_1),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			// todo
+			// assert_noop!(
+			// 	Tellor::begin_dispute(RuntimeOrigin::signed(4), query_id, Timestamp::get()),
+			// 	pallet_balances::Error::<Test>::InsufficientBalance
+			// ); // must have tokens to pay for dispute
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(dispute_reporter),
+				query_id,
+				Timestamp::get()
+			));
+			//let balance_2 = Balances::balance(&dispute_reporter);
+			assert_eq!(
+				Tellor::get_dispute_info(1).unwrap(),
+				(query_id, Timestamp::get(), uint_value(100), reporter_1)
+			);
+			assert_eq!(
+				Tellor::get_open_disputes_on_id(query_id),
+				1,
+				"open disputes on id should be correct"
+			);
+			let parachain_id: u32 = ParachainId::get();
+			let identifier = keccak_256(&ethabi::encode(&vec![
+				Token::Uint(parachain_id.into()),
+				Token::FixedBytes(query_id.0.to_vec()),
+				Token::Uint(Timestamp::get().into()),
+			]))
+			.into();
+			assert_eq!(
+				Tellor::get_vote_rounds(identifier),
+				vec![1],
+				"number of vote rounds should be correct"
+			);
+			// todo: assert_eq!(balance_1 - balance_2, token(10), "dispute fee paid should be correct");
+
+			assert_noop!(Tellor::execute_vote(10, result), Error::InvalidDispute); // dispute id must exist
+			assert_noop!(Tellor::execute_vote(1, result), Error::VoteNotTallied); // vote must be tallied
+			(Timestamp::get(), identifier)
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+			assert_noop!(Tellor::execute_vote(1, result), Error::TallyDisputePeriodActive); // a day must pass before execution
+		});
+
+		let timestamp = with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::execute_vote(1, result));
+			assert_noop!(Tellor::execute_vote(1, result), Error::VoteAlreadyExecuted); // vote already executed
+			assert_noop!(
+				Tellor::begin_dispute(RuntimeOrigin::signed(dispute_reporter), query_id, timestamp),
+				Error::DisputeRoundReportingPeriodExpired
+			); // assert second dispute started within a day
+
+			let vote = Tellor::get_vote_info(1).unwrap();
+			assert_eq!(vote.identifier, identifier, "identifier should be correct");
+			assert_eq!(vote.vote_round, 1, "vote round should be correct");
+			assert_eq!(vote.executed, true, "vote should be executed");
+			assert_eq!(vote.result, Some(result), "vote should pass");
+
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter_3,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_3),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(dispute_reporter),
+				query_id,
+				Timestamp::get()
+			));
+			Timestamp::get()
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(2));
+			// start new round
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(dispute_reporter),
+				query_id,
+				timestamp
+			));
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_noop!(Tellor::execute_vote(2, result), Error::VoteNotFinal); // vote must be the final vote
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(3));
+			assert_noop!(Tellor::execute_vote(3, result), Error::TallyDisputePeriodActive); // must wait longer
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::execute_vote(3, result));
+		});
+	});
 }
 
 #[test]
