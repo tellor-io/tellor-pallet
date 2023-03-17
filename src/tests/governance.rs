@@ -1,6 +1,6 @@
 use super::*;
 use crate::{mock::AccountId, types::Tally, Config, VoteResult};
-use frame_support::{assert_noop, assert_ok};
+use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, Get};
 use sp_runtime::traits::BadOrigin;
 
@@ -730,7 +730,60 @@ fn get_vote_tally_by_address() {
 }
 
 #[test]
-#[ignore]
-fn get_user_tips() {
-	todo!()
+fn get_tips_by_address() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let user = 1;
+	let reporter = 2;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L404
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			Balances::make_free_balance_be(&user, token(1_000) + 1);
+			assert_ok!(Tellor::tip(
+				RuntimeOrigin::signed(user),
+				query_id,
+				token(20),
+				query_data.clone()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data,
+			));
+
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(user), 1, Some(true)));
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+			Timestamp::get()
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
+			assert_eq!(
+				Tellor::get_vote_info(1).unwrap().users,
+				Tally::<AmountOf<Test>> { does_support: token(20), against: 0, invalid_query: 0 },
+				"vote users does_support weight should be based on tip total"
+			)
+		});
+	});
 }
