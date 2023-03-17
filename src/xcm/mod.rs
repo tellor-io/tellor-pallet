@@ -8,7 +8,7 @@ use frame_support::{
 	traits::{OriginTrait, PalletInfoAccess},
 };
 use sp_core::Get;
-use sp_std::{fmt::Debug, vec, vec::Vec};
+use sp_std::{boxed::Box, fmt::Debug, vec, vec::Vec};
 use traits::SendXcm;
 use xcm_executor::traits::{Convert, ConvertOrigin};
 
