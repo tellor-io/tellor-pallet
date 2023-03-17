@@ -91,18 +91,15 @@ impl Into<MultiLocation> for ContractLocation {
 }
 
 pub(crate) fn transact(
-	fees: MultiAsset,
+	fees: Box<MultiAsset>,
 	weight_limit: WeightLimit,
 	require_weight_at_most: u64,
 	call: Vec<u8>,
 ) -> Xcm<()> {
-	let withdrawal_assets =
-		MultiAssets::from_sorted_and_deduplicated_skip_checks(vec![fees.clone()]);
-
 	// Construct xcm message
 	Xcm(vec![
-		WithdrawAsset(withdrawal_assets),
-		BuyExecution { fees, weight_limit },
+		WithdrawAsset((*fees.clone()).into()),
+		BuyExecution { fees: *fees, weight_limit },
 		Transact {
 			origin_type: OriginKind::SovereignAccount,
 			require_weight_at_most,
@@ -112,7 +109,7 @@ pub(crate) fn transact(
 }
 
 pub(crate) fn transact_with_config(call: Vec<u8>, config: XcmConfig) -> Xcm<()> {
-	transact(config.fees, config.weight_limit, config.require_weight_at_most, call)
+	transact(Box::new(config.fees), config.weight_limit, config.require_weight_at_most, call)
 }
 
 #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo)]

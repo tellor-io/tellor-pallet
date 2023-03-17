@@ -417,6 +417,8 @@ pub mod pallet {
 		Configured { stake_amount: AmountOf<T> },
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
+		/// Emitted when deregistration from the controller contracts is attempted.
+		DeregistrationAttempted { para_id: u32, contract_address: Address },
 	}
 
 	#[pallet::error]
@@ -472,6 +474,8 @@ pub mod pallet {
 		ValueDisputed,
 
 		// Oracle
+		/// Cannot deregister due to active stake.
+		ActiveStake,
 		InvalidAddress,
 		/// Balance must be greater than stake amount.
 		InsufficientStake,
@@ -590,7 +594,7 @@ pub mod pallet {
 			// Register relevant supplied config with parachain registry contract
 			let registry_contract = T::Registry::get();
 			let message = xcm::transact(
-				*fees,
+				fees,
 				weight_limit,
 				require_weight_at_most,
 				ethereum_xcm::transact(
@@ -1577,7 +1581,35 @@ pub mod pallet {
 		#[pallet::call_index(15)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
-			todo!()
+			ensure!(
+				Self::get_total_stake_amount() == <AmountOf<T>>::default(),
+				Error::<T>::ActiveStake
+			);
+
+			// Update local configuration
+			<StakeAmount<T>>::set(None);
+			Self::deposit_event(Event::Configured { stake_amount: <AmountOf<T>>::default() });
+
+			// Register relevant supplied config with parachain registry contract
+			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotRegistered)?;
+			let registry_contract = T::Registry::get();
+			let message = xcm::transact_with_config(
+				ethereum_xcm::transact(
+					registry_contract.address,
+					registry::deregister()
+						.try_into()
+						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+					config.gas_limit,
+					None,
+				),
+				config.xcm_config,
+			);
+			Self::send_xcm(registry_contract.para_id, message)?;
+			Self::deposit_event(Event::DeregistrationAttempted {
+				para_id: registry_contract.para_id,
+				contract_address: registry_contract.address.into(),
+			});
+			Ok(())
 		}
 	}
 }

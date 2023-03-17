@@ -93,7 +93,7 @@ pub(crate) fn transact(
 		xcm_transaction: EthereumXcmTransaction::V2(EthereumXcmTransactionV2 {
 			gas_limit: gas_limit.into(),
 			action: TransactionAction::Call(contract_address.into()),
-			value: value.unwrap_or(U256::zero()),
+			value: value.unwrap_or_default(),
 			input: call_data,
 			access_list: None,
 		}),
