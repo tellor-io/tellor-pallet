@@ -1,9 +1,11 @@
 use super::*;
-use crate::{types::Tally, Config, VoteResult};
+use crate::{mock::AccountId, types::Tally, Config, VoteResult};
 use frame_support::{assert_noop, assert_ok};
-use sp_core::Get;
+use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, Get};
 use sp_runtime::traits::BadOrigin;
 
+type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
+type ParachainId = <Test as Config>::ParachainId;
 type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
 type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
 
@@ -526,9 +528,80 @@ fn get_vote_count() {
 }
 
 #[test]
-#[ignore]
 fn get_vote_info() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L322
+	ext.execute_with(|| {
+		let (disputed_time, disputed_block) = with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(true)));
+			(Timestamp::get(), System::block_number())
+		});
+
+		let tallied = with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+			Timestamp::get()
+		});
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
+			let vote = Tellor::get_vote_info(1).unwrap();
+			let parachain_id: u32 = ParachainId::get();
+			assert_eq!(
+				vote.identifier,
+				keccak_256(&ethabi::encode(&vec![
+					Token::Uint(parachain_id.into()),
+					Token::FixedBytes(query_id.0.to_vec()),
+					Token::Uint(disputed_time.into())
+				]))
+				.into(),
+				"vote identifier should be correct"
+			);
+			assert_eq!(vote.vote_round, 1, "vote round should be correct");
+			assert_eq!(vote.start_date, disputed_time, "vote start date should be correct");
+			assert_eq!(vote.block_number, disputed_block, "vote block number should be correct");
+			assert_eq!(vote.fee, token(10), "vote fee should be correct");
+			assert_eq!(vote.tally_date, tallied, "vote tally date should be correct");
+			assert_eq!(
+				vote.users,
+				Tally::<AmountOf<Test>>::default(),
+				"vote users should be correct"
+			);
+			assert_eq!(
+				vote.reporters,
+				Tally::<u128> { does_support: 1, against: 0, invalid_query: 0 },
+				"vote reporters should be correct"
+			);
+			assert_eq!(vote.executed, true, "vote executed should be correct");
+			assert_eq!(vote.result, Some(VoteResult::Passed), "vote result should be Passed");
+			assert_eq!(vote.initiator, reporter, "vote initiator should be correct");
+			let voted: BoundedVotes = bounded_btree_map!(reporter => true);
+			assert_eq!(vote.voted, voted, "vote account vote status should be correct");
+		})
+	});
 }
 
 #[test]

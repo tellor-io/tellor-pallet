@@ -20,7 +20,7 @@ use sp_std::cell::RefCell;
 use std::time::{SystemTime, UNIX_EPOCH};
 use xcm::latest::prelude::*;
 
-type AccountId = u128; // u64 is not enough to hold bytes used to generate bounty account
+pub(crate) type AccountId = u128; // u64 is not enough to hold bytes used to generate bounty account
 type Balance = u64;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
