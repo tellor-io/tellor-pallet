@@ -605,9 +605,54 @@ fn get_vote_info() {
 }
 
 #[test]
-#[ignore]
 fn get_vote_rounds() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L361
+	ext.execute_with(|| {
+		let (timestamp, identifier) = with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				Timestamp::get()
+			));
+			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(true)));
+			let parachain_id: u32 = ParachainId::get();
+			let identifier = keccak_256(&ethabi::encode(&vec![
+				Token::Uint(parachain_id.into()),
+				Token::FixedBytes(query_id.0.to_vec()),
+				Token::Uint(Timestamp::get().into()),
+			]))
+			.into();
+			assert_eq!(Tellor::get_vote_rounds(identifier), vec![1]);
+			(Timestamp::get(), identifier)
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(1));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
+			assert_eq!(Tellor::get_vote_rounds(identifier), vec![1, 2]);
+		});
+	});
 }
 
 #[test]
