@@ -412,7 +412,7 @@ fn slash_reporter() {
 		});
 
 		let dispute_id = with_block_after(WithdrawalPeriod::get(), || {
-			assert_ok!(Tellor::report_stake_withdrawal(
+			assert_ok!(Tellor::report_stake_withdrawn(
 				Origin::Staking.into(),
 				reporter,
 				token(625).into(),
@@ -638,7 +638,7 @@ fn withdraw_stake() {
 			));
 			assert_eq!(Tellor::get_total_stakers(), 1);
 			assert_noop!(
-				Tellor::report_stake_withdrawal(
+				Tellor::report_stake_withdrawn(
 					Origin::Staking.into(),
 					reporter,
 					STAKE_AMOUNT.into(),
@@ -653,7 +653,7 @@ fn withdraw_stake() {
 				address
 			));
 			assert_noop!(
-				Tellor::report_stake_withdrawal(
+				Tellor::report_stake_withdrawn(
 					Origin::Staking.into(),
 					reporter,
 					STAKE_AMOUNT.into(),
@@ -667,7 +667,7 @@ fn withdraw_stake() {
 		});
 
 		with_block_after(WithdrawalPeriod::get(), || {
-			assert_ok!(Tellor::report_stake_withdrawal(
+			assert_ok!(Tellor::report_stake_withdrawn(
 				Origin::Staking.into(),
 				reporter,
 				token(10).into(),
@@ -677,7 +677,7 @@ fn withdraw_stake() {
 			assert_eq!(staker_details.staked_balance, token(90));
 			assert_eq!(staker_details.locked_balance, 0);
 			assert_noop!(
-				Tellor::report_stake_withdrawal(
+				Tellor::report_stake_withdrawn(
 					Origin::Staking.into(),
 					reporter,
 					token(10).into(),

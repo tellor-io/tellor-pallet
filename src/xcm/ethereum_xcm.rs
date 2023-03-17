@@ -38,6 +38,7 @@ pub enum EthereumXcmFee {
 	Auto,
 }
 
+/// Xcm transact's Ethereum transaction.
 #[derive(Clone, Debug, Eq, PartialEq, Encode, TypeInfo)]
 #[allow(dead_code)]
 pub enum EthereumXcmTransaction {
@@ -45,22 +46,35 @@ pub enum EthereumXcmTransaction {
 	V2(EthereumXcmTransactionV2),
 }
 
+/// Xcm transact's Ethereum transaction.
 #[derive(Clone, Debug, Eq, PartialEq, Encode, TypeInfo)]
 pub struct EthereumXcmTransactionV1 {
+	/// Gas limit to be consumed by remote EVM execution.
 	pub gas_limit: U256,
+	/// Fee configuration of choice.
 	pub fee_payment: EthereumXcmFee,
+	/// Either a Call (the callee, account or contract address) or Create (currently unsupported).
 	pub action: TransactionAction,
+	/// Value to be transferred.
 	pub value: U256,
+	/// Input data for a contract call.
 	pub input: BoundedVec<u8, ConstU32<MAX_ETHEREUM_XCM_INPUT_SIZE>>,
+	/// Map of addresses to be pre-paid to warm storage.
 	pub access_list: Option<Vec<(H160, Vec<H256>)>>,
 }
 
+/// Xcm transact's Ethereum transaction.
 #[derive(Clone, Debug, Eq, PartialEq, Encode, TypeInfo)]
 pub struct EthereumXcmTransactionV2 {
+	/// Gas limit to be consumed by remote EVM execution.
 	pub gas_limit: U256,
+	/// Either a Call (the callee, account or contract address) or Create (currently unsupported).
 	pub action: TransactionAction,
+	/// Value to be transferred.
 	pub value: U256,
+	/// Input data for a contract call.
 	pub input: BoundedVec<u8, ConstU32<MAX_ETHEREUM_XCM_INPUT_SIZE>>,
+	/// Map of addresses to be pre-paid to warm storage.
 	pub access_list: Option<Vec<(H160, Vec<H256>)>>,
 }
 

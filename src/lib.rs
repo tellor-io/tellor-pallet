@@ -556,6 +556,13 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Registers the parachain with the Tellor controller contracts.
+		///
+		/// - `stake_amount`: The stake amount required to report oracle data to the parachain.
+		/// - `fees`: The asset(s) to pay for cross-chain message fees.
+		/// - `weight_limit`: The maximum amount of weight to purchase for remote execution of messages.
+		/// - `require_weight_at_most`: The maximum weight of any remote call.
+		/// - `gas_limit`: Gas limit to be consumed by remote EVM execution.
 		#[pallet::call_index(0)]
 		pub fn register(
 			origin: OriginFor<T>,
@@ -1220,42 +1227,40 @@ pub mod pallet {
 				reporter: dispute_initiator.clone(),
 			});
 
-			{
-				// Lookup corresponding addresses on controller chain
-				let dispute_initiator = <StakerDetails<T>>::get(&dispute_initiator)
-					.ok_or(Error::<T>::NotReporter)?
-					.address;
-				let disputed_reporter = <StakerDetails<T>>::get(&dispute.disputed_reporter)
-					.ok_or(Error::<T>::NotReporter)?
-					.address;
+			// Lookup corresponding addresses on controller chain
+			let dispute_initiator = <StakerDetails<T>>::get(&dispute_initiator)
+				.ok_or(Error::<T>::NotReporter)?
+				.address;
+			let disputed_reporter = <StakerDetails<T>>::get(&dispute.disputed_reporter)
+				.ok_or(Error::<T>::NotReporter)?
+				.address;
 
-				let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
 
-				// todo: charge dispute initiator corresponding fees
+			// todo: charge dispute initiator corresponding fees
 
-				let governance_contract = T::Governance::get();
-				let message = xcm::transact_with_config(
-					ethereum_xcm::transact(
-						governance_contract.address,
-						governance::begin_parachain_dispute(
-							query_id.as_ref(),
-							timestamp.saturated_into::<u128>(),
-							&dispute.value,
-							disputed_reporter,
-							dispute_initiator,
-							dispute_fee,
-							<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
-						)
-						.try_into()
-						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-						config.gas_limit,
-						None,
-					),
-					config.xcm_config,
-				);
-				Self::send_xcm(governance_contract.para_id, message)?;
-				// todo: emit event such as GovernanceBeginDisputeAttempted?
-			}
+			let governance_contract = T::Governance::get();
+			let message = xcm::transact_with_config(
+				ethereum_xcm::transact(
+					governance_contract.address,
+					governance::begin_parachain_dispute(
+						query_id.as_ref(),
+						timestamp.saturated_into::<u128>(),
+						&dispute.value,
+						disputed_reporter,
+						dispute_initiator,
+						dispute_fee,
+						<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+					)
+					.try_into()
+					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+					config.gas_limit,
+					None,
+				),
+				config.xcm_config,
+			);
+			Self::send_xcm(governance_contract.para_id, message)?;
+			// todo: emit event such as GovernanceBeginDisputeAttempted?
 			Ok(())
 		}
 
@@ -1436,7 +1441,7 @@ pub mod pallet {
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
 		#[pallet::call_index(11)]
-		pub fn report_stake_withdrawal(
+		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
 			amount: Amount,
@@ -1474,7 +1479,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Reports a slashing of a reporter.
+		/// Reports a slashing of a reporter, due to a passing vote.
 		///
 		/// - `dispute_id`: The dispute identifier which resulted in the slashing.
 		/// - `reporter`: The address of the slashed reporter.
@@ -1537,6 +1542,9 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Reports the result of a dispute as invalid.
+		///
+		/// - `dispute_id`: The identifier of the dispute.
 		#[pallet::call_index(13)]
 		pub fn report_invalid_dispute(
 			origin: OriginFor<T>,
@@ -1549,6 +1557,9 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Slashes a dispute initiator, due to a failed vote.
+		///
+		/// - `dispute_id`: The identifier of the dispute.
 		#[pallet::call_index(14)]
 		pub fn slash_dispute_initiator(
 			origin: OriginFor<T>,
@@ -1562,6 +1573,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Deregisters the parachain from the Tellor controller contracts.
 		#[pallet::call_index(15)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
