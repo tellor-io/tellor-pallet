@@ -1,17 +1,22 @@
 use crate::{
+	contracts::registry,
 	mock::*,
 	types::{AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryIdOf, ValueOf},
-	Event, Origin,
+	xcm::{ethereum_xcm, XcmConfig},
+	Event, Origin, StakeAmount,
 };
 use ethabi::{Bytes, Token, Uint};
-use frame_support::{assert_ok, traits::PalletInfoAccess};
+use frame_support::{assert_noop, assert_ok, traits::PalletInfoAccess};
 use sp_core::{bytes::to_hex, keccak_256, H256};
-use xcm::latest::prelude::*;
+use sp_runtime::traits::BadOrigin;
+use xcm::{latest::prelude::*, DoubleEncoded};
 
 mod autopay;
 mod governance;
 mod oracle;
 
+type Config = crate::types::Configuration;
+type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
 
 fn submit_value_and_begin_dispute(
@@ -74,6 +79,32 @@ fn uint_value(value: impl Into<Uint>) -> ValueOf<Test> {
 	ethabi::encode(&[Token::Uint(value.into())]).try_into().unwrap()
 }
 
+fn xcm_transact(
+	call: DoubleEncoded<RuntimeCall>,
+	fees: Box<MultiAsset>,
+	weight_limit: WeightLimit,
+	require_weight_at_most: u64,
+) -> Vec<(MultiLocation, Xcm<()>)> {
+	vec![(
+		MultiLocation { parents: 1, interior: X1(Parachain(PARA_ID)) },
+		Xcm(vec![
+			DescendOrigin(X1(PalletInstance(PALLET_INDEX))), // interior
+			WithdrawAsset((*fees.clone()).into()),
+			BuyExecution { fees: *fees, weight_limit },
+			Transact {
+				origin_type: OriginKind::SovereignAccount,
+				require_weight_at_most,
+				call: call.into(),
+			},
+		]),
+	)]
+}
+
+#[test]
+fn converts_token() {
+	assert_eq!(token(2.97), 2_970_000_000_000)
+}
+
 #[test]
 fn encodes_spot_price() {
 	assert_eq!(
@@ -83,6 +114,68 @@ fn encodes_spot_price() {
 }
 
 #[test]
-fn converts_token() {
-	assert_eq!(token(2.97), 2_970_000_000_000)
+fn register() {
+	let fees = Box::new(MultiAsset {
+		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }),
+		fun: Fungible(300_000_000_000_000u128),
+	});
+	let weight_limit = WeightLimit::Limited(123456);
+	let require_weight_at_most = u64::MAX;
+	let gas_limit = u128::MAX;
+	let mut ext = new_test_ext();
+
+	ext.execute_with(|| {
+		with_block(|| {
+			for origin in
+				vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
+			{
+				assert_noop!(Tellor::register(origin, 0, fees.clone(), Unlimited, 0, 0), BadOrigin);
+			}
+
+			assert_ok!(Tellor::register(
+				RuntimeOrigin::root(),
+				STAKE_AMOUNT,
+				fees.clone(),
+				weight_limit.clone(),
+				require_weight_at_most,
+				gas_limit
+			));
+			assert_eq!(StakeAmount::<Test>::get().unwrap(), STAKE_AMOUNT);
+			assert_eq!(
+				Configuration::get().unwrap(),
+				Config {
+					xcm_config: XcmConfig {
+						fees: *fees.clone(),
+						weight_limit: weight_limit.clone(),
+						require_weight_at_most
+					},
+					gas_limit
+				}
+			);
+			System::assert_has_event(Event::Configured { stake_amount: STAKE_AMOUNT }.into());
+
+			assert_eq!(
+				sent_xcm(),
+				xcm_transact(
+					ethereum_xcm::transact(
+						*REGISTRY,
+						registry::register(PARA_ID, PALLET_INDEX, STAKE_AMOUNT).try_into().unwrap(),
+						gas_limit,
+						None,
+					)
+					.into(),
+					fees,
+					weight_limit,
+					require_weight_at_most,
+				)
+			);
+			System::assert_last_event(
+				Event::RegistrationAttempted {
+					para_id: PARA_ID,
+					contract_address: (*REGISTRY).into(),
+				}
+				.into(),
+			)
+		});
+	});
 }

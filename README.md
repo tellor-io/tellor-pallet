@@ -90,7 +90,7 @@ License: Unlicense
 
 | Dispatchable Function                                |    Functional Test    | Notes                                                          |
 |------------------------------------------------------|:---------------------:|----------------------------------------------------------------|
-| :heavy_check_mark: `register`                        | :white_square_button: | Partially implemented                                          |
+| :heavy_check_mark: `register`                        |  :white_check_mark:   | Partially implemented                                          |
 | :heavy_check_mark: `report_stake_deposited`          |  :heavy_check_mark:   | Mostly implemented, `depositStake` functional test implemented |
 | :heavy_check_mark: `report_staking_withdraw_request` |  :white_check_mark:   | 99% implemented                                                |
 | :heavy_check_mark: `report_stake_withdrawal`         |  :white_check_mark:   |                                                                |

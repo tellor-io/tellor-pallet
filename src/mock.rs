@@ -11,13 +11,17 @@ use frame_support::{
 	PalletId,
 };
 use frame_system as system;
+use once_cell::sync::Lazy;
 use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, Convert, IdentityLookup, Keccak256},
 };
 use sp_std::cell::RefCell;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+	convert::Into,
+	time::{SystemTime, UNIX_EPOCH},
+};
 use xcm::latest::prelude::*;
 
 pub(crate) type AccountId = u128; // u64 is not enough to hold bytes used to generate bounty account
@@ -25,6 +29,8 @@ type Balance = u64;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
+pub(crate) const PALLET_INDEX: u8 = 3;
+pub(crate) const PARA_ID: u32 = 2000;
 pub(crate) const UNIT: u64 = 1_000_000_000_000;
 
 // Configure a mock runtime to test the pallet.
@@ -37,7 +43,7 @@ frame_support::construct_runtime!(
 		System: frame_system,
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		Tellor: tellor,
+		Tellor: tellor = 3
 	}
 );
 
@@ -88,13 +94,16 @@ impl pallet_timestamp::Config for Test {
 	type WeightInfo = ();
 }
 
-const PARA_ID: u32 = 2000;
+pub(crate) static REGISTRY: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
+static GOVERNANCE: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
+static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 
 parameter_types! {
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
-	pub TellorRegistry: ContractLocation = (PARA_ID, Address::random().into()).into();
-	pub TellorGovernance: ContractLocation = (PARA_ID, Address::random().into()).into();
-	pub TellorStaking: ContractLocation = (PARA_ID, Address::random().into()).into();
+	pub const ParachainId: u32 = PARA_ID;
+	pub TellorRegistry: ContractLocation = (PARA_ID, *REGISTRY).into();
+	pub TellorGovernance: ContractLocation = (PARA_ID, *GOVERNANCE).into();
+	pub TellorStaking: ContractLocation = (PARA_ID, *STAKING).into();
 }
 
 impl tellor::Config for Test {
@@ -121,7 +130,7 @@ impl tellor::Config for Test {
 	type MaxVotes = ConstU32<10>;
 	type MaxVoteRounds = ConstU32<10>;
 	type PalletId = TellorPalletId;
-	type ParachainId = ();
+	type ParachainId = ParachainId;
 	type Price = u128;
 	type RegistrationOrigin = system::EnsureRoot<AccountId>;
 	type Registry = TellorRegistry;
