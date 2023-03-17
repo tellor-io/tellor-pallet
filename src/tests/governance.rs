@@ -1,9 +1,6 @@
 use super::*;
 use crate::{mock::AccountId, types::Tally, Config, VoteResult};
-use frame_support::{
-	assert_noop, assert_ok,
-	traits::{fungible::Inspect, Currency},
-};
+use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, Get};
 use sp_runtime::traits::BadOrigin;
 

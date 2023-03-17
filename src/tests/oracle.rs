@@ -1269,6 +1269,41 @@ fn get_total_stakers() {
 }
 
 #[test]
+fn is_in_dispute() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+
+			let timestamp = Timestamp::get();
+			assert!(!Tellor::is_in_dispute(query_id, timestamp));
+			// Value can only be removed via dispute
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
+			assert!(Tellor::is_in_dispute(query_id, timestamp));
+		});
+	});
+}
+
+#[test]
 fn retrieve_data() {
 	let reporter = 1;
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();

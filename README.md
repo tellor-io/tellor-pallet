@@ -64,7 +64,7 @@ License: Unlicense
 | :white_check_mark: `get_total_stake_amount`                        |  :white_check_mark:   |       |
 | :white_check_mark: `get_total_stakers`                             |  :white_check_mark:   |       |
 | :white_square_button: `get_total_time_based_rewards_balance`?      | :white_square_button: |       |
-| :white_check_mark: `is_in_dispute`                                 | :white_square_button: |       |
+| :white_check_mark: `is_in_dispute`                                 |  :white_check_mark:   |       |
 | :white_check_mark: `retrieve_data`                                 |  :white_check_mark:   |       |
 
 ### Governance
