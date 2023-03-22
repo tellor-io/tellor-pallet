@@ -5,6 +5,8 @@
 
 License: Unlicense
 
+This repo is a clone of this work [here](https://github.com/evilrobot-01/substrate-pallets/tree/tellor).
+
 ## Porting Progress
 
 ### AutoPay
