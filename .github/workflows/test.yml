@@ -1,0 +1,84 @@
+name: Run Tests
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push or pull request events but only for the tellor branch
+  push:
+    branches: [ tellor ]
+  pull_request:
+    branches: [ tellor ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    env:
+      NIGHTLY: nightly-2023-02-01 # Fix version to prevent cache misses with nightly changes
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set-Up
+        run: sudo apt update && sudo apt install -y git clang curl libssl-dev llvm libudev-dev cmake protobuf-compiler
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+
+      - name: Install Nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.NIGHTLY }}
+          override: true
+          target: wasm32-unknown-unknown
+
+      - name: Cache Build artefacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+            runtime-api/target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test
+
+      - name: Install cargo-nextest
+        run: if ! which cargo-nextest &> /dev/null; then cargo install cargo-nextest; fi
+
+      # Pallet
+      - name: Configure CI
+        run: mkdir .config && echo -e "[profile.ci.junit]\npath = \"junit.xml\"" > .config/nextest.toml
+      - name: Run pallet tests
+        run: cargo nextest run --release --profile ci
+      - name: Report pallet test results
+        uses: dorny/test-reporter@v1
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          name: pallet
+          path: target/nextest/ci/junit.xml
+          reporter: jest-junit
+
+      # Runtime API
+      - name: Configure CI
+        run: mkdir .config && echo -e "[profile.ci.junit]\npath = \"junit.xml\"" > .config/nextest.toml
+        working-directory: runtime-api
+      - name: Run runtime-api tests
+        run: cargo nextest run --release --profile ci
+        working-directory: runtime-api
+      - name: Report runtime-api test results
+        uses: dorny/test-reporter@v1
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          name: runtime-api
+          path: target/nextest/ci/junit.xml
+          reporter: jest-junit
+          working-directory: 'runtime-api'
