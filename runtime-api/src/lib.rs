@@ -153,9 +153,6 @@ sp_api::decl_runtime_apis! {
 		/// Count of the number of values received for the query identifier.
 		fn get_new_value_count_by_query_id(query_id: QueryId) -> u32;
 
-		// todo: getPendingRewardByStaker?
-		// todo: getRealStakingRewardsBalance?
-
 		/// Returns reporter and whether a value was disputed for a given query identifier and timestamp.
 		/// # Arguments
 		/// * `query_id` - The query identifier to look up.
