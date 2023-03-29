@@ -58,6 +58,7 @@ fn begin_dispute() {
 		let dispute_id = with_block(|| {
 			// todo:
 			// await h.expectThrow(gov.connect(accounts[4]).beginDispute(ETH_QUERY_ID, blocky.timestamp)) // must have tokens to pay/begin dispute
+			Balances::make_free_balance_be(&another_reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -154,6 +155,7 @@ fn begins_dispute_xcm() {
 			));
 
 			let timestamp = Timestamp::now();
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 
 			let sent_messages = sent_xcm();
@@ -211,6 +213,7 @@ fn execute_vote() {
 			// 	Tellor::begin_dispute(RuntimeOrigin::signed(4), query_id, Timestamp::get()),
 			// 	pallet_balances::Error::<Test>::InsufficientBalance
 			// ); // must have tokens to pay for dispute
+			Balances::make_free_balance_be(&dispute_reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_reporter),
 				query_id,
@@ -341,6 +344,7 @@ fn tally_votes() {
 			));
 			assert_noop!(Tellor::tally_votes(1), Error::InvalidDispute); // Cannot tally a dispute that does not exist
 
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -390,6 +394,7 @@ fn vote() {
 				0,
 				query_data.clone(),
 			));
+			Balances::make_free_balance_be(&reporter_2, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter_2),
 				query_id,
@@ -481,6 +486,7 @@ fn did_vote() {
 				0,
 				query_data.clone(),
 			));
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -519,6 +525,7 @@ fn get_dispute_info() {
 				0,
 				query_data.clone(),
 			));
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -565,6 +572,7 @@ fn get_disputes_by_reporter() {
 				query_data.clone(),
 			));
 			assert_eq!(Tellor::get_disputes_by_reporter(reporter), Vec::<u32>::new());
+			Balances::make_free_balance_be(&dispute_initiator, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_initiator),
 				query_id,
@@ -647,6 +655,7 @@ fn get_open_disputes_on_id() {
 			));
 
 			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 0);
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 1);
 			assert_ok!(Tellor::begin_dispute(
@@ -695,6 +704,7 @@ fn get_vote_count() {
 				0,
 				query_data.clone(),
 			));
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -756,6 +766,7 @@ fn get_vote_info() {
 				0,
 				query_data.clone(),
 			));
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -833,6 +844,7 @@ fn get_vote_rounds() {
 				0,
 				query_data.clone(),
 			));
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -884,6 +896,7 @@ fn get_vote_tally_by_address() {
 				0,
 				query_data.clone(),
 			));
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -966,7 +979,7 @@ fn get_tips_by_address() {
 				0,
 				query_data,
 			));
-
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,

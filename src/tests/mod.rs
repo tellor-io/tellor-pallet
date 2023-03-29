@@ -6,7 +6,7 @@ use crate::{
 	Event, Origin, StakeAmount,
 };
 use ethabi::{Bytes, Token, Uint};
-use frame_support::{assert_noop, assert_ok, traits::PalletInfoAccess};
+use frame_support::{assert_noop, assert_ok, traits::{PalletInfoAccess, Currency}};
 use sp_core::{bytes::to_hex, keccak_256, H256};
 use sp_runtime::traits::BadOrigin;
 use xcm::{latest::prelude::*, DoubleEncoded};

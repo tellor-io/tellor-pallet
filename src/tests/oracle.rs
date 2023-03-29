@@ -3,7 +3,8 @@ use crate::{
 	types::{Nonce, QueryIdOf, TimestampOf},
 	Config, DAY_IN_MILLISECONDS,
 };
-use frame_support::{assert_noop, assert_ok};
+use frame_support::{assert_noop, assert_ok, traits::Currency};
+use pallet_balances::Event::BalanceSet;
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, Get, U256};
 use sp_runtime::traits::BadOrigin;
 
@@ -13,6 +14,7 @@ type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
 type ReportingLock = <Test as Config>::ReportingLock;
 type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
 type WithdrawalPeriod = <Test as Config>::WithdrawalPeriod;
+
 
 #[test]
 fn deposit_stake() {
@@ -134,6 +136,7 @@ fn remove_value() {
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(100));
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
 
+			Balances::make_free_balance_be(&another_reporter, token(1_000));
 			// Value can only be removed via dispute
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
@@ -275,6 +278,7 @@ fn slash_reporter() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
 	ext.execute_with(|| {
 		let dispute_id = with_block(|| {
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_noop!(
 				Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, 0, STAKE_AMOUNT.into()),
 				BadOrigin
@@ -1274,7 +1278,6 @@ fn is_in_dispute() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let mut ext = new_test_ext();
-
 	// Prerequisites
 	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
@@ -1296,6 +1299,7 @@ fn is_in_dispute() {
 
 			let timestamp = Timestamp::get();
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			// Value can only be removed via dispute
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 			assert!(Tellor::is_in_dispute(query_id, timestamp));

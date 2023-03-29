@@ -1217,11 +1217,10 @@ pub mod pallet {
 			}
 			<VoteCount<T>>::mutate(|count| count.saturating_inc());
 			// todo: confirm dispute fee handling with Tellor
-			// require(
-			// 	token.transferFrom(msg.sender, address(this), _disputeFee),
-			// 	"Fee must be paid"
-			// ); // This is the dispute fee. Returned if dispute passes
 			let dispute_fee = vote.fee;
+			// should we check for funds availability?
+			//ensure!(T::Token::balance(&dispute_initiator) > dispute_fee, Error::<T>::InsufficientFund);
+			Self::pay_dispute_initialization_fee(&dispute_initiator, &dispute_fee)?;
 			<VoteInfo<T>>::insert(dispute_id, vote);
 			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {

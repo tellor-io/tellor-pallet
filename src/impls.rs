@@ -12,6 +12,17 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
+	pub(super) fn pay_dispute_initialization_fee(dispute_initiator: &AccountIdOf<T>, amount: &AmountOf<T>) -> DispatchResult {
+		let pallet_id = T::PalletId::get();
+		T::Token::transfer(
+			dispute_initiator,
+			&pallet_id.into_sub_account_truncating(b"dispute"),
+			*amount,
+			false,
+		)?;
+		Ok(())
+	}
+
 	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, Error<T>> {
 		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
 	}

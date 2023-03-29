@@ -215,6 +215,7 @@ fn claim_tip_ensures() {
 			Timestamp::get()
 		});
 		with_block(|| {
+			Balances::make_free_balance_be(&another_reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -1049,6 +1050,7 @@ fn claim_onetime_tip() {
 		});
 		let claim_buffer: u64 = ClaimBuffer::get();
 		with_block_after(claim_buffer / 2, || {
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 		});
 		with_block_after(claim_buffer / 2, || {
