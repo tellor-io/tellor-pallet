@@ -1366,13 +1366,6 @@ fn add_staking_rewards() {
 }
 
 #[test]
-#[ignore]
-fn get_pending_reward_by_staker() {
-	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L561
-	todo!()
-}
-
-#[test]
 fn get_index_for_data_before() {
 	let reporter = 1;
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
@@ -1630,11 +1623,5 @@ fn update_rewards() {
 #[test]
 #[ignore]
 fn update_stake_and_pay_rewards() {
-	todo!()
-}
-
-#[test]
-#[ignore]
-fn get_real_staking_rewards_balance() {
 	todo!()
 }
