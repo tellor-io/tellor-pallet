@@ -43,15 +43,14 @@ impl<T: Config> Pallet<T> {
 			Some(vote) => {
 				// Ensure vote has not already been executed, and vote must be tallied
 				ensure!(!vote.executed, Error::<T>::VoteAlreadyExecuted);
-				ensure!(vote.tally_date > <TimestampOf<T>>::default(), Error::<T>::VoteNotTallied);
+				ensure!(vote.tally_date > 0, Error::<T>::VoteNotTallied);
 				// Ensure vote must be final vote and that time has to be pass after the vote is tallied
 				ensure!(
 					<VoteRounds<T>>::get(vote.identifier).len() == vote.vote_round as usize,
 					Error::VoteNotFinal
 				);
 				ensure!(
-					T::Time::now().saturating_sub(vote.tally_date) >=
-						T::VoteTallyDisputePeriod::get(),
+					Self::now().saturating_sub(vote.tally_date) >= TALLIED_VOTE_DISPUTE_PERIOD,
 					Error::<T>::TallyDisputePeriodActive
 				);
 				vote.executed = true;
@@ -121,7 +120,7 @@ impl<T: Config> Pallet<T> {
 	/// Block number of the timestamp for the given query identifier and timestamp, if found.
 	pub fn get_block_number_by_timestamp(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 	) -> Option<BlockNumberOf<T>> {
 		<Reports<T>>::get(query_id)
 			.and_then(|r| r.timestamp_to_block_number.get(&timestamp).copied())
@@ -147,8 +146,7 @@ impl<T: Config> Pallet<T> {
 		if <Tips<T>>::get(query_id).map_or(0, |t| t.len()) == 0 {
 			return AmountOf::<T>::default()
 		}
-		let timestamp_retrieved =
-			Self::_get_current_value(query_id).map_or(TimestampOf::<T>::default(), |v| v.1);
+		let timestamp_retrieved = Self::_get_current_value(query_id).map_or(0, |v| v.1);
 		match <Tips<T>>::get(query_id) {
 			Some(tips) => match tips.last() {
 				Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
@@ -163,9 +161,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier to look up the value for
 	/// # Returns
 	/// The value retrieved, along with its timestamp, if found.
-	pub(super) fn _get_current_value(
-		query_id: QueryIdOf<T>,
-	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
+	pub(super) fn _get_current_value(query_id: QueryIdOf<T>) -> Option<(ValueOf<T>, Timestamp)> {
 		let mut count = Self::get_new_value_count_by_query_id(query_id);
 		if count == 0 {
 			return None
@@ -203,8 +199,8 @@ impl<T: Config> Pallet<T> {
 	/// The value retrieved and its timestamp, if found.
 	pub fn get_data_before(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
-	) -> Option<(ValueOf<T>, TimestampOf<T>)> {
+		timestamp: Timestamp,
+	) -> Option<(ValueOf<T>, Timestamp)> {
 		Self::get_index_for_data_before(query_id, timestamp)
 			.and_then(|index| Self::get_timestamp_by_query_id_and_index(query_id, index))
 			.and_then(|timestamp_retrieved| {
@@ -241,7 +237,7 @@ impl<T: Config> Pallet<T> {
 	/// reporter of the disputed value.
 	pub fn get_dispute_info(
 		dispute_id: DisputeIdOf<T>,
-	) -> Option<(QueryIdOf<T>, TimestampOf<T>, ValueOf<T>, AccountIdOf<T>)> {
+	) -> Option<(QueryIdOf<T>, Timestamp, ValueOf<T>, AccountIdOf<T>)> {
 		<DisputeInfo<T>>::get(dispute_id)
 			.map(|d| (d.query_id, d.timestamp, d.value, d.disputed_reporter))
 	}
@@ -306,7 +302,7 @@ impl<T: Config> Pallet<T> {
 	/// Whether the index was found along with the latest index found before the supplied timestamp.
 	pub fn get_index_for_data_before(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 	) -> Option<usize> {
 		let count = Self::get_new_value_count_by_query_id(query_id);
 		if count > 0 {
@@ -400,11 +396,11 @@ impl<T: Config> Pallet<T> {
 	/// Amount of tip.
 	pub(super) fn get_onetime_tip_amount(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 		claimer: &AccountIdOf<T>,
 	) -> Result<AmountOf<T>, Error<T>> {
 		ensure!(
-			T::Time::now().saturating_sub(timestamp) > T::ClaimBuffer::get(),
+			Self::now().saturating_sub(timestamp) > CLAIM_BUFFER,
 			Error::<T>::ClaimBufferNotPassed
 		);
 		ensure!(!Self::is_in_dispute(query_id, timestamp), Error::<T>::ValueDisputed);
@@ -422,9 +418,7 @@ impl<T: Config> Pallet<T> {
 					let mut mid;
 					while max.saturating_sub(min) > 1 {
 						mid = (max.saturating_add(min)).saturating_div(2);
-						if tips.get(mid).map_or(<TimestampOf<T>>::default(), |t| t.timestamp) >
-							timestamp
-						{
+						if tips.get(mid).map_or(0, |t| t.timestamp) > timestamp {
 							max = mid;
 						} else {
 							min = mid;
@@ -522,7 +516,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
 	/// All past tips.
-	pub fn get_past_tips(query_id: QueryIdOf<T>) -> Vec<Tip<AmountOf<T>, TimestampOf<T>>> {
+	pub fn get_past_tips(query_id: QueryIdOf<T>) -> Vec<Tip<AmountOf<T>, Timestamp>> {
 		<Tips<T>>::get(query_id).map_or_else(Vec::default, |t| t.to_vec())
 	}
 
@@ -535,7 +529,7 @@ impl<T: Config> Pallet<T> {
 	pub fn get_past_tip_by_index(
 		query_id: QueryIdOf<T>,
 		index: u32,
-	) -> Option<Tip<AmountOf<T>, TimestampOf<T>>> {
+	) -> Option<Tip<AmountOf<T>, Timestamp>> {
 		<Tips<T>>::get(query_id).and_then(|t| t.get(index as usize).cloned())
 	}
 
@@ -560,7 +554,7 @@ impl<T: Config> Pallet<T> {
 	/// The reporter who submitted the value and whether the value was disputed, provided a value exists.
 	pub fn get_report_details(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 	) -> Option<(AccountIdOf<T>, bool)> {
 		<Reports<T>>::get(query_id).and_then(|report| {
 			report.reporter_by_timestamp.get(&timestamp).map(|reporter| {
@@ -577,7 +571,7 @@ impl<T: Config> Pallet<T> {
 	/// Identifier of the reporter who reported the value for the query identifier at the given timestamp.
 	pub fn get_reporter_by_timestamp(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 	) -> Option<AccountIdOf<T>> {
 		<Reports<T>>::get(query_id)
 			.and_then(|report| report.reporter_by_timestamp.get(&timestamp).cloned())
@@ -588,15 +582,15 @@ impl<T: Config> Pallet<T> {
 	/// * `reporter` - The identifier of the reporter.
 	/// # Returns
 	/// The timestamp of the reporter's last submission, if one exists.
-	pub fn get_reporter_last_timestamp(reporter: AccountIdOf<T>) -> Option<TimestampOf<T>> {
+	pub fn get_reporter_last_timestamp(reporter: AccountIdOf<T>) -> Option<Timestamp> {
 		<StakerDetails<T>>::get(reporter).map(|stake_info| stake_info.reporter_last_timestamp)
 	}
 
 	/// Returns the reporting lock time, the amount of time a reporter must wait to submit again.
 	/// # Returns
 	/// The reporting lock time.
-	pub fn get_reporting_lock() -> TimestampOf<T> {
-		T::ReportingLock::get()
+	pub fn get_reporting_lock() -> Timestamp {
+		REPORTING_LOCK
 	}
 
 	/// Returns the number of values submitted by a specific reporter.
@@ -628,17 +622,17 @@ impl<T: Config> Pallet<T> {
 	pub(super) fn _get_reward_amount(
 		feed_id: FeedIdOf<T>,
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 	) -> Result<AmountOf<T>, Error<T>> {
 		ensure!(
-			T::Time::now().saturating_sub(timestamp) < T::ClaimPeriod::get(),
+			Self::now().saturating_sub(timestamp) < CLAIM_PERIOD,
 			Error::<T>::ClaimPeriodExpired
 		);
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
 		ensure!(!feed.reward_claimed.get(&timestamp).unwrap_or(&false), Error::TipAlreadyClaimed);
 		let n = (timestamp.saturating_sub(feed.details.start_time))
-			.checked_div(&feed.details.interval)
+			.checked_div(feed.details.interval)
 			.ok_or(Error::<T>::IntervalCalculationError)?; // finds closest interval n to timestamp
 		let c = feed.details.start_time.saturating_add(feed.details.interval.saturating_mul(n)); // finds start timestamp c of interval n
 		let value_retrieved = Self::retrieve_data(query_id, timestamp);
@@ -671,11 +665,7 @@ impl<T: Config> Pallet<T> {
 		if time_diff < feed.details.window && timestamp_before < c {
 			// add time based rewards if applicable
 			reward_amount.saturating_accrue(
-				feed.details
-					.reward_increase_per_second
-					.checked_div(&<AmountOf<T>>::from(1_000u16))
-					.ok_or(Error::<T>::RewardCalculationError)? // convert to ms
-					.saturating_mul(time_diff.into()),
+				feed.details.reward_increase_per_second.saturating_mul(time_diff.into()),
 			);
 		} else {
 			ensure!(price_change > feed.details.price_threshold, Error::<T>::PriceThresholdNotMet);
@@ -697,7 +687,7 @@ impl<T: Config> Pallet<T> {
 	pub fn get_reward_amount(
 		feed_id: FeedIdOf<T>,
 		query_id: QueryIdOf<T>,
-		timestamps: Vec<TimestampOf<T>>,
+		timestamps: Vec<Timestamp>,
 	) -> AmountOf<T> {
 		// todo: use boundedvec for timestamps
 
@@ -727,7 +717,7 @@ impl<T: Config> Pallet<T> {
 	pub fn get_reward_claimed_status(
 		feed_id: FeedIdOf<T>,
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 	) -> Option<bool> {
 		<DataFeeds<T>>::get(query_id, feed_id)
 			.map(|f| f.reward_claimed.get(&timestamp).copied().unwrap_or_default())
@@ -743,7 +733,7 @@ impl<T: Config> Pallet<T> {
 	pub fn get_reward_claim_status_list(
 		feed_id: FeedIdOf<T>,
 		query_id: QueryIdOf<T>,
-		timestamps: Vec<TimestampOf<T>>,
+		timestamps: Vec<Timestamp>,
 	) -> Vec<bool> {
 		// todo: use boundedvec for timestamps
 		<DataFeeds<T>>::get(query_id, feed_id).map_or_else(Vec::default, |feed| {
@@ -773,7 +763,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the timestamp for the last value of any identifier from the oracle.
 	/// # Returns
 	/// The timestamp of the last oracle value.
-	pub fn get_time_of_last_new_value() -> Option<TimestampOf<T>> {
+	pub fn get_time_of_last_new_value() -> Option<Timestamp> {
 		<TimeOfLastNewValue<T>>::get()
 	}
 
@@ -786,7 +776,7 @@ impl<T: Config> Pallet<T> {
 	pub fn get_timestamp_by_query_id_and_index(
 		query_id: QueryIdOf<T>,
 		index: usize,
-	) -> Option<TimestampOf<T>> {
+	) -> Option<Timestamp> {
 		<Reports<T>>::get(query_id).and_then(|report| report.timestamps.get(index).copied())
 	}
 
@@ -798,7 +788,7 @@ impl<T: Config> Pallet<T> {
 	/// The index of the reporter timestamp within the available timestamps for specific query identifier.
 	pub fn get_timestamp_index_by_timestamp(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 	) -> Option<u32> {
 		<Reports<T>>::get(query_id)
 			.and_then(|report| report.timestamp_index.get(&timestamp).copied())
@@ -877,19 +867,22 @@ impl<T: Config> Pallet<T> {
 	/// * `timestamp` - Timestamp of the value.
 	/// # Returns
 	/// Whether the value is disputed.
-	pub fn is_in_dispute(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> bool {
+	pub fn is_in_dispute(query_id: QueryIdOf<T>, timestamp: Timestamp) -> bool {
 		<Reports<T>>::get(query_id)
 			.map_or(false, |report| report.is_disputed.contains_key(&timestamp))
+	}
+
+	/// Returns the duration since UNIX_EPOCH, in seconds.
+	pub(super) fn now() -> u64 {
+		// Use seconds to match EVM smart contracts
+		T::Time::now().as_secs()
 	}
 
 	/// Removes a value from the oracle.
 	/// # Arguments
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
-	pub(super) fn remove_value(
-		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
-	) -> DispatchResult {
+	pub(super) fn remove_value(query_id: QueryIdOf<T>, timestamp: Timestamp) -> DispatchResult {
 		// todo: rename once remove_value dispatchable removed
 		<Reports<T>>::mutate(query_id, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidTimestamp),
@@ -922,7 +915,7 @@ impl<T: Config> Pallet<T> {
 	/// * `timestamp` - Timestamp to retrieve data/value from.
 	/// # Returns
 	/// Value for timestamp submitted, if found.
-	pub fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<ValueOf<T>> {
+	pub fn retrieve_data(query_id: QueryIdOf<T>, timestamp: Timestamp) -> Option<ValueOf<T>> {
 		<Reports<T>>::get(query_id)
 			.and_then(|report| report.value_by_timestamp.get(&timestamp).cloned())
 	}
@@ -940,7 +933,7 @@ impl<T: Config> Pallet<T> {
 		let initiator = <VoteInfo<T>>::try_mutate(dispute_id, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidDispute),
 			Some(vote) => {
-				ensure!(vote.tally_date == TimestampOf::<T>::default(), Error::VoteAlreadyTallied);
+				ensure!(vote.tally_date == 0, Error::VoteAlreadyTallied);
 				ensure!(
 					dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),
 					Error::InvalidDispute
@@ -949,13 +942,12 @@ impl<T: Config> Pallet<T> {
 				// Vote time increases as rounds increase but only up to withdrawal period
 				// todo: safe math
 				ensure!(
-					T::Time::now() - vote.start_date >=
-						T::VoteRoundPeriod::get() * vote.vote_round.into() ||
-						T::Time::now() - vote.start_date >= T::WithdrawalPeriod::get(),
+					Self::now() - vote.start_date >= DISPUTE_PERIOD * vote.vote_round as Timestamp ||
+						Self::now() - vote.start_date >= WITHDRAWAL_PERIOD,
 					Error::VotingPeriodActive
 				);
 				// Note: remainder of tallying functionality takes place within governance controller contract
-				vote.tally_date = T::Time::now(); // Update time vote was tallied
+				vote.tally_date = Self::now(); // Update time vote was tallied
 				Ok(vote.initiator.clone())
 			},
 		})?;
@@ -1050,13 +1042,11 @@ impl<T: Config> Pallet<T> {
 	}
 }
 
-impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>, QueryIdOf<T>, TimestampOf<T>>
-	for Pallet<T>
-{
+impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>, QueryIdOf<T>> for Pallet<T> {
 	fn get_data_after(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
-	) -> Option<(Vec<u8>, TimestampOf<T>)> {
+		timestamp: Timestamp,
+	) -> Option<(Vec<u8>, Timestamp)> {
 		Self::get_index_for_data_after(query_id, timestamp)
 			.and_then(|index| Self::get_timestamp_by_query_id_and_index(query_id, index))
 			.and_then(|timestamp_retrieved| {
@@ -1067,30 +1057,24 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>, QueryIdOf<T>, TimestampO
 
 	fn get_data_before(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
-	) -> Option<(Vec<u8>, TimestampOf<T>)> {
+		timestamp: Timestamp,
+	) -> Option<(Vec<u8>, Timestamp)> {
 		Self::get_data_before(query_id, timestamp).map(|(v, t)| (v.into_inner(), t))
 	}
 
-	fn get_index_for_data_after(
-		_query_id: QueryIdOf<T>,
-		_timestamp: TimestampOf<T>,
-	) -> Option<usize> {
+	fn get_index_for_data_after(_query_id: QueryIdOf<T>, _timestamp: Timestamp) -> Option<usize> {
 		todo!()
 	}
 
-	fn get_index_for_data_before(
-		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
-	) -> Option<usize> {
+	fn get_index_for_data_before(query_id: QueryIdOf<T>, timestamp: Timestamp) -> Option<usize> {
 		Self::get_index_for_data_before(query_id, timestamp)
 	}
 
 	fn get_multiple_values_before(
 		_query_id: QueryIdOf<T>,
-		_timestamp: TimestampOf<T>,
-		_max_age: TimestampOf<T>,
-	) -> Vec<(Vec<u8>, TimestampOf<T>)> {
+		_timestamp: Timestamp,
+		_max_age: Timestamp,
+	) -> Vec<(Vec<u8>, Timestamp)> {
 		todo!()
 	}
 
@@ -1100,7 +1084,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>, QueryIdOf<T>, TimestampO
 
 	fn get_reporter_by_timestamp(
 		query_id: QueryIdOf<T>,
-		timestamp: TimestampOf<T>,
+		timestamp: Timestamp,
 	) -> Option<AccountIdOf<T>> {
 		Self::get_reporter_by_timestamp(query_id, timestamp)
 	}
@@ -1108,15 +1092,15 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>, QueryIdOf<T>, TimestampO
 	fn get_timestamp_by_query_id_and_index(
 		query_id: QueryIdOf<T>,
 		index: usize,
-	) -> Option<TimestampOf<T>> {
+	) -> Option<Timestamp> {
 		Self::get_timestamp_by_query_id_and_index(query_id, index)
 	}
 
-	fn is_in_dispute(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> bool {
+	fn is_in_dispute(query_id: QueryIdOf<T>, timestamp: Timestamp) -> bool {
 		Self::is_in_dispute(query_id, timestamp)
 	}
 
-	fn retrieve_data(query_id: QueryIdOf<T>, timestamp: TimestampOf<T>) -> Option<Vec<u8>> {
+	fn retrieve_data(query_id: QueryIdOf<T>, timestamp: Timestamp) -> Option<Vec<u8>> {
 		Self::retrieve_data(query_id, timestamp).map(|v| v.into_inner())
 	}
 

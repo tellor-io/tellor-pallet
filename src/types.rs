@@ -1,5 +1,5 @@
 use super::Config;
-use frame_support::{pallet_prelude::*, traits::Time};
+use frame_support::pallet_prelude::*;
 pub(crate) use governance::Tally;
 use sp_core::{bounded::BoundedBTreeMap, H160, U256};
 
@@ -10,15 +10,12 @@ pub(crate) type AmountOf<T> = <T as Config>::Amount;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
 pub(crate) type DisputeIdOf<T> = <T as Config>::DisputeId;
 pub(crate) type DisputeOf<T> =
-	governance::Dispute<AccountIdOf<T>, QueryIdOf<T>, TimestampOf<T>, ValueOf<T>>;
+	governance::Dispute<AccountIdOf<T>, QueryIdOf<T>, Timestamp, ValueOf<T>>;
 pub(crate) type FeedIdOf<T> = <T as Config>::Hash;
-pub(crate) type FeedOf<T> =
-	autopay::Feed<AmountOf<T>, TimestampOf<T>, <T as Config>::MaxRewardClaims>;
-pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>, TimestampOf<T>>;
+pub(crate) type FeedOf<T> = autopay::Feed<AmountOf<T>, Timestamp, <T as Config>::MaxRewardClaims>;
+pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>, Timestamp>;
 pub(crate) type _HashOf<T> = <T as Config>::Hash;
 pub(crate) type HasherOf<T> = <T as Config>::Hasher;
-#[cfg(test)]
-pub(crate) type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
 pub(crate) type PriceOf<T> = <T as Config>::Price;
@@ -27,18 +24,14 @@ pub(crate) type QueryIdOf<T> = <T as Config>::Hash;
 pub(crate) type ReportOf<T> = oracle::Report<
 	AccountIdOf<T>,
 	BlockNumberOf<T>,
-	TimestampOf<T>,
+	Timestamp,
 	ValueOf<T>,
 	<T as Config>::MaxTimestamps,
 >;
-pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<
-	AmountOf<T>,
-	<T as Config>::MaxQueriesPerReporter,
-	QueryIdOf<T>,
-	TimestampOf<T>,
->;
-pub(crate) type TimestampOf<T> = <<T as Config>::Time as Time>::Moment;
-pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>, TimestampOf<T>>;
+pub(crate) type StakeInfoOf<T> =
+	oracle::StakeInfo<AmountOf<T>, <T as Config>::MaxQueriesPerReporter, QueryIdOf<T>, Timestamp>;
+pub(crate) type Timestamp = u64;
+pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>, Timestamp>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
 pub(crate) type VoteCountOf<T> = DisputeIdOf<T>;
 pub(crate) type VoteIdOf<T> = <T as Config>::Hash;
@@ -46,7 +39,7 @@ pub(crate) type VoteOf<T> = governance::Vote<
 	AccountIdOf<T>,
 	AmountOf<T>,
 	BlockNumberOf<T>,
-	TimestampOf<T>,
+	Timestamp,
 	VoteIdOf<T>,
 	<T as Config>::MaxVotes,
 >;

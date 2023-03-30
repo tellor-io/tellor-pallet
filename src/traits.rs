@@ -1,3 +1,4 @@
+use crate::types::Timestamp;
 use sp_std::vec::Vec;
 use xcm::latest::prelude::*;
 
@@ -11,7 +12,7 @@ pub trait SendXcm {
 }
 
 /// This trait helps pallets read data from Tellor
-pub trait UsingTellor<AccountId, Price, QueryId, Timestamp> {
+pub trait UsingTellor<AccountId, Price, QueryId> {
 	/// Retrieves the next value for the query identifier after the specified timestamp.
 	/// # Arguments
 	/// * `query_id` - The query identifier to look up the value for.

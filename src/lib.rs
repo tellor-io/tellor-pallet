@@ -1,11 +1,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use crate::constants::{
+	CLAIM_BUFFER, CLAIM_PERIOD, DISPUTE_PERIOD, REPORTING_LOCK, TALLIED_VOTE_DISPUTE_PERIOD,
+	WITHDRAWAL_PERIOD,
+};
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
 use codec::Encode;
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
 	ensure,
-	traits::{fungible::Transfer, EnsureOrigin, Len, Time},
+	traits::{fungible::Transfer, EnsureOrigin, Len, UnixTime},
 };
 pub use pallet::*;
 use sp_core::Get;
@@ -31,16 +35,12 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+mod constants;
 mod contracts;
 mod impls;
 pub mod traits;
 mod types;
 pub mod xcm;
-
-pub const MINUTE_IN_MILLISECONDS: u64 = 60 * 1_000;
-pub const HOUR_IN_MILLISECONDS: u64 = 60 * MINUTE_IN_MILLISECONDS;
-pub const DAY_IN_MILLISECONDS: u64 = 24 * HOUR_IN_MILLISECONDS;
-pub const WEEK_IN_MILLISECONDS: u64 = 7 * DAY_IN_MILLISECONDS;
 
 #[frame_support::pallet(dev_mode)]
 pub mod pallet {
@@ -93,15 +93,7 @@ pub mod pallet {
 			+ MaxEncodedLen
 			+ TypeInfo
 			+ Into<U256>
-			+ From<<Self::Time as Time>::Moment>;
-
-		/// The claim buffer time.
-		#[pallet::constant]
-		type ClaimBuffer: Get<<Self::Time as Time>::Moment>;
-
-		/// The claim period.
-		#[pallet::constant]
-		type ClaimPeriod: Get<<Self::Time as Time>::Moment>;
+			+ From<u64>;
 
 		/// The identifier used for disputes.
 		type DisputeId: Member
@@ -207,10 +199,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type Registry: Get<ContractLocation>;
 
-		/// Base amount of time before a reporter is able to submit a value again.
-		#[pallet::constant]
-		type ReportingLock: Get<TimestampOf<Self>>;
-
 		/// The location of the staking controller contract.
 		#[pallet::constant]
 		type Staking: Get<ContractLocation>;
@@ -219,24 +207,12 @@ pub mod pallet {
 		type StakingOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
 		/// The on-chain time provider.
-		type Time: Time;
+		type Time: UnixTime;
 
 		type Token: Inspect<Self::AccountId, Balance = Self::Amount> + Transfer<Self::AccountId>;
 
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
-
-		/// The dispute period.
-		#[pallet::constant]
-		type VoteRoundPeriod: Get<<Self::Time as Time>::Moment>;
-
-		/// The dispute period after a vote has been tallied.
-		#[pallet::constant]
-		type VoteTallyDisputePeriod: Get<<Self::Time as Time>::Moment>;
-
-		/// The withdrawal period.
-		#[pallet::constant]
-		type WithdrawalPeriod: Get<<Self::Time as Time>::Moment>;
 
 		type Xcm: traits::SendXcm;
 	}
@@ -293,7 +269,7 @@ pub mod pallet {
 	pub type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_new_value)]
-	pub type TimeOfLastNewValue<T> = StorageValue<_, TimestampOf<T>>;
+	pub type TimeOfLastNewValue<T> = StorageValue<_, Timestamp>;
 	#[pallet::storage]
 	pub type TotalStakeAmount<T> = StorageValue<_, AmountOf<T>, ValueQuery>;
 	#[pallet::storage]
@@ -368,7 +344,7 @@ pub mod pallet {
 		/// Emitted when a new value is submitted.
 		NewReport {
 			query_id: QueryIdOf<T>,
-			time: TimestampOf<T>,
+			time: Timestamp,
 			value: ValueOf<T>,
 			nonce: Nonce,
 			query_data: QueryDataOf<T>,
@@ -387,14 +363,14 @@ pub mod pallet {
 			address: Address,
 		},
 		/// Emitted when a value is removed (via governance).
-		ValueRemoved { query_id: QueryIdOf<T>, timestamp: TimestampOf<T> },
+		ValueRemoved { query_id: QueryIdOf<T>, timestamp: Timestamp },
 
 		// Governance
 		/// Emitted when a new dispute is opened.
 		NewDispute {
 			dispute_id: DisputeIdOf<T>,
 			query_id: QueryIdOf<T>,
-			timestamp: TimestampOf<T>,
+			timestamp: Timestamp,
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when an address casts their vote.
@@ -462,7 +438,6 @@ pub mod pallet {
 		PriceChangeCalculationError,
 		/// Price threshold not met.
 		PriceThresholdNotMet,
-		RewardCalculationError,
 		/// Timestamp not eligible for tip.
 		TimestampIneligibleForTip,
 		/// Tip already claimed.
@@ -626,7 +601,7 @@ pub mod pallet {
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
 			query_id: QueryIdOf<T>,
-			timestamps: BoundedVec<TimestampOf<T>, T::MaxClaimTimestamps>,
+			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
 			ensure!(
@@ -698,7 +673,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			feed_id: FeedIdOf<T>,
 			query_id: QueryIdOf<T>,
-			timestamps: BoundedVec<TimestampOf<T>, T::MaxClaimTimestamps>,
+			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
 
@@ -709,7 +684,7 @@ pub mod pallet {
 			let mut cumulative_reward = AmountOf::<T>::default();
 			for timestamp in &timestamps {
 				ensure!(
-					T::Time::now().saturating_sub(*timestamp) > T::ClaimBuffer::get(),
+					Self::now().saturating_sub(*timestamp) > CLAIM_BUFFER,
 					Error::<T>::ClaimBufferNotPassed
 				);
 				ensure!(
@@ -820,9 +795,9 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			query_id: QueryIdOf<T>,
 			reward: AmountOf<T>,
-			start_time: TimestampOf<T>,
-			interval: TimestampOf<T>,
-			window: TimestampOf<T>,
+			start_time: Timestamp,
+			interval: Timestamp,
+			window: Timestamp,
 			price_threshold: u16,
 			reward_increase_per_second: AmountOf<T>,
 			query_data: QueryDataOf<T>,
@@ -847,7 +822,7 @@ pub mod pallet {
 			let feed = <DataFeeds<T>>::get(query_id, feed_id);
 			ensure!(feed.is_none(), Error::<T>::FeedAlreadyExists);
 			ensure!(reward > <AmountOf<T>>::default(), Error::<T>::InvalidReward);
-			ensure!(interval > <TimestampOf<T>>::default(), Error::<T>::InvalidInterval);
+			ensure!(interval > 0, Error::<T>::InvalidInterval);
 			ensure!(window < interval, Error::<T>::InvalidWindow);
 
 			let feed = FeedDetailsOf::<T> {
@@ -918,7 +893,7 @@ pub mod pallet {
 						*maybe_tips = Some(
 							BoundedVec::try_from(vec![TipOf::<T> {
 								amount,
-								timestamp: T::Time::now().saturating_add(1u8.into()),
+								timestamp: Self::now().saturating_add(1u8.into()),
 								cumulative_tips: amount,
 							}])
 							.map_err(|_| Error::<T>::MaxTipsReached)?,
@@ -927,11 +902,11 @@ pub mod pallet {
 						Ok(())
 					},
 					Some(tips) => {
-						let timestamp_retrieved = Self::_get_current_value(query_id)
-							.map_or(<TimestampOf<T>>::default(), |v| v.1);
+						let timestamp_retrieved =
+							Self::_get_current_value(query_id).map_or(0, |v| v.1);
 						match tips.last_mut() {
 							Some(last_tip) if timestamp_retrieved < last_tip.timestamp => {
-								last_tip.timestamp = T::Time::now().saturating_add(1u8.into());
+								last_tip.timestamp = Self::now().saturating_add(1u8.into());
 								last_tip.amount.saturating_accrue(amount);
 								last_tip.cumulative_tips.saturating_accrue(amount);
 							},
@@ -941,7 +916,7 @@ pub mod pallet {
 									.map_or(<AmountOf<T>>::default(), |t| t.cumulative_tips);
 								tips.try_push(Tip {
 									amount,
-									timestamp: T::Time::now().saturating_add(1u8.into()),
+									timestamp: Self::now().saturating_add(1u8.into()),
 									cumulative_tips: cumulative_tips.saturating_add(amount),
 								})
 								.map_err(|_| Error::<T>::MaxTipsReached)?;
@@ -1013,13 +988,13 @@ pub mod pallet {
 				Error::<T>::InsufficientStake
 			);
 			// Require reporter to abide by given reporting lock
-			let timestamp = T::Time::now();
+			let timestamp = Self::now();
 			ensure!(
 				// todo: refactor to remove saturated_into()
 				(timestamp.saturating_sub(staker.reporter_last_timestamp))
 					.saturated_into::<u128>()
 					.saturating_mul(1_000) >
-					(T::ReportingLock::get().saturated_into::<u128>().saturating_mul(1_000))
+					((REPORTING_LOCK as u128).saturating_mul(1_000))
 						.checked_div(
 							staker
 								.staked_balance
@@ -1117,7 +1092,7 @@ pub mod pallet {
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryIdOf<T>,
-			timestamp: TimestampOf<T>,
+			timestamp: Timestamp,
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
 			// Only reporters can begin disputes due to requiring an account on staking chain to potentially receive slash amount if dispute successful
@@ -1152,10 +1127,10 @@ pub mod pallet {
 			let mut vote = VoteOf::<T> {
 				identifier: vote_id,
 				vote_round: vote_rounds.len() as u32,
-				start_date: T::Time::now(),
+				start_date: Self::now(),
 				block_number: frame_system::Pallet::<T>::block_number(),
 				fee: Self::get_dispute_fee(),
-				tally_date: <TimestampOf<T>>::default(),
+				tally_date: 0,
 				users: Tally::default(),
 				reporters: Tally::default(),
 				executed: false,
@@ -1173,7 +1148,7 @@ pub mod pallet {
 			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 			if vote_rounds.len() == 1 {
 				ensure!(
-					T::Time::now().saturating_sub(timestamp) < T::ReportingLock::get(),
+					Self::now().saturating_sub(timestamp) < REPORTING_LOCK,
 					Error::<T>::DisputeReportingPeriodExpired
 				);
 				<OpenDisputesOnId<T>>::mutate(query_id, |open_disputes| {
@@ -1197,9 +1172,9 @@ pub mod pallet {
 				let prev_id =
 					vote_rounds.get(vote_rounds.len() - 2).ok_or(Error::<T>::InvalidIndex)?;
 				ensure!(
-					T::Time::now() -
+					Self::now() -
 						<VoteInfo<T>>::get(prev_id).ok_or(Error::<T>::InvalidVote)?.tally_date <
-						T::VoteRoundPeriod::get(),
+						DISPUTE_PERIOD,
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
 				vote.fee = vote.fee.saturating_mul(
@@ -1288,10 +1263,7 @@ pub mod pallet {
 				match maybe {
 					None => Err(Error::<T>::InvalidVote.into()),
 					Some(vote) => {
-						ensure!(
-							vote.tally_date == <TimestampOf<T>>::default(),
-							Error::<T>::VoteAlreadyTallied
-						);
+						ensure!(vote.tally_date == 0, Error::<T>::VoteAlreadyTallied);
 						ensure!(!vote.voted.contains_key(&voter), Error::<T>::AlreadyVoted);
 						// Update voting status and increment total queries for support, invalid, or against based on vote
 						vote.voted
@@ -1376,7 +1348,7 @@ pub mod pallet {
 					}
 				}
 				Self::update_stake_and_pay_rewards(&mut staker, staked_balance + amount)?;
-				staker.start_date = T::Time::now(); // This resets the staker start date to now
+				staker.start_date = Self::now(); // This resets the staker start date to now
 				*maybe = Some(staker);
 				Ok(())
 			})?;
@@ -1411,7 +1383,7 @@ pub mod pallet {
 						// todo: safe math
 						let stake_amount = staker.staked_balance - amount;
 						Self::update_stake_and_pay_rewards(staker, stake_amount)?;
-						staker.start_date = T::Time::now();
+						staker.start_date = Self::now();
 						staker.locked_balance.saturating_accrue(amount);
 						// toWithdraw += _amount; // <- todo: check whether this is required here
 						Ok(())
@@ -1469,8 +1441,7 @@ pub mod pallet {
 							Error::<T>::NoWithdrawalRequested
 						);
 						ensure!(
-							T::Time::now().saturating_sub(staker.start_date) >=
-								T::WithdrawalPeriod::get(),
+							Self::now().saturating_sub(staker.start_date) >= WITHDRAWAL_PERIOD,
 							Error::<T>::WithdrawalPeriodPending
 						);
 						// toWithdraw -= _staker.lockedBalance; // todo: required?
