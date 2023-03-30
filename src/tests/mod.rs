@@ -2,7 +2,10 @@ use crate::{
 	contracts::registry,
 	mock,
 	mock::*,
-	types::{AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryId, ValueOf},
+	types::{
+		AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryId, Timestamp,
+		ValueOf,
+	},
 	xcm::{ethereum_xcm, XcmConfig},
 	Event, Origin, StakeAmount,
 };
@@ -22,6 +25,15 @@ mod oracle;
 type Config = crate::types::Configuration;
 type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
+
+fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeIdOf<T> {
+	keccak_256(&ethabi::encode(&[
+		Token::Uint(para_id.into()),
+		Token::FixedBytes(query_id.0.to_vec()),
+		Token::Uint(timestamp.into()),
+	]))
+		.into()
+}
 
 // Returns the timestamp for the current block.
 fn now() -> crate::types::Timestamp {
@@ -95,7 +107,7 @@ fn xcm_transact(
 	require_weight_at_most: u64,
 ) -> Vec<(MultiLocation, Xcm<()>)> {
 	vec![(
-		MultiLocation { parents: 1, interior: X1(Parachain(PARA_ID)) },
+		MultiLocation { parents: 1, interior: X1(Parachain(EVM_PARA_ID)) },
 		Xcm(vec![
 			DescendOrigin(X1(PalletInstance(PALLET_INDEX))), // interior
 			WithdrawAsset((*fees.clone()).into()),
@@ -180,7 +192,7 @@ fn register() {
 			);
 			System::assert_last_event(
 				Event::RegistrationAttempted {
-					para_id: PARA_ID,
+					para_id: EVM_PARA_ID,
 					contract_address: (*REGISTRY).into(),
 				}
 				.into(),

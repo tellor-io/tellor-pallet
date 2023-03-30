@@ -9,7 +9,7 @@ pub type Address = H160;
 pub(crate) type Amount = U256;
 pub(crate) type AmountOf<T> = <T as Config>::Amount;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
-pub(crate) type DisputeIdOf<T> = <T as Config>::DisputeId;
+pub(crate) type DisputeIdOf<T> = <T as Config>::Hash;
 pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, QueryId, Timestamp, ValueOf<T>>;
 pub(crate) type FeedId = H256;
 pub(crate) type FeedOf<T> = autopay::Feed<AmountOf<T>, Timestamp, <T as Config>::MaxRewardClaims>;
@@ -31,14 +31,12 @@ pub(crate) type StakeInfoOf<T> =
 pub(crate) type Timestamp = u64;
 pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>, Timestamp>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
-pub(crate) type VoteCountOf<T> = DisputeIdOf<T>;
-pub(crate) type VoteId = H256;
 pub(crate) type VoteOf<T> = governance::Vote<
 	AccountIdOf<T>,
 	AmountOf<T>,
 	BlockNumberOf<T>,
 	Timestamp,
-	VoteId,
+	DisputeIdOf<T>,
 	<T as Config>::MaxVotes,
 >;
 
@@ -197,9 +195,9 @@ pub(crate) mod governance {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxVotes))]
-	pub struct Vote<AccountId, Amount, BlockNumber, Timestamp, VoteId, MaxVotes: Get<u32>> {
-		/// Identifier of the vote.
-		pub identifier: VoteId,
+	pub struct Vote<AccountId, Amount, BlockNumber, Timestamp, DisputeId, MaxVotes: Get<u32>> {
+		/// Identifier of the dispute.
+		pub identifier: DisputeId,
 		/// The round of voting on a given dispute or proposal.
 		pub vote_round: u32,
 		/// Timestamp of when vote was initiated.
