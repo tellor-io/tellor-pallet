@@ -7,7 +7,7 @@ use crate::{
 };
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{assert_noop, assert_ok, traits::PalletInfoAccess};
-use sp_core::{bytes::to_hex, keccak_256, H256};
+use sp_core::{bytes::to_hex, keccak_256, H256, Get};
 use sp_runtime::traits::BadOrigin;
 use xcm::{latest::prelude::*, DoubleEncoded};
 
@@ -18,6 +18,7 @@ mod oracle;
 type Config = crate::types::Configuration;
 type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
+pub type WithdrawalPeriod = <Test as crate::Config>::WithdrawalPeriod;
 
 fn submit_value_and_begin_dispute(
 	reporter: AccountIdOf<Test>,
@@ -100,6 +101,13 @@ fn xcm_transact(
 	)]
 }
 
+fn transact_with_config(
+	call: DoubleEncoded<RuntimeCall>,
+	config: XcmConfig
+) -> Vec<(MultiLocation, Xcm<()>)> {
+	xcm_transact(call, Box::new(config.fees), config.weight_limit, config.require_weight_at_most)
+}
+
 #[test]
 fn converts_token() {
 	assert_eq!(token(2.97), 2_970_000_000_000)
@@ -175,6 +183,70 @@ fn register() {
 					contract_address: (*REGISTRY).into(),
 				}
 				.into(),
+			)
+		});
+	});
+}
+
+#[test]
+fn deregister() {
+	let reporter = 1;
+	let address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			deposit_stake(reporter, STAKE_AMOUNT, address.clone());
+
+		});
+	});
+
+	ext.execute_with(|| {
+		with_block(|| {
+			for origin in
+			vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
+			{
+				assert_noop!(Tellor::deregister(origin), BadOrigin);
+			}
+			assert_noop!(Tellor::deregister(RuntimeOrigin::root()), Error::ActiveStake);
+			assert_ok!(Tellor::report_staking_withdraw_request(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				address.clone()
+			));
+		});
+		with_block_after(WithdrawalPeriod::get(), || {
+			assert_ok!(Tellor::report_stake_withdrawn(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				address
+			));
+			let config = Configuration::get().unwrap();
+			assert_ok!(Tellor::deregister(RuntimeOrigin::root()));
+			assert!(StakeAmount::<Test>::get().is_none());
+			System::assert_has_event(Event::Configured { stake_amount: STAKE_AMOUNT }.into());
+			assert_eq!(
+				vec![sent_xcm().last().unwrap().clone()],
+				transact_with_config(
+					ethereum_xcm::transact(
+						*REGISTRY,
+						registry::deregister().try_into().unwrap(),
+						config.gas_limit,
+						None,
+					).into(),
+					config.xcm_config,
+				)
+			);
+
+			System::assert_last_event(
+				Event::DeregistrationAttempted {
+					para_id: PARA_ID,
+					contract_address: (*REGISTRY).into(),
+				}.into(),
 			)
 		});
 	});

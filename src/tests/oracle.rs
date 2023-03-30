@@ -12,7 +12,6 @@ type BoundedReportsSubmittedByQueryId =
 type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
 type ReportingLock = <Test as Config>::ReportingLock;
 type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
-type WithdrawalPeriod = <Test as Config>::WithdrawalPeriod;
 
 #[test]
 fn deposit_stake() {
