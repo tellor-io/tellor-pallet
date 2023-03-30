@@ -1,7 +1,7 @@
 # Tellor
 
-[![Check Set-Up & Build](https://github.com/evilrobot-01/substrate-pallets/actions/workflows/check.yml/badge.svg?branch=tellor)](https://github.com/evilrobot-01/substrate-pallets/actions/workflows/check.yml)
-[![Run Tests](https://github.com/evilrobot-01/substrate-pallets/actions/workflows/test.yml/badge.svg?branch=tellor)](https://github.com/evilrobot-01/substrate-pallets/actions/workflows/test.yml)
+[![Check Set-Up & Build](https://github.com/tellor-io/tellor-pallet/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/tellor-io/tellor-pallet/actions/workflows/check.yml)
+[![Run Tests](https://github.com/tellor-io/tellor-pallet/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/tellor-io/tellor-pallet/actions/workflows/test.yml)
 
 License: Unlicense
 

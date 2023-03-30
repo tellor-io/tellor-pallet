@@ -4,9 +4,9 @@ name: Run Tests
 on:
   # Triggers the workflow on push or pull request events but only for the tellor branch
   push:
-    branches: [ tellor ]
+    branches: [ main ]
   pull_request:
-    branches: [ tellor ]
+    branches: [ main ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
