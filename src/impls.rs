@@ -62,7 +62,7 @@ impl<T: Config> Pallet<T> {
 						disputes.saturating_dec();
 					}
 				});
-				vote.result = Some(result.clone());
+				vote.result = Some(result);
 				Ok(())
 			},
 		})?;
