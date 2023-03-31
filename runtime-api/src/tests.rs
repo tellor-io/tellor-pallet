@@ -26,7 +26,7 @@ type Block = frame_system::mocking::MockBlock<Test>;
 type AccountId = u64;
 type Amount = u64;
 type BlockNumber = u64;
-type DisputeId = u128;
+type DisputeId = H256;
 type QueryId = H256;
 type MaxValueLength = ConstU32<4>;
 type Moment = u64;
@@ -34,7 +34,6 @@ type FeedId = H256;
 type StakeInfo =
 	tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter, QueryId, Moment>;
 type Value = BoundedVec<u8, MaxValueLength>;
-type VoteId = H256;
 
 // Configure a mock runtime to test implementation of the runtime-api
 frame_support::construct_runtime!(
@@ -99,7 +98,6 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = Amount;
-	type DisputeId = DisputeId;
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
@@ -113,7 +111,6 @@ impl tellor::Config for Test {
 	type MaxTipsPerQuery = ();
 	type MaxValueLength = MaxValueLength;
 	type MaxVotes = ();
-	type MaxVoteRounds = ();
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
 	type Price = u32;
@@ -295,9 +292,9 @@ mock_impl_runtime_apis! {
 		}
 	}
 
-	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, DisputeId, QueryId, Moment, Value, DisputeId, VoteId> for Test {
-		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> bool {
-			tellor::Pallet::<Test>::did_vote(dispute_id, voter)
+	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, DisputeId, QueryId, Moment, Value> for Test {
+		fn did_vote(dispute_id: DisputeId, vote_round: u32, voter: AccountId) -> bool {
+			tellor::Pallet::<Test>::did_vote(dispute_id, vote_round, voter)
 		}
 
 		fn get_dispute_fee() -> Amount {
@@ -316,12 +313,12 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_open_disputes_on_id(query_id)
 		}
 
-		fn get_vote_count() -> DisputeId {
+		fn get_vote_count() -> u128 {
 			tellor::Pallet::<Test>::get_vote_count()
 		}
 
-		fn get_vote_info(dispute_id: DisputeId) -> Option<(VoteId,VoteInfo<Amount,BlockNumber, Moment>,bool,Option<VoteResult>,AccountId)> {
-			tellor::Pallet::<Test>::get_vote_info(dispute_id).map(|v| (v.identifier,
+		fn get_vote_info(dispute_id: DisputeId, vote_round: u32) -> Option<(VoteInfo<Amount,BlockNumber, Moment>,bool,Option<VoteResult>,AccountId)> {
+			tellor::Pallet::<Test>::get_vote_info(dispute_id, vote_round).map(|v| (
 			VoteInfo{
 					vote_round: v.vote_round,
 					start_date: v.start_date,
@@ -340,8 +337,8 @@ mock_impl_runtime_apis! {
 			v.initiator))
 		}
 
-		fn get_vote_rounds(vote_id: VoteId) -> Vec<DisputeId>{
-			tellor::Pallet::<Test>::get_vote_rounds(vote_id)
+		fn get_vote_rounds(dispute_id: DisputeId) -> u32 {
+			tellor::Pallet::<Test>::get_vote_rounds(dispute_id)
 		}
 
 		fn get_vote_tally_by_address(voter: AccountId) -> u128 {
@@ -688,7 +685,9 @@ mod governance {
 	#[test]
 	fn did_vote() {
 		new_test_ext().execute_with(|| {
-			assert!(!Test.did_vote(&BLOCKID, DisputeId::default(), AccountId::default()).unwrap());
+			assert!(!Test
+				.did_vote(&BLOCKID, DisputeId::default(), 0, AccountId::default())
+				.unwrap());
 		});
 	}
 
@@ -712,7 +711,7 @@ mod governance {
 	#[test]
 	fn get_dispute_info() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_dispute_info(&BLOCKID, 0).unwrap(), None);
+			assert_eq!(Test.get_dispute_info(&BLOCKID, DisputeId::default()).unwrap(), None);
 		});
 	}
 
@@ -733,14 +732,14 @@ mod governance {
 	#[test]
 	fn get_vote_info() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_vote_info(&BLOCKID, 0).unwrap(), None);
+			assert_eq!(Test.get_vote_info(&BLOCKID, DisputeId::default(), 0).unwrap(), None);
 		});
 	}
 
 	#[test]
 	fn get_vote_rounds() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_vote_rounds(&BLOCKID, H256::random()).unwrap(), vec![]);
+			assert_eq!(Test.get_vote_rounds(&BLOCKID, H256::random()).unwrap(), 0);
 		});
 	}
 
