@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
 	constants::{CLAIM_BUFFER, REPORTING_LOCK, WEEK_IN_SECONDS},
-	types::{FeedDetailsOf, FeedIdOf, QueryDataOf, QueryIdOf, Timestamp, TipOf},
+	types::{FeedDetailsOf, FeedId, QueryDataOf, QueryId, Timestamp, TipOf},
 	Config,
 };
 use frame_support::{
@@ -2357,7 +2357,7 @@ fn get_current_feeds() {
 	new_test_ext().execute_with(|| {
 		with_block(|| {
 			// create multiple feeds for the same query id
-			let feeds: Vec<FeedIdOf<Test>> = (1..=5u8)
+			let feeds: Vec<FeedId> = (1..=5u8)
 				.map(|i| {
 					create_feed(
 						feed_creator,
@@ -2382,7 +2382,7 @@ fn get_current_feeds() {
 // Helper function for creating feeds
 fn create_feed(
 	feed_creator: AccountIdOf<Test>,
-	query_id: QueryIdOf<Test>,
+	query_id: QueryId,
 	reward: AmountOf<Test>,
 	start_time: Timestamp,
 	interval: Timestamp,
@@ -2391,7 +2391,7 @@ fn create_feed(
 	reward_increase_per_second: AmountOf<Test>,
 	query_data: QueryDataOf<Test>,
 	amount: AmountOf<Test>,
-) -> FeedIdOf<Test> {
+) -> FeedId {
 	assert_ok!(Tellor::setup_data_feed(
 		RuntimeOrigin::signed(feed_creator),
 		query_id,

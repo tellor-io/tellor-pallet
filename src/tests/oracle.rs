@@ -4,7 +4,7 @@ use crate::{
 		DAY_IN_SECONDS, DISPUTE_PERIOD, REPORTING_LOCK, TALLIED_VOTE_DISPUTE_PERIOD,
 		WITHDRAWAL_PERIOD,
 	},
-	types::{Nonce, QueryIdOf, Timestamp},
+	types::{Nonce, QueryId, Timestamp},
 	Config,
 };
 use frame_support::{assert_noop, assert_ok};
@@ -12,7 +12,7 @@ use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, U256};
 use sp_runtime::traits::BadOrigin;
 
 type BoundedReportsSubmittedByQueryId =
-	BoundedBTreeMap<QueryIdOf<Test>, u128, <Test as Config>::MaxQueriesPerReporter>;
+	BoundedBTreeMap<QueryId, u128, <Test as Config>::MaxQueriesPerReporter>;
 
 #[test]
 fn deposit_stake() {

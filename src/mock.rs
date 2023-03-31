@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	testing::Header,
-	traits::{BlakeTwo256, Convert, IdentityLookup, Keccak256},
+	traits::{BlakeTwo256, Convert, IdentityLookup},
 };
 use sp_std::cell::RefCell;
 use std::{
@@ -109,8 +109,6 @@ impl tellor::Config for Test {
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
-	type Hash = H256;
-	type Hasher = Keccak256;
 	type MaxClaimTimestamps = ConstU32<10>;
 	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;

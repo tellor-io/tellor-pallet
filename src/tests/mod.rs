@@ -2,7 +2,7 @@ use crate::{
 	contracts::registry,
 	mock,
 	mock::*,
-	types::{AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryIdOf, ValueOf},
+	types::{AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryId, ValueOf},
 	xcm::{ethereum_xcm, XcmConfig},
 	Event, Origin, StakeAmount,
 };
@@ -30,7 +30,7 @@ fn now() -> crate::types::Timestamp {
 
 fn submit_value_and_begin_dispute(
 	reporter: AccountIdOf<Test>,
-	query_id: QueryIdOf<Test>,
+	query_id: QueryId,
 	query_data: QueryDataOf<Test>,
 ) -> DisputeIdOf<Test> {
 	assert_ok!(Tellor::submit_value(

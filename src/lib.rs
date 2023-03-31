@@ -19,13 +19,13 @@ use sp_runtime::{
 };
 use sp_std::vec::Vec;
 pub use traits::{SendXcm, UsingTellor};
-use types::*;
 pub use types::{
 	autopay::{FeedDetails, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
 	Address,
 };
+use types::{QueryId, *};
 
 #[cfg(test)]
 mod mock;
@@ -46,7 +46,7 @@ pub mod xcm;
 pub mod pallet {
 	use super::{
 		contracts::{governance, registry},
-		types::*,
+		types::{QueryId, *},
 		xcm::{self, ethereum_xcm},
 		*,
 	};
@@ -55,8 +55,7 @@ pub mod pallet {
 	use frame_support::{
 		pallet_prelude::*,
 		sp_runtime::traits::{
-			AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, MaybeSerializeDeserialize,
-			Member, SimpleBitOps,
+			AtLeast32BitUnsigned, Hash, MaybeDisplay, MaybeSerializeDeserialize, Member,
 		},
 		traits::{
 			fungible::{Inspect, Transfer},
@@ -118,25 +117,6 @@ pub mod pallet {
 
 		/// Origin that handles dispute resolution (governance).
 		type GovernanceOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
-
-		/// The output of the `Hasher` function.
-		type Hash: Parameter
-			+ Member
-			+ MaybeSerializeDeserialize
-			+ Debug
-			+ MaybeDisplay
-			+ SimpleBitOps
-			+ Ord
-			+ Default
-			+ Copy
-			+ CheckEqual
-			+ sp_std::hash::Hash
-			+ AsRef<[u8]>
-			+ AsMut<[u8]>
-			+ MaxEncodedLen;
-
-		/// The hashing system (algorithm) to be used (e.g. keccak256).
-		type Hasher: Hash<Output = <Self as Config>::Hash> + TypeInfo;
 
 		/// The maximum number of timestamps per claim.
 		#[pallet::constant]
@@ -222,35 +202,29 @@ pub mod pallet {
 	pub type CurrentFeeds<T> = StorageMap<
 		_,
 		Blake2_128Concat,
-		QueryIdOf<T>,
-		BoundedVec<FeedIdOf<T>, <T as Config>::MaxFeedsPerQuery>,
+		QueryId,
+		BoundedVec<FeedId, <T as Config>::MaxFeedsPerQuery>,
 	>;
 	#[pallet::storage]
-	pub type DataFeeds<T> = StorageDoubleMap<
-		_,
-		Blake2_128Concat,
-		QueryIdOf<T>,
-		Blake2_128Concat,
-		FeedIdOf<T>,
-		FeedOf<T>,
-	>;
+	pub type DataFeeds<T> =
+		StorageDoubleMap<_, Blake2_128Concat, QueryId, Blake2_128Concat, FeedId, FeedOf<T>>;
 	#[pallet::storage]
 	pub type FeedsWithFunding<T> =
-		StorageValue<_, BoundedVec<FeedIdOf<T>, <T as Config>::MaxFundedFeeds>, ValueQuery>;
+		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
-	pub type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedIdOf<T>, QueryIdOf<T>>;
+	pub type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedId, QueryId>;
 	#[pallet::storage]
 	pub type QueryIdsWithFunding<T> =
-		StorageValue<_, BoundedVec<QueryIdOf<T>, <T as Config>::MaxFundedFeeds>, ValueQuery>;
+		StorageValue<_, BoundedVec<QueryId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
 	#[pallet::getter(fn query_ids_with_funding_index)]
-	pub type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, u32>;
+	pub type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryId, u32>;
 	#[pallet::storage]
 	#[pallet::getter(fn tips)]
 	pub type Tips<T> = StorageMap<
 		_,
 		Blake2_128Concat,
-		QueryIdOf<T>,
+		QueryId,
 		BoundedVec<TipOf<T>, <T as Config>::MaxTipsPerQuery>,
 	>;
 	#[pallet::storage]
@@ -258,7 +232,7 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, AmountOf<T>, ValueQuery>;
 	// Oracle
 	#[pallet::storage]
-	pub type Reports<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, ReportOf<T>>;
+	pub type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
 	#[pallet::storage]
 	pub type RewardRate<T> = StorageValue<_, AmountOf<T>>;
 	#[pallet::storage]
@@ -281,7 +255,7 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, DisputeOf<T>>;
 	#[pallet::storage]
-	pub type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, u128>;
+	pub type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryId, u128>;
 	#[pallet::storage]
 	pub type VoteCount<T> = StorageValue<_, DisputeIdOf<T>, ValueQuery>;
 	#[pallet::storage]
@@ -290,7 +264,7 @@ pub mod pallet {
 	pub type VoteRounds<T> = StorageMap<
 		_,
 		Blake2_128Concat,
-		VoteIdOf<T>,
+		VoteId,
 		BoundedVec<DisputeIdOf<T>, <T as Config>::MaxVoteRounds>,
 		ValueQuery,
 	>;
@@ -299,7 +273,7 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
 	// Query Data
 	#[pallet::storage]
-	pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, QueryDataOf<T>>;
+	pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryId, QueryDataOf<T>>;
 	// Configuration
 	#[pallet::storage]
 	pub type Configuration<T> = StorageValue<_, types::Configuration>;
@@ -310,32 +284,32 @@ pub mod pallet {
 		// AutoPay
 		/// Emitted when a data feed is funded.
 		DataFeedFunded {
-			query_id: QueryIdOf<T>,
-			feed_id: FeedIdOf<T>,
+			query_id: QueryId,
+			feed_id: FeedId,
 			amount: AmountOf<T>,
 			feed_funder: AccountIdOf<T>,
 			feed_details: FeedDetailsOf<T>,
 		},
 		/// Emitted when a data feed is set up.
 		NewDataFeed {
-			query_id: QueryIdOf<T>,
-			feed_id: FeedIdOf<T>,
+			query_id: QueryId,
+			feed_id: FeedId,
 			query_data: QueryDataOf<T>,
 			feed_creator: AccountIdOf<T>,
 		},
 		/// Emitted when a onetime tip is claimed.
-		OneTimeTipClaimed { query_id: QueryIdOf<T>, amount: AmountOf<T>, reporter: AccountIdOf<T> },
+		OneTimeTipClaimed { query_id: QueryId, amount: AmountOf<T>, reporter: AccountIdOf<T> },
 		/// Emitted when a tip is added.
 		TipAdded {
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			amount: AmountOf<T>,
 			query_data: QueryDataOf<T>,
 			tipper: AccountIdOf<T>,
 		},
 		/// Emitted when a tip is claimed.
 		TipClaimed {
-			feed_id: FeedIdOf<T>,
-			query_id: QueryIdOf<T>,
+			feed_id: FeedId,
+			query_id: QueryId,
 			amount: AmountOf<T>,
 			reporter: AccountIdOf<T>,
 		},
@@ -343,7 +317,7 @@ pub mod pallet {
 		// Oracle
 		/// Emitted when a new value is submitted.
 		NewReport {
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			time: Timestamp,
 			value: ValueOf<T>,
 			nonce: Nonce,
@@ -363,13 +337,13 @@ pub mod pallet {
 			address: Address,
 		},
 		/// Emitted when a value is removed (via governance).
-		ValueRemoved { query_id: QueryIdOf<T>, timestamp: Timestamp },
+		ValueRemoved { query_id: QueryId, timestamp: Timestamp },
 
 		// Governance
 		/// Emitted when a new dispute is opened.
 		NewDispute {
 			dispute_id: DisputeIdOf<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			timestamp: Timestamp,
 			reporter: AccountIdOf<T>,
 		},
@@ -386,7 +360,7 @@ pub mod pallet {
 
 		// Query Data
 		/// Emitted when query data is stored.
-		QueryDataStored { query_id: QueryIdOf<T> },
+		QueryDataStored { query_id: QueryId },
 
 		// Registration
 		/// Emitted when the pallet is (re-)configured.
@@ -600,7 +574,7 @@ pub mod pallet {
 		#[pallet::call_index(1)]
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
@@ -671,8 +645,8 @@ pub mod pallet {
 		#[pallet::call_index(2)]
 		pub fn claim_tip(
 			origin: OriginFor<T>,
-			feed_id: FeedIdOf<T>,
-			query_id: QueryIdOf<T>,
+			feed_id: FeedId,
+			query_id: QueryId,
 			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
@@ -771,8 +745,8 @@ pub mod pallet {
 		#[pallet::call_index(3)]
 		pub fn fund_feed(
 			origin: OriginFor<T>,
-			feed_id: FeedIdOf<T>,
-			query_id: QueryIdOf<T>,
+			feed_id: FeedId,
+			query_id: QueryId,
 			amount: AmountOf<T>,
 		) -> DispatchResult {
 			let feed_funder = ensure_signed(origin)?;
@@ -793,7 +767,7 @@ pub mod pallet {
 		#[pallet::call_index(4)]
 		pub fn setup_data_feed(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			reward: AmountOf<T>,
 			start_time: Timestamp,
 			interval: Timestamp,
@@ -804,11 +778,8 @@ pub mod pallet {
 			amount: AmountOf<T>,
 		) -> DispatchResult {
 			let feed_creator = ensure_signed(origin)?;
-			ensure!(
-				query_id == HasherOf::<T>::hash(query_data.as_ref()),
-				Error::<T>::InvalidQueryId
-			);
-			let feed_id = HasherOf::<T>::hash(
+			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
+			let feed_id = Keccak256::hash(
 				&contracts::Abi::default()
 					.fixed_bytes(query_id.as_ref())
 					.uint(reward)
@@ -876,15 +847,12 @@ pub mod pallet {
 		#[pallet::call_index(5)]
 		pub fn tip(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			amount: AmountOf<T>,
 			query_data: QueryDataOf<T>,
 		) -> DispatchResult {
 			let tipper = ensure_signed(origin)?;
-			ensure!(
-				query_id == HasherOf::<T>::hash(query_data.as_ref()),
-				Error::<T>::InvalidQueryId
-			);
+			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			ensure!(amount > AmountOf::<T>::default(), Error::<T>::InvalidAmount);
 
 			<Tips<T>>::try_mutate(query_id, |mut maybe_tips| -> DispatchResult {
@@ -958,7 +926,7 @@ pub mod pallet {
 		#[pallet::call_index(6)]
 		pub fn submit_value(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			value: ValueOf<T>,
 			nonce: Nonce,
 			query_data: QueryDataOf<T>,
@@ -1007,10 +975,7 @@ pub mod pallet {
 						.ok_or(Error::<T>::ReportingLockCalculationError)?,
 				Error::<T>::ReporterTimeLocked
 			);
-			ensure!(
-				query_id == HasherOf::<T>::hash(query_data.as_ref()),
-				Error::<T>::InvalidQueryId
-			);
+			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			staker.reporter_last_timestamp = timestamp;
 			// Checks for no double reporting of timestamps
 			ensure!(
@@ -1091,7 +1056,7 @@ pub mod pallet {
 		#[pallet::call_index(7)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			timestamp: Timestamp,
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
@@ -1102,7 +1067,7 @@ pub mod pallet {
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
 				Error::<T>::NoValueExists
 			);
-			let vote_id: VoteIdOf<T> = HasherOf::<T>::hash(
+			let vote_id: VoteId = Keccak256::hash(
 				&contracts::Abi::default()
 					.uint(T::ParachainId::get())
 					.fixed_bytes(query_id.as_ref())
