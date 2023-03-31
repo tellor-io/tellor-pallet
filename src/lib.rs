@@ -1252,7 +1252,6 @@ pub mod pallet {
 						&dispute.value,
 						disputed_reporter,
 						dispute_initiator,
-						dispute_fee,
 						<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
 					)
 					.try_into()
