@@ -1,16 +1,8 @@
 use super::*;
 
-pub(crate) fn register(
-	para_id: ParaId,
-	pallet_index: u8,
-	stake_amount: impl Into<Amount>,
-) -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [40, 162, 149, 29];
-	Call::new(&FUNCTION)
-		.uint(para_id)
-		.uint(pallet_index)
-		.uint(stake_amount)
-		.encode()
+pub(crate) fn register(para_id: ParaId, pallet_index: u8) -> Vec<u8> {
+	const FUNCTION: [u8; 4] = [20, 1, 238, 43];
+	Call::new(&FUNCTION).uint(para_id).uint(pallet_index).encode()
 }
 
 pub(crate) fn deregister() -> Vec<u8> {
@@ -25,13 +17,12 @@ mod tests {
 
 	#[allow(deprecated)]
 	fn register() -> Function {
-		// register(uint32,uint8,uint256)
+		// register(uint32,uint8)
 		Function {
 			name: "register".to_string(),
 			inputs: vec![
 				param("_paraId", ParamType::Uint(32)),
 				param("_palletIndex", ParamType::Uint(8)),
-				param("_stakeAmount", ParamType::Uint(256)),
 			],
 			outputs: vec![],
 			constant: None,
@@ -51,17 +42,12 @@ mod tests {
 	fn encodes_register_call() {
 		let para_id = 3000;
 		let pallet_index = 3;
-		let stake_amount = 1675711956967u128;
 
 		assert_eq!(
 			register()
-				.encode_input(&vec![
-					Token::Uint(para_id.into()),
-					Token::Uint(pallet_index.into()),
-					Token::Uint(stake_amount.into()),
-				])
+				.encode_input(&vec![Token::Uint(para_id.into()), Token::Uint(pallet_index.into()),])
 				.unwrap()[..],
-			super::register(para_id, pallet_index, stake_amount)[..]
+			super::register(para_id, pallet_index)[..]
 		)
 	}
 

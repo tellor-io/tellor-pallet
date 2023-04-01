@@ -168,7 +168,7 @@ fn register() {
 				xcm_transact(
 					ethereum_xcm::transact(
 						*REGISTRY,
-						registry::register(PARA_ID, PALLET_INDEX, STAKE_AMOUNT).try_into().unwrap(),
+						registry::register(PARA_ID, PALLET_INDEX).try_into().unwrap(),
 						gas_limit,
 						None,
 					)
