@@ -275,7 +275,7 @@ sp_api::decl_runtime_apis! {
 		/// * `voter` - The account of the voter to check.
 		/// # Returns
 		/// Whether or not the account voted for the specific dispute round.
-		fn did_vote(dispute_id: DisputeId, vote_round: u32, voter: AccountId) -> bool;
+		fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountId) -> bool;
 
 		/// Get the latest dispute fee.
 		/// # Returns
@@ -317,14 +317,14 @@ sp_api::decl_runtime_apis! {
 		/// # Returns
 		/// Information on a vote for a given dispute identifier including: the vote identifier, the
 		/// vote information, whether it has been executed, the vote result and the dispute initiator.
-		fn get_vote_info(dispute_id: DisputeId, vote_round: u32) -> Option<(VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)>;
+		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)>;
 
 		/// Returns the voting rounds for a given dispute identifier.
 		/// # Arguments
 		/// * `dispute_id` - Identifier for a dispute.
 		/// # Returns
 		/// The number of vote rounds for the dispute identifier.
-		fn get_vote_rounds(dispute_id: DisputeId) -> u32;
+		fn get_vote_rounds(dispute_id: DisputeId) -> u8;
 
 		/// Returns the total number of votes cast by a voter.
 		/// # Arguments

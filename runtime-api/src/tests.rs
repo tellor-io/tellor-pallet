@@ -293,7 +293,7 @@ mock_impl_runtime_apis! {
 	}
 
 	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, DisputeId, QueryId, Moment, Value> for Test {
-		fn did_vote(dispute_id: DisputeId, vote_round: u32, voter: AccountId) -> bool {
+		fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountId) -> bool {
 			tellor::Pallet::<Test>::did_vote(dispute_id, vote_round, voter)
 		}
 
@@ -317,7 +317,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_vote_count()
 		}
 
-		fn get_vote_info(dispute_id: DisputeId, vote_round: u32) -> Option<(VoteInfo<Amount,BlockNumber, Moment>,bool,Option<VoteResult>,AccountId)> {
+		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Amount,BlockNumber, Moment>,bool,Option<VoteResult>,AccountId)> {
 			tellor::Pallet::<Test>::get_vote_info(dispute_id, vote_round).map(|v| (
 			VoteInfo{
 					vote_round: v.vote_round,
@@ -337,7 +337,7 @@ mock_impl_runtime_apis! {
 			v.initiator))
 		}
 
-		fn get_vote_rounds(dispute_id: DisputeId) -> u32 {
+		fn get_vote_rounds(dispute_id: DisputeId) -> u8 {
 			tellor::Pallet::<Test>::get_vote_rounds(dispute_id)
 		}
 

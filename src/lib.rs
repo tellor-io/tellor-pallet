@@ -238,9 +238,9 @@ pub mod pallet {
 	pub type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
 	#[pallet::storage]
 	pub type VoteInfo<T> =
-		StorageDoubleMap<_, Blake2_128Concat, DisputeIdOf<T>, Blake2_128Concat, u32, VoteOf<T>>;
+		StorageDoubleMap<_, Blake2_128Concat, DisputeIdOf<T>, Blake2_128Concat, u8, VoteOf<T>>;
 	#[pallet::storage]
-	pub type VoteRounds<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, u32, ValueQuery>;
+	pub type VoteRounds<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, u8, ValueQuery>;
 	#[pallet::storage]
 	pub type VoteTallyByAddress<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;

@@ -199,7 +199,7 @@ pub(crate) mod governance {
 		/// Identifier of the dispute.
 		pub identifier: DisputeId,
 		/// The round of voting on a given dispute or proposal.
-		pub vote_round: u32,
+		pub vote_round: u8,
 		/// Timestamp of when vote was initiated.
 		pub start_date: Timestamp,
 		/// Block number of when vote was initiated.

@@ -24,7 +24,7 @@ impl<T: Config> Pallet<T> {
 	/// * `voter` - The account of the voter to check.
 	/// # Returns
 	/// Whether or not the account voted for the specific dispute round.
-	pub fn did_vote(dispute_id: DisputeIdOf<T>, vote_round: u32, voter: AccountIdOf<T>) -> bool {
+	pub fn did_vote(dispute_id: DisputeIdOf<T>, vote_round: u8, voter: AccountIdOf<T>) -> bool {
 		<VoteInfo<T>>::get(dispute_id, vote_round)
 			.and_then(|v| v.voted.get(&voter).copied())
 			.unwrap_or_default()
@@ -37,7 +37,7 @@ impl<T: Config> Pallet<T> {
 	/// * `result` - The result of the dispute, as determined by governance.
 	pub(super) fn execute_vote(
 		dispute_id: DisputeIdOf<T>,
-		vote_round: u32,
+		vote_round: u8,
 		result: VoteResult,
 	) -> DispatchResult {
 		// Ensure validity of id
@@ -843,7 +843,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Information on a vote for a given dispute identifier including: the vote identifier, the
 	/// vote information, whether it has been executed, the vote result and the dispute initiator.
-	pub fn get_vote_info(dispute_id: DisputeIdOf<T>, vote_round: u32) -> Option<VoteOf<T>> {
+	pub fn get_vote_info(dispute_id: DisputeIdOf<T>, vote_round: u8) -> Option<VoteOf<T>> {
 		<VoteInfo<T>>::get(dispute_id, vote_round)
 	}
 
@@ -852,7 +852,7 @@ impl<T: Config> Pallet<T> {
 	/// * `dispute_id` - Identifier for a dispute.
 	/// # Returns
 	/// The number of vote rounds for the dispute identifier.
-	pub fn get_vote_rounds(dispute_id: DisputeIdOf<T>) -> u32 {
+	pub fn get_vote_rounds(dispute_id: DisputeIdOf<T>) -> u8 {
 		<VoteRounds<T>>::get(dispute_id)
 	}
 
@@ -933,7 +933,7 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `dispute_id` - The dispute identifier.
 	/// * `vote_round` - The vote round.
-	pub(crate) fn tally_votes(dispute_id: DisputeIdOf<T>, vote_round: u32) -> DispatchResult {
+	pub(crate) fn tally_votes(dispute_id: DisputeIdOf<T>, vote_round: u8) -> DispatchResult {
 		// Ensure vote has not been executed and that vote has not been tallied
 		let initiator = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidDispute),
