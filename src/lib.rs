@@ -1558,6 +1558,7 @@ pub mod pallet {
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote, inferring result based on function called
 			Self::execute_vote(dispute_id, VoteResult::Invalid)?;
+			// todo: return fee to dispute initiator
 			Ok(())
 		}
 

@@ -990,3 +990,96 @@ fn get_tips_by_address() {
 		});
 	});
 }
+
+#[test]
+fn invalid_dispute() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let dispute_id = 0;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			super::deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+		})
+	});
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L127
+	ext.execute_with(|| {
+		let dispute_id = with_block(|| {
+			assert_noop!(
+				Tellor::report_invalid_dispute(
+					RuntimeOrigin::signed(reporter),
+					dispute_id
+				),
+				BadOrigin
+			);
+
+			submit_value_and_begin_dispute(reporter, query_id, query_data.clone())
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(dispute_id));
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(
+				Tellor::report_invalid_dispute(
+					Origin::Governance.into(),
+					dispute_id
+				)
+			);
+		});
+		// todo: validate returned fee of the initiator
+	});
+}
+
+#[test]
+fn slash_dispute_initiator() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let dispute_id = 0;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			super::deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+		})
+	});
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L127
+	ext.execute_with(|| {
+		let dispute_id = with_block(|| {
+			assert_noop!(
+				Tellor::report_invalid_dispute(
+					RuntimeOrigin::signed(reporter),
+					dispute_id
+				),
+				BadOrigin
+			);
+
+			submit_value_and_begin_dispute(reporter, query_id, query_data.clone())
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(dispute_id));
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(
+				Tellor::report_invalid_dispute(
+					Origin::Governance.into(),
+					dispute_id
+				)
+			);
+		});
+
+		// todo: validate slashed amount of the initiator
+	});
+}
