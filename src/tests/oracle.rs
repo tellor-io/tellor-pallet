@@ -4,7 +4,6 @@ use crate::{
 	Config, DAY_IN_MILLISECONDS,
 };
 use frame_support::{assert_noop, assert_ok, traits::Currency};
-use pallet_balances::Event::BalanceSet;
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, Get, U256};
 use sp_runtime::traits::BadOrigin;
 
@@ -14,7 +13,6 @@ type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
 type ReportingLock = <Test as Config>::ReportingLock;
 type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
 type WithdrawalPeriod = <Test as Config>::WithdrawalPeriod;
-
 
 #[test]
 fn deposit_stake() {
@@ -1616,6 +1614,137 @@ fn get_data_before() {
 			Tellor::get_data_before(query_id, timestamp_2),
 			Some((uint_value(150), timestamp_1))
 		);
+	});
+}
+
+#[test]
+fn invalid_dispute() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let dispute_id = 0;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			super::deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+		})
+	});
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L127
+	ext.execute_with(|| {
+		Balances::make_free_balance_be(&reporter, token(1_000));
+		let balance_before_begin_dispute = Balances::free_balance(&reporter);
+		let dispute_id = with_block(|| {
+			assert_noop!(
+				Tellor::report_invalid_dispute(
+					RuntimeOrigin::signed(reporter),
+					dispute_id
+				),
+				BadOrigin
+			);
+
+			submit_value_and_begin_dispute(reporter, query_id, query_data.clone())
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(dispute_id));
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(
+				Tellor::report_invalid_dispute(
+					Origin::Governance.into(),
+					dispute_id
+				)
+			);
+
+			// validate updated balance of dispute initiator
+			assert_eq!(Balances::free_balance(reporter), balance_before_begin_dispute);
+		});
+	});
+}
+
+#[test]
+fn slash_dispute_initiator() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let another_reporter = 2;
+	let dispute_id = 0;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L127
+	ext.execute_with(|| {
+		Balances::make_free_balance_be(&another_reporter, token(1_000));
+		let balance_before_begin_dispute = Balances::free_balance(&another_reporter);
+		let dispute_id = with_block(|| {
+			assert_noop!(
+				Tellor::report_invalid_dispute(
+					RuntimeOrigin::signed(reporter),
+					dispute_id
+				),
+				BadOrigin
+			);
+
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data,
+			));
+
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				another_reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				Timestamp::get()
+			));
+
+			match System::events().last().unwrap().event {
+				RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) => dispute_id,
+				_ => panic!(),
+			}
+		});
+
+		with_block_after(VoteRoundPeriod::get(), || {
+			assert_ok!(Tellor::tally_votes(dispute_id));
+		});
+
+		with_block_after(VoteTallyDisputePeriod::get(), || {
+			assert_ok!(
+				Tellor::slash_dispute_initiator(
+					Origin::Governance.into(),
+					dispute_id
+				)
+			);
+
+			// validate slashed balance of dispute initiator
+			let vote_info = Tellor::get_vote_info(dispute_id).unwrap();
+			assert_eq!(
+				Balances::free_balance(another_reporter),
+				balance_before_begin_dispute - vote_info.fee
+			);
+		});
 	});
 }
 

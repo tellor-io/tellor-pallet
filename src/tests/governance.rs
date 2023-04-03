@@ -59,6 +59,7 @@ fn begin_dispute() {
 			// todo:
 			// await h.expectThrow(gov.connect(accounts[4]).beginDispute(ETH_QUERY_ID, blocky.timestamp)) // must have tokens to pay/begin dispute
 			Balances::make_free_balance_be(&another_reporter, token(1_000));
+			let balance_before_begin_dispute = Balances::free_balance(&another_reporter);
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -86,6 +87,11 @@ fn begin_dispute() {
 			);
 			// todo
 			// assert(balance1 - balance2 - (await flex.getStakeAmount()/10) == 0, "dispute fee paid should be correct")
+			let dispute_initialization_fee = vote_info.fee;
+			assert_eq!(
+				Balances::free_balance(another_reporter),
+				balance_before_begin_dispute - dispute_initialization_fee
+			);
 			dispute_id
 		});
 

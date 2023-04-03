@@ -530,6 +530,8 @@ pub mod pallet {
 		VoteNotTallied,
 		/// Time for voting has not elapsed.
 		VotingPeriodActive,
+		/// Balance must be greater than transferring amount
+		InsufficientBalance,
 
 		// Registration
 		NotRegistered,
@@ -1219,8 +1221,13 @@ pub mod pallet {
 			// todo: confirm dispute fee handling with Tellor
 			let dispute_fee = vote.fee;
 			// should we check for funds availability?
-			//ensure!(T::Token::balance(&dispute_initiator) > dispute_fee, Error::<T>::InsufficientFund);
-			Self::pay_dispute_initialization_fee(&dispute_initiator, &dispute_fee)?;
+			let pallet_id = T::PalletId::get();
+			T::Token::transfer(
+				&dispute_initiator,
+				&pallet_id.into_sub_account_truncating(b"dispute"),
+				dispute_fee,
+				false,
+			)?;
 			<VoteInfo<T>>::insert(dispute_id, vote);
 			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {
@@ -1571,7 +1578,6 @@ pub mod pallet {
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote, inferring result based on function called
 			Self::execute_vote(dispute_id, VoteResult::Failed)?;
-			// todo: slash dispute initiator
 			Ok(())
 		}
 
