@@ -50,7 +50,7 @@ impl<T: Config> Pallet<T> {
 					Error::VoteNotFinal
 				);
 				ensure!(
-					Self::now().saturating_sub(vote.tally_date) >= TALLIED_VOTE_DISPUTE_PERIOD,
+					Self::now().saturating_sub(vote.tally_date) >= 1 * DAYS,
 					Error::<T>::TallyDisputePeriodActive
 				);
 				vote.executed = true;
@@ -397,7 +397,7 @@ impl<T: Config> Pallet<T> {
 		claimer: &AccountIdOf<T>,
 	) -> Result<AmountOf<T>, Error<T>> {
 		ensure!(
-			Self::now().saturating_sub(timestamp) > CLAIM_BUFFER,
+			Self::now().saturating_sub(timestamp) > 12 * HOURS,
 			Error::<T>::ClaimBufferNotPassed
 		);
 		ensure!(!Self::is_in_dispute(query_id, timestamp), Error::<T>::ValueDisputed);
@@ -621,10 +621,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Result<AmountOf<T>, Error<T>> {
-		ensure!(
-			Self::now().saturating_sub(timestamp) < CLAIM_PERIOD,
-			Error::<T>::ClaimPeriodExpired
-		);
+		ensure!(Self::now().saturating_sub(timestamp) < 4 * WEEKS, Error::<T>::ClaimPeriodExpired);
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
 		ensure!(!feed.reward_claimed.get(&timestamp).unwrap_or(&false), Error::TipAlreadyClaimed);
@@ -936,11 +933,11 @@ impl<T: Config> Pallet<T> {
 					Error::InvalidDispute
 				);
 				// Determine appropriate vote duration dispute round
-				// Vote time increases as rounds increase but only up to withdrawal period
+				// Vote time increases as rounds increase but only up to 6 days (withdrawal period)
 				// todo: safe math
 				ensure!(
-					Self::now() - vote.start_date >= DISPUTE_PERIOD * vote.vote_round as Timestamp ||
-						Self::now() - vote.start_date >= WITHDRAWAL_PERIOD,
+					Self::now() - vote.start_date >= vote.vote_round as Timestamp * DAYS ||
+						Self::now() - vote.start_date >= 6 * DAYS,
 					Error::VotingPeriodActive
 				);
 				// Note: remainder of tallying functionality takes place within governance controller contract

@@ -1,9 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::constants::{
-	CLAIM_BUFFER, CLAIM_PERIOD, DISPUTE_PERIOD, REPORTING_LOCK, TALLIED_VOTE_DISPUTE_PERIOD,
-	WITHDRAWAL_PERIOD,
-};
+use crate::constants::{DAYS, HOURS, REPORTING_LOCK, WEEKS};
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
 use codec::Encode;
 use frame_support::{
@@ -451,7 +448,7 @@ pub mod pallet {
 		AlreadyVoted,
 		/// Dispute must be started within reporting lock time.
 		DisputeReportingPeriodExpired,
-		/// New dispute round must be started within the dispute round reporting time.
+		/// New dispute round must be started within a day.
 		DisputeRoundReportingPeriodExpired,
 		/// Dispute does not exist.
 		InvalidDispute,
@@ -467,7 +464,7 @@ pub mod pallet {
 		NotReporter,
 		/// No value exists at given timestamp.
 		NoValueExists,
-		/// Sufficient time has to pass after tally to allow for disputes.
+		/// One day has to pass after tally to allow for disputes.
 		TallyDisputePeriodActive,
 		/// Vote has already been executed.
 		VoteAlreadyExecuted,
@@ -658,7 +655,7 @@ pub mod pallet {
 			let mut cumulative_reward = AmountOf::<T>::default();
 			for timestamp in &timestamps {
 				ensure!(
-					Self::now().saturating_sub(*timestamp) > CLAIM_BUFFER,
+					Self::now().saturating_sub(*timestamp) > 12 * HOURS,
 					Error::<T>::ClaimBufferNotPassed
 				);
 				ensure!(
@@ -1139,7 +1136,7 @@ pub mod pallet {
 				ensure!(
 					Self::now() -
 						<VoteInfo<T>>::get(prev_id).ok_or(Error::<T>::InvalidVote)?.tally_date <
-						DISPUTE_PERIOD,
+						1 * DAYS,
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
 				vote.fee = vote.fee.saturating_mul(
@@ -1406,7 +1403,7 @@ pub mod pallet {
 							Error::<T>::NoWithdrawalRequested
 						);
 						ensure!(
-							Self::now().saturating_sub(staker.start_date) >= WITHDRAWAL_PERIOD,
+							Self::now().saturating_sub(staker.start_date) >= 7 * DAYS,
 							Error::<T>::WithdrawalPeriodPending
 						);
 						// toWithdraw -= _staker.lockedBalance; // todo: required?

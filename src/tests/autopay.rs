@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-	constants::{CLAIM_BUFFER, REPORTING_LOCK, WEEK_IN_SECONDS},
+	constants::REPORTING_LOCK,
 	types::{FeedDetailsOf, FeedId, QueryDataOf, QueryId, Timestamp, TipOf},
 	Config,
 };
@@ -163,7 +163,7 @@ fn claim_tip_ensures() {
 			);
 		});
 		// Advancing time 12 hours to satisfy hardcoded buffer time.
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(43_200, || {
 			// message sender not reporter for given queryId and timestamp
 			assert_noop!(
 				Tellor::claim_tip(
@@ -218,7 +218,7 @@ fn claim_tip_ensures() {
 				timestamp
 			));
 		});
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(43_200 /* claim buffer */, || {
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -263,7 +263,7 @@ fn claim_tip_ensures() {
 			));
 			now()
 		});
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(43_200 /* claim buffer */, || {
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(reporter),
@@ -293,21 +293,19 @@ fn claim_tip_ensures() {
 				10,
 				query_data.clone(),
 			));
-			now()
-		});
-		with_block_after(CLAIM_BUFFER, || {
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(reporter),
 					feed_id,
 					query_id,
-					bounded_vec![timestamp_1, timestamp_2]
+					bounded_vec![timestamp_1, now()]
 				),
 				Error::InsufficientFeedBalance
 			);
+			now()
 		});
 		// timestamp too old to claim tip
-		with_block_after(4 * WEEK_IN_SECONDS, || {
+		with_block_after(86_400 * 7 * 4 * 6, || {
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(reporter),
@@ -386,7 +384,7 @@ fn claim_tip() {
 	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L120
 	ext.execute_with(|| {
 		// Advancing time 12 hours to satisfy hardcoded buffer time.
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(43_200, || {
 			let payer_before = Tellor::get_data_feed(feed_id).unwrap();
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
@@ -460,7 +458,7 @@ fn _get_reward_amount() {
 			(now(), feed_id)
 		});
 
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(43_201, || {
 			// Variable updates
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
@@ -1019,7 +1017,7 @@ fn claim_onetime_tip() {
 				Error::ClaimBufferNotPassed
 			);
 		});
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(86_400 / 2, || {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -1044,10 +1042,10 @@ fn claim_onetime_tip() {
 			));
 			now()
 		});
-		with_block_after(CLAIM_BUFFER / 2, || {
+		with_block_after((86_400 / 2) - 2 /* within reporting lock */, || {
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 		});
-		with_block_after(CLAIM_BUFFER / 2, || {
+		with_block_after(86_400 / 2 /* rest of claim buffer */, || {
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -1075,7 +1073,7 @@ fn claim_onetime_tip() {
 			));
 			now()
 		});
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(86_400 / 2, || {
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(reporter),
@@ -1115,7 +1113,7 @@ fn claim_onetime_tip() {
 			));
 			now()
 		});
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(86_400 / 2, || {
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -1164,7 +1162,7 @@ fn claim_onetime_tip() {
 			));
 			now()
 		});
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(86_400 / 2, || {
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -1178,10 +1176,8 @@ fn claim_onetime_tip() {
 				query_id,
 				bounded_vec![timestamp_2]
 			));
-		});
 
-		// tip already claimed
-		with_block_after(CLAIM_BUFFER, || {
+			// tip already claimed
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -1215,7 +1211,7 @@ fn claim_onetime_tip() {
 			));
 			now()
 		});
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(3_600 * 12, || {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1664,7 +1660,7 @@ fn get_funded_feeds() {
 			)
 		}
 
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(43_200, || {
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
 				feed_2,
@@ -1850,7 +1846,7 @@ fn get_funded_query_ids() {
 			now()
 		});
 
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(3_600 * 12, || {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_1,
@@ -1915,7 +1911,7 @@ fn get_funded_query_ids() {
 			now()
 		});
 
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(3_600 * 12, || {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_2,
@@ -2101,7 +2097,7 @@ fn get_reward_amount() {
 		);
 
 		// query rewards 1 week later
-		with_block_after(1 * WEEK_IN_SECONDS, || {
+		with_block_after(86_400 * 7, || {
 			assert_eq!(
 				Tellor::get_reward_amount(
 					feed_id,
@@ -2113,7 +2109,7 @@ fn get_reward_amount() {
 		});
 
 		// query after 12 weeks
-		with_block_after(12 * WEEK_IN_SECONDS, || {
+		with_block_after(86_400 * 7 * 12, || {
 			assert_eq!(
 				Tellor::get_reward_amount(
 					feed_id,
@@ -2269,7 +2265,7 @@ fn get_reward_claim_status_list() {
 			));
 			now()
 		});
-		let timestamp_2 = with_block_after(CLAIM_BUFFER, || {
+		let timestamp_2 = with_block_after(3_600, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter_2),
 				query_id,
@@ -2279,7 +2275,7 @@ fn get_reward_claim_status_list() {
 			));
 			now()
 		});
-		let timestamp_3 = with_block_after(CLAIM_BUFFER, || {
+		let timestamp_3 = with_block_after(3_600, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter_3),
 				query_id,
@@ -2301,7 +2297,7 @@ fn get_reward_claim_status_list() {
 		);
 
 		// claim tip and check status
-		with_block_after(CLAIM_BUFFER, || {
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter_1),
 				feed_id,

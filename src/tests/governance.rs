@@ -1,10 +1,5 @@
 use super::*;
-use crate::{
-	constants::{DISPUTE_PERIOD, REPORTING_LOCK, TALLIED_VOTE_DISPUTE_PERIOD},
-	mock::AccountId,
-	types::Tally,
-	Config, VoteResult,
-};
+use crate::{constants::REPORTING_LOCK, mock::AccountId, types::Tally, Config, VoteResult};
 use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map};
 use sp_runtime::traits::BadOrigin;
@@ -90,11 +85,13 @@ fn begin_dispute() {
 			dispute_id
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Report slash after tally dispute period
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				dispute_id,
@@ -104,7 +101,7 @@ fn begin_dispute() {
 			));
 		});
 
-		let timestamp = with_block_after(DISPUTE_PERIOD * 2, || {
+		let timestamp = with_block_after(86_400 * 2, || {
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
 				Error::DisputeRoundReportingPeriodExpired
@@ -126,7 +123,7 @@ fn begin_dispute() {
 			now()
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		with_block_after(86_400 + 10, || {
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
 				Error::DisputeReportingPeriodExpired
@@ -246,12 +243,14 @@ fn execute_vote() {
 			(now(), identifier)
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 			assert_noop!(Tellor::execute_vote(1, result), Error::TallyDisputePeriodActive); // a day must pass before execution
 		});
 
-		let timestamp = with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Execute after tally dispute period
+		let timestamp = with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::execute_vote(1, result));
 			assert_noop!(Tellor::execute_vote(1, result), Error::VoteAlreadyExecuted); // vote already executed
 			assert_noop!(
@@ -286,7 +285,7 @@ fn execute_vote() {
 			now()
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(2));
 			// start new round
 			assert_ok!(Tellor::begin_dispute(
@@ -296,16 +295,16 @@ fn execute_vote() {
 			));
 		});
 
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		with_block_after(86_400 * 2, || {
 			assert_noop!(Tellor::execute_vote(2, result), Error::VoteNotFinal); // vote must be the final vote
 		});
 
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(3));
 			assert_noop!(Tellor::execute_vote(3, result), Error::TallyDisputePeriodActive); // must wait longer
 		});
 
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(3, result));
 		});
 	});
@@ -347,7 +346,7 @@ fn tally_votes() {
 			assert_noop!(Tellor::tally_votes(1), Error::VotingPeriodActive); // Time for voting has not elapsed
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(1));
 			assert_noop!(Tellor::tally_votes(1), Error::VoteAlreadyTallied); // cannot re-tally a dispute
 
@@ -401,7 +400,7 @@ fn vote() {
 			); // Sender has already voted
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 			assert_noop!(
 				Tellor::vote(RuntimeOrigin::signed(reporter_2), 1, Some(true)),
@@ -576,10 +575,12 @@ fn get_disputes_by_reporter() {
 			assert_eq!(Tellor::get_disputes_by_reporter(reporter), vec![2, 1]);
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(1));
 		});
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 		});
 
@@ -638,10 +639,12 @@ fn get_open_disputes_on_id() {
 			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 2);
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 		});
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 		});
 
@@ -680,10 +683,12 @@ fn get_vote_count() {
 			assert_eq!(Tellor::get_vote_count(), 1, "vote count should increment correctly");
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 		});
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 			assert_eq!(
 				Tellor::get_vote_count(),
@@ -734,11 +739,13 @@ fn get_vote_info() {
 			(now(), System::block_number())
 		});
 
-		let tallied = with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		let tallied = with_block_after(86_400 * 7, || {
 			assert_ok!(Tellor::tally_votes(1));
 			now()
 		});
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 			let vote = Tellor::get_vote_info(1).unwrap();
 			let parachain_id: u32 = ParachainId::get();
@@ -814,7 +821,7 @@ fn get_vote_rounds() {
 			(now(), identifier)
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 			assert_eq!(Tellor::get_vote_rounds(identifier), vec![1, 2]);
@@ -928,12 +935,14 @@ fn get_tips_by_address() {
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(user), 1, Some(true)));
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(1));
 			now()
 		});
 
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 			assert_eq!(
 				Tellor::get_vote_info(1).unwrap().users,

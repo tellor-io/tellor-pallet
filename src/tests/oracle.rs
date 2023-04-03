@@ -1,9 +1,6 @@
 use super::*;
 use crate::{
-	constants::{
-		DAY_IN_SECONDS, DISPUTE_PERIOD, REPORTING_LOCK, TALLIED_VOTE_DISPUTE_PERIOD,
-		WITHDRAWAL_PERIOD,
-	},
+	constants::{DAYS, REPORTING_LOCK},
 	types::{Nonce, QueryId, Timestamp},
 	Config,
 };
@@ -290,11 +287,13 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		let dispute_id = with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Report slash after tally dispute period
+		let dispute_id = with_block_after(86_400, || {
 			// Slash when locked balance = 0
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, amount);
@@ -332,11 +331,13 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		let dispute_id = with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Report slash after tally dispute period
+		let dispute_id = with_block_after(86_400, || {
 			// Slash when lockedBalance >= stakeAmount
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
@@ -367,11 +368,13 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Report slash after tally dispute period
+		with_block_after(86_400, || {
 			// Slash when 0 < locked balance < stake amount
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
@@ -411,7 +414,7 @@ fn slash_reporter() {
 			assert_eq!(Tellor::get_total_stake_amount(), token(75));
 		});
 
-		let dispute_id = with_block_after(WITHDRAWAL_PERIOD, || {
+		let dispute_id = with_block_after(604_800, || {
 			assert_ok!(Tellor::report_stake_withdrawn(
 				Origin::Staking.into(),
 				reporter,
@@ -427,11 +430,13 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data) // start dispute, required for slashing
 		});
 
-		with_block_after(DISPUTE_PERIOD, || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		with_block_after(TALLIED_VOTE_DISPUTE_PERIOD, || {
+		// Report slash after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				dispute_id,
@@ -531,7 +536,7 @@ fn submit_value() {
 			);
 		});
 
-		with_block_after(WITHDRAWAL_PERIOD, || {
+		with_block_after(3_600 /* 1 hour */, || {
 			let timestamp = now();
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
@@ -666,7 +671,7 @@ fn withdraw_stake() {
 			assert_eq!(staker_details.locked_balance, token(10));
 		});
 
-		with_block_after(WITHDRAWAL_PERIOD, || {
+		with_block_after(60 * 60 * 24 * 7, || {
 			assert_ok!(Tellor::report_stake_withdrawn(
 				Origin::Staking.into(),
 				reporter,
@@ -1406,7 +1411,7 @@ fn get_index_for_data_before() {
 
 		// advance time and test
 		for year in 1..2 {
-			with_block_after(year * 365 * DAY_IN_SECONDS, || {
+			with_block_after(year * 365 * 86_400, || {
 				assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 			});
 		}
@@ -1560,7 +1565,7 @@ fn get_data_before() {
 
 		// advance time one year and test
 		for year in 1..2 {
-			with_block_after(year * 365 * DAY_IN_SECONDS, || {
+			with_block_after(year * 365 * 86_400, || {
 				assert_eq!(
 					Tellor::get_data_before(query_id, timestamp_3 + 1),
 					Some((uint_value(170), timestamp_3))
