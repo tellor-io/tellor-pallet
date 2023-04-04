@@ -229,18 +229,18 @@ pub mod pallet {
 	// Governance
 	#[pallet::storage]
 	pub type DisputeIdsByReporter<T> =
-		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Blake2_128Concat, DisputeIdOf<T>, ()>;
+		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Blake2_128Concat, DisputeId, ()>;
 	#[pallet::storage]
-	pub type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, DisputeOf<T>>;
+	pub type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeId, DisputeOf<T>>;
 	#[pallet::storage]
 	pub type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryId, u128>;
 	#[pallet::storage]
 	pub type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
 	#[pallet::storage]
 	pub type VoteInfo<T> =
-		StorageDoubleMap<_, Blake2_128Concat, DisputeIdOf<T>, Blake2_128Concat, u8, VoteOf<T>>;
+		StorageDoubleMap<_, Blake2_128Concat, DisputeId, Blake2_128Concat, u8, VoteOf<T>>;
 	#[pallet::storage]
-	pub type VoteRounds<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, u8, ValueQuery>;
+	pub type VoteRounds<T> = StorageMap<_, Blake2_128Concat, DisputeId, u8, ValueQuery>;
 	#[pallet::storage]
 	pub type VoteTallyByAddress<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
@@ -315,21 +315,17 @@ pub mod pallet {
 		// Governance
 		/// Emitted when a new dispute is opened.
 		NewDispute {
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 			query_id: QueryId,
 			timestamp: Timestamp,
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when an address casts their vote.
-		Voted { dispute_id: DisputeIdOf<T>, supports: Option<bool>, voter: AccountIdOf<T> },
+		Voted { dispute_id: DisputeId, supports: Option<bool>, voter: AccountIdOf<T> },
 		/// Emitted when all casting for a vote is tallied.
-		VoteTallied {
-			dispute_id: DisputeIdOf<T>,
-			initiator: AccountIdOf<T>,
-			reporter: AccountIdOf<T>,
-		},
+		VoteTallied { dispute_id: DisputeId, initiator: AccountIdOf<T>, reporter: AccountIdOf<T> },
 		/// Emitted when a vote is executed.
-		VoteExecuted { dispute_id: DisputeIdOf<T>, result: VoteResult },
+		VoteExecuted { dispute_id: DisputeId, result: VoteResult },
 
 		// Query Data
 		/// Emitted when query data is stored.
@@ -1040,7 +1036,7 @@ pub mod pallet {
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
 				Error::<T>::NoValueExists
 			);
-			let dispute_id: DisputeIdOf<T> = Keccak256::hash(
+			let dispute_id: DisputeId = Keccak256::hash(
 				&contracts::Abi::default()
 					.uint(T::ParachainId::get())
 					.fixed_bytes(query_id.as_ref())
@@ -1103,7 +1099,8 @@ pub mod pallet {
 				ensure!(
 					Self::now() -
 						<VoteInfo<T>>::get(dispute_id, prev_id)
-							.ok_or(Error::<T>::InvalidVote)?.tally_date < 1 * DAYS,
+							.ok_or(Error::<T>::InvalidVote)?
+							.tally_date < 1 * DAYS,
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
 				vote.fee = vote.fee.saturating_mul(
@@ -1177,13 +1174,13 @@ pub mod pallet {
 		#[pallet::call_index(8)]
 		pub fn vote(
 			origin: OriginFor<T>,
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 			supports: Option<bool>,
 		) -> DispatchResult {
 			let voter = ensure_signed(origin)?;
 			// Ensure that dispute has not been executed and that vote does not exist and is not tallied
 			ensure!(
-				dispute_id != <DisputeIdOf<T>>::default() &&
+				dispute_id != <DisputeId>::default() &&
 					dispute_id != Keccak256::hash(&[]) &&
 					<DisputeInfo<T>>::contains_key(dispute_id),
 				Error::<T>::InvalidVote
@@ -1393,7 +1390,7 @@ pub mod pallet {
 		#[pallet::call_index(12)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 			reporter: AccountIdOf<T>,
 			recipient: AccountIdOf<T>,
 			amount: Amount,
@@ -1454,7 +1451,7 @@ pub mod pallet {
 		#[pallet::call_index(13)]
 		pub fn report_invalid_dispute(
 			origin: OriginFor<T>,
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
@@ -1470,7 +1467,7 @@ pub mod pallet {
 		#[pallet::call_index(14)]
 		pub fn slash_dispute_initiator(
 			origin: OriginFor<T>,
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;

@@ -3,8 +3,7 @@ use crate::{
 	mock,
 	mock::*,
 	types::{
-		AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryId, Timestamp,
-		ValueOf,
+		AccountIdOf, Address, Amount, AmountOf, DisputeId, QueryDataOf, QueryId, Timestamp, ValueOf,
 	},
 	xcm::{ethereum_xcm, XcmConfig},
 	Event, Origin, StakeAmount,
@@ -26,13 +25,13 @@ type Config = crate::types::Configuration;
 type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
 
-fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeIdOf<T> {
+fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeId {
 	keccak_256(&ethabi::encode(&[
 		Token::Uint(para_id.into()),
 		Token::FixedBytes(query_id.0.to_vec()),
 		Token::Uint(timestamp.into()),
 	]))
-		.into()
+	.into()
 }
 
 // Returns the timestamp for the current block.
@@ -44,7 +43,7 @@ fn submit_value_and_begin_dispute(
 	reporter: AccountIdOf<Test>,
 	query_id: QueryId,
 	query_data: QueryDataOf<Test>,
-) -> DisputeIdOf<Test> {
+) -> DisputeId {
 	assert_ok!(Tellor::submit_value(
 		RuntimeOrigin::signed(reporter),
 		query_id,

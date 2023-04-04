@@ -539,7 +539,8 @@ fn get_dispute_info() {
 				query_data.clone(),
 			));
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
-			let dispute_info = Tellor::get_dispute_info(dispute_id(PARA_ID, query_id, now())).unwrap();
+			let dispute_info =
+				Tellor::get_dispute_info(dispute_id(PARA_ID, query_id, now())).unwrap();
 			assert_eq!(dispute_info.0, query_id, "disputed query id should be correct");
 			assert_eq!(dispute_info.1, now(), "disputed timestamp should be correct");
 			assert_eq!(dispute_info.2, uint_value(100), "disputed value should be correct");
@@ -579,7 +580,7 @@ fn get_disputes_by_reporter() {
 				0,
 				query_data.clone(),
 			));
-			assert_eq!(Tellor::get_disputes_by_reporter(reporter), Vec::<DisputeIdOf<Test>>::new());
+			assert_eq!(Tellor::get_disputes_by_reporter(reporter), Vec::<DisputeId>::new());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_initiator),
 				query_id,
@@ -993,7 +994,7 @@ fn get_tips_by_address() {
 	});
 }
 
-fn sort(mut disputes: Vec<DisputeIdOf<Test>>) -> Vec<DisputeIdOf<Test>> {
+fn sort(mut disputes: Vec<DisputeId>) -> Vec<DisputeId> {
 	disputes.sort();
 	disputes
 }

@@ -9,7 +9,7 @@ pub type Address = H160;
 pub(crate) type Amount = U256;
 pub(crate) type AmountOf<T> = <T as Config>::Amount;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
-pub(crate) type DisputeIdOf<T> = <T as Config>::Hash;
+pub(crate) type DisputeId = H256;
 pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, QueryId, Timestamp, ValueOf<T>>;
 pub(crate) type FeedId = H256;
 pub(crate) type FeedOf<T> = autopay::Feed<AmountOf<T>, Timestamp, <T as Config>::MaxRewardClaims>;
@@ -36,7 +36,7 @@ pub(crate) type VoteOf<T> = governance::Vote<
 	AmountOf<T>,
 	BlockNumberOf<T>,
 	Timestamp,
-	DisputeIdOf<T>,
+	DisputeId,
 	<T as Config>::MaxVotes,
 >;
 

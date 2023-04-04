@@ -24,7 +24,7 @@ impl<T: Config> Pallet<T> {
 	/// * `voter` - The account of the voter to check.
 	/// # Returns
 	/// Whether or not the account voted for the specific dispute round.
-	pub fn did_vote(dispute_id: DisputeIdOf<T>, vote_round: u8, voter: AccountIdOf<T>) -> bool {
+	pub fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountIdOf<T>) -> bool {
 		<VoteInfo<T>>::get(dispute_id, vote_round)
 			.and_then(|v| v.voted.get(&voter).copied())
 			.unwrap_or_default()
@@ -36,13 +36,13 @@ impl<T: Config> Pallet<T> {
 	/// * `vote_round` - The vote round.
 	/// * `result` - The result of the dispute, as determined by governance.
 	pub(super) fn execute_vote(
-		dispute_id: DisputeIdOf<T>,
+		dispute_id: DisputeId,
 		vote_round: u8,
 		result: VoteResult,
 	) -> DispatchResult {
 		// Ensure validity of id
 		ensure!(
-			dispute_id != <DisputeIdOf<T>>::default() &&
+			dispute_id != <DisputeId>::default() &&
 				dispute_id != Keccak256::hash(&[]) &&
 				<DisputeInfo<T>>::contains_key(dispute_id),
 			Error::<T>::InvalidDispute
@@ -245,7 +245,7 @@ impl<T: Config> Pallet<T> {
 	/// query identifier of disputed value, timestamp of disputed value, value being disputed,
 	/// reporter of the disputed value.
 	pub fn get_dispute_info(
-		dispute_id: DisputeIdOf<T>,
+		dispute_id: DisputeId,
 	) -> Option<(QueryId, Timestamp, ValueOf<T>, AccountIdOf<T>)> {
 		<DisputeInfo<T>>::get(dispute_id)
 			.map(|d| (d.query_id, d.timestamp, d.value, d.disputed_reporter))
@@ -256,7 +256,7 @@ impl<T: Config> Pallet<T> {
 	/// * `reporter` - The account of the reporter to check for.
 	/// # Returns
 	/// Dispute identifiers for a reporter, in no particular order.
-	pub fn get_disputes_by_reporter(reporter: AccountIdOf<T>) -> Vec<DisputeIdOf<T>> {
+	pub fn get_disputes_by_reporter(reporter: AccountIdOf<T>) -> Vec<DisputeId> {
 		<DisputeIdsByReporter<T>>::iter_key_prefix(reporter).collect()
 	}
 
@@ -843,7 +843,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Information on a vote for a given dispute identifier including: the vote identifier, the
 	/// vote information, whether it has been executed, the vote result and the dispute initiator.
-	pub fn get_vote_info(dispute_id: DisputeIdOf<T>, vote_round: u8) -> Option<VoteOf<T>> {
+	pub fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<VoteOf<T>> {
 		<VoteInfo<T>>::get(dispute_id, vote_round)
 	}
 
@@ -852,7 +852,7 @@ impl<T: Config> Pallet<T> {
 	/// * `dispute_id` - Identifier for a dispute.
 	/// # Returns
 	/// The number of vote rounds for the dispute identifier.
-	pub fn get_vote_rounds(dispute_id: DisputeIdOf<T>) -> u8 {
+	pub fn get_vote_rounds(dispute_id: DisputeId) -> u8 {
 		<VoteRounds<T>>::get(dispute_id)
 	}
 
@@ -933,14 +933,14 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `dispute_id` - The dispute identifier.
 	/// * `vote_round` - The vote round.
-	pub(crate) fn tally_votes(dispute_id: DisputeIdOf<T>, vote_round: u8) -> DispatchResult {
+	pub(crate) fn tally_votes(dispute_id: DisputeId, vote_round: u8) -> DispatchResult {
 		// Ensure vote has not been executed and that vote has not been tallied
 		let initiator = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidDispute),
 			Some(vote) => {
 				ensure!(vote.tally_date == 0, Error::VoteAlreadyTallied);
 				ensure!(
-					dispute_id != <DisputeIdOf<T>>::default() &&
+					dispute_id != DisputeId::default() &&
 						dispute_id != Keccak256::hash(&[]) &&
 						<DisputeInfo<T>>::contains_key(dispute_id),
 					Error::InvalidDispute

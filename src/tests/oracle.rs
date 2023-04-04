@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-	constants::{DAYS, REPORTING_LOCK},
+	constants::REPORTING_LOCK,
 	types::{Nonce, QueryId, Timestamp},
 	Config,
 };
