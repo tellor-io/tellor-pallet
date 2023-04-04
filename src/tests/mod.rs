@@ -1,12 +1,16 @@
 use crate::{
 	contracts::registry,
+	mock,
 	mock::*,
-	types::{AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryIdOf, ValueOf},
+	types::{AccountIdOf, Address, Amount, AmountOf, DisputeIdOf, QueryDataOf, QueryId, ValueOf},
 	xcm::{ethereum_xcm, XcmConfig},
 	Event, Origin, StakeAmount,
 };
 use ethabi::{Bytes, Token, Uint};
-use frame_support::{assert_noop, assert_ok, traits::PalletInfoAccess};
+use frame_support::{
+	assert_noop, assert_ok,
+	traits::{PalletInfoAccess, UnixTime},
+};
 use sp_core::{bytes::to_hex, keccak_256, H256};
 use sp_runtime::traits::BadOrigin;
 use xcm::{latest::prelude::*, DoubleEncoded};
@@ -19,9 +23,14 @@ type Config = crate::types::Configuration;
 type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
 
+// Returns the timestamp for the current block.
+fn now() -> crate::types::Timestamp {
+	<mock::Timestamp as UnixTime>::now().as_secs()
+}
+
 fn submit_value_and_begin_dispute(
 	reporter: AccountIdOf<Test>,
-	query_id: QueryIdOf<Test>,
+	query_id: QueryId,
 	query_data: QueryDataOf<Test>,
 ) -> DisputeIdOf<Test> {
 	assert_ok!(Tellor::submit_value(
@@ -31,7 +40,7 @@ fn submit_value_and_begin_dispute(
 		0,
 		query_data
 	));
-	assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, Timestamp::get()));
+	assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 
 	match System::events().last().unwrap().event {
 		RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) => dispute_id,

@@ -1,14 +1,11 @@
 use super::*;
-use crate::{mock::AccountId, types::Tally, Config, VoteResult};
+use crate::{constants::REPORTING_LOCK, mock::AccountId, types::Tally, Config, VoteResult};
 use frame_support::{assert_noop, assert_ok, traits::Currency};
-use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, Get};
+use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map};
 use sp_runtime::traits::BadOrigin;
 
 type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
 type ParachainId = <Test as Config>::ParachainId;
-type ReportingLock = <Test as Config>::ReportingLock;
-type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
-type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
 
 #[test]
 fn begin_dispute() {
@@ -52,7 +49,7 @@ fn begin_dispute() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
 		let dispute_id = with_block(|| {
@@ -88,12 +85,13 @@ fn begin_dispute() {
 			dispute_id
 		});
 
-		let dispute_period = VoteRoundPeriod::get();
-		with_block_after(dispute_period, || {
+		// Tally votes after vote duration
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Report slash after tally dispute period
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				dispute_id,
@@ -103,7 +101,7 @@ fn begin_dispute() {
 			));
 		});
 
-		let timestamp = with_block_after(dispute_period * 2, || {
+		let timestamp = with_block_after(86_400 * 2, || {
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
 				Error::DisputeRoundReportingPeriodExpired
@@ -122,10 +120,10 @@ fn begin_dispute() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		with_block_after(86_400 + 10, || {
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
 				Error::DisputeReportingPeriodExpired
@@ -153,7 +151,7 @@ fn begins_dispute_xcm() {
 				query_data
 			));
 
-			let timestamp = Timestamp::now();
+			let timestamp = now();
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 
 			let sent_messages = sent_xcm();
@@ -208,18 +206,18 @@ fn execute_vote() {
 			));
 			// todo
 			// assert_noop!(
-			// 	Tellor::begin_dispute(RuntimeOrigin::signed(4), query_id, Timestamp::get()),
+			// 	Tellor::begin_dispute(RuntimeOrigin::signed(4), query_id, now()),
 			// 	pallet_balances::Error::<Test>::InsufficientBalance
 			// ); // must have tokens to pay for dispute
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_reporter),
 				query_id,
-				Timestamp::get()
+				now()
 			));
 			//let balance_2 = Balances::balance(&dispute_reporter);
 			assert_eq!(
 				Tellor::get_dispute_info(1).unwrap(),
-				(query_id, Timestamp::get(), uint_value(100), reporter_1)
+				(query_id, now(), uint_value(100), reporter_1)
 			);
 			assert_eq!(
 				Tellor::get_open_disputes_on_id(query_id),
@@ -230,7 +228,7 @@ fn execute_vote() {
 			let identifier = keccak_256(&ethabi::encode(&vec![
 				Token::Uint(parachain_id.into()),
 				Token::FixedBytes(query_id.0.to_vec()),
-				Token::Uint(Timestamp::get().into()),
+				Token::Uint(now().into()),
 			]))
 			.into();
 			assert_eq!(
@@ -242,15 +240,17 @@ fn execute_vote() {
 
 			assert_noop!(Tellor::execute_vote(10, result), Error::InvalidDispute); // dispute id must exist
 			assert_noop!(Tellor::execute_vote(1, result), Error::VoteNotTallied); // vote must be tallied
-			(Timestamp::get(), identifier)
+			(now(), identifier)
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 			assert_noop!(Tellor::execute_vote(1, result), Error::TallyDisputePeriodActive); // a day must pass before execution
 		});
 
-		let timestamp = with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Execute after tally dispute period
+		let timestamp = with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::execute_vote(1, result));
 			assert_noop!(Tellor::execute_vote(1, result), Error::VoteAlreadyExecuted); // vote already executed
 			assert_noop!(
@@ -280,12 +280,12 @@ fn execute_vote() {
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_reporter),
 				query_id,
-				Timestamp::get()
+				now()
 			));
-			Timestamp::get()
+			now()
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(2));
 			// start new round
 			assert_ok!(Tellor::begin_dispute(
@@ -295,16 +295,16 @@ fn execute_vote() {
 			));
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		with_block_after(86_400 * 2, || {
 			assert_noop!(Tellor::execute_vote(2, result), Error::VoteNotFinal); // vote must be the final vote
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(3));
 			assert_noop!(Tellor::execute_vote(3, result), Error::TallyDisputePeriodActive); // must wait longer
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(3, result));
 		});
 	});
@@ -341,21 +341,17 @@ fn tally_votes() {
 			));
 			assert_noop!(Tellor::tally_votes(1), Error::InvalidDispute); // Cannot tally a dispute that does not exist
 
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(false)));
 			assert_noop!(Tellor::tally_votes(1), Error::VotingPeriodActive); // Time for voting has not elapsed
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(1));
 			assert_noop!(Tellor::tally_votes(1), Error::VoteAlreadyTallied); // cannot re-tally a dispute
 
 			let vote_info = Tellor::get_vote_info(1).unwrap();
-			assert_eq!(vote_info.tally_date, Timestamp::get(), "Tally date should be correct");
+			assert_eq!(vote_info.tally_date, now(), "Tally date should be correct");
 		});
 	});
 }
@@ -390,11 +386,7 @@ fn vote() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter_2),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter_2), query_id, now()));
 			assert_noop!(
 				Tellor::vote(RuntimeOrigin::signed(reporter_2), 2, Some(false)),
 				Error::InvalidVote
@@ -408,7 +400,7 @@ fn vote() {
 			); // Sender has already voted
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 			assert_noop!(
 				Tellor::vote(RuntimeOrigin::signed(reporter_2), 1, Some(true)),
@@ -481,11 +473,7 @@ fn did_vote() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			assert!(!Tellor::did_vote(1, reporter), "voter's voted status should be correct");
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(true)));
 			assert!(Tellor::did_vote(1, reporter), "voter's voted status should be correct");
@@ -519,14 +507,10 @@ fn get_dispute_info() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			let dispute_info = Tellor::get_dispute_info(1).unwrap();
 			assert_eq!(dispute_info.0, query_id, "disputed query id should be correct");
-			assert_eq!(dispute_info.1, Timestamp::get(), "disputed timestamp should be correct");
+			assert_eq!(dispute_info.1, now(), "disputed timestamp should be correct");
 			assert_eq!(dispute_info.2, uint_value(100), "disputed value should be correct");
 			assert_eq!(dispute_info.3, reporter, "disputed reporter should be correct");
 		});
@@ -568,12 +552,12 @@ fn get_disputes_by_reporter() {
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_initiator),
 				query_id,
-				Timestamp::get()
+				now()
 			));
-			Timestamp::get()
+			now()
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -586,15 +570,17 @@ fn get_disputes_by_reporter() {
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_initiator),
 				query_id,
-				Timestamp::get()
+				now()
 			));
 			assert_eq!(Tellor::get_disputes_by_reporter(reporter), vec![2, 1]);
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(1));
 		});
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 		});
 
@@ -629,7 +615,7 @@ fn get_open_disputes_on_id() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 		with_block(|| {
 			assert_ok!(Tellor::report_stake_deposited(
@@ -649,18 +635,16 @@ fn get_open_disputes_on_id() {
 			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 0);
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 1);
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 2);
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 		});
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 		});
 
@@ -695,18 +679,16 @@ fn get_vote_count() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			assert_eq!(Tellor::get_vote_count(), 1, "vote count should increment correctly");
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 		});
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 			assert_eq!(
 				Tellor::get_vote_count(),
@@ -720,11 +702,7 @@ fn get_vote_count() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			assert_eq!(Tellor::get_vote_count(), 2, "vote count should increment correctly");
 		})
 	});
@@ -756,20 +734,18 @@ fn get_vote_info() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), 1, Some(true)));
-			(Timestamp::get(), System::block_number())
+			(now(), System::block_number())
 		});
 
-		let tallied = with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		let tallied = with_block_after(86_400 * 7, || {
 			assert_ok!(Tellor::tally_votes(1));
-			Timestamp::get()
+			now()
 		});
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 			let vote = Tellor::get_vote_info(1).unwrap();
 			let parachain_id: u32 = ParachainId::get();
@@ -833,23 +809,19 @@ fn get_vote_rounds() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			let parachain_id: u32 = ParachainId::get();
 			let identifier = keccak_256(&ethabi::encode(&vec![
 				Token::Uint(parachain_id.into()),
 				Token::FixedBytes(query_id.0.to_vec()),
-				Token::Uint(Timestamp::get().into()),
+				Token::Uint(now().into()),
 			]))
 			.into();
 			assert_eq!(Tellor::get_vote_rounds(identifier), vec![1]);
-			(Timestamp::get(), identifier)
+			(now(), identifier)
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(1));
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 			assert_eq!(Tellor::get_vote_rounds(identifier), vec![1, 2]);
@@ -884,11 +856,7 @@ fn get_vote_tally_by_address() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 		});
 
 		with_block(|| {
@@ -905,11 +873,7 @@ fn get_vote_tally_by_address() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 
 			assert_eq!(
 				Tellor::get_vote_tally_by_address(reporter),
@@ -967,20 +931,18 @@ fn get_tips_by_address() {
 				query_data,
 			));
 
-			assert_ok!(Tellor::begin_dispute(
-				RuntimeOrigin::signed(reporter),
-				query_id,
-				Timestamp::get()
-			));
+			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(user), 1, Some(true)));
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(1));
-			Timestamp::get()
+			now()
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Execute vote after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::execute_vote(1, VoteResult::Passed));
 			assert_eq!(
 				Tellor::get_vote_info(1).unwrap().users,

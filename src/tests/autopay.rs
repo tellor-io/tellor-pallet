@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
-	types::{FeedDetailsOf, FeedIdOf, QueryDataOf, QueryIdOf, TimestampOf, TipOf},
-	Config, WEEK_IN_MILLISECONDS,
+	constants::REPORTING_LOCK,
+	types::{FeedDetailsOf, FeedId, QueryDataOf, QueryId, Timestamp, TipOf},
+	Config,
 };
 use frame_support::{
 	assert_noop, assert_ok,
@@ -10,13 +11,9 @@ use frame_support::{
 use sp_core::{bounded::BoundedVec, bounded_vec, keccak_256};
 use sp_runtime::traits::{AccountIdConversion, BadOrigin};
 
-type ClaimBuffer = <Test as Config>::ClaimBuffer;
 type Fee = <Test as Config>::Fee;
-type ReportingLock = <Test as Config>::ReportingLock;
 type Pallet = crate::Pallet<Test>;
 type Price = <Test as Config>::Price;
-
-const SECONDS: u64 = 1_000;
 
 #[test]
 fn claim_tip_ensures() {
@@ -42,9 +39,9 @@ fn claim_tip_ensures() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				0,
 				query_data.clone(),
@@ -60,10 +57,10 @@ fn claim_tip_ensures() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -71,10 +68,10 @@ fn claim_tip_ensures() {
 				1,
 				query_data.clone(),
 			));
-			timestamps.try_push(Timestamp::get()).unwrap();
+			timestamps.try_push(now()).unwrap();
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -82,10 +79,10 @@ fn claim_tip_ensures() {
 				2,
 				query_data.clone(),
 			));
-			bad_timestamps.try_push(Timestamp::get()).unwrap();
+			bad_timestamps.try_push(now()).unwrap();
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -96,7 +93,7 @@ fn claim_tip_ensures() {
 			// Note: timestamp not added to vector as per reference test
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -104,11 +101,11 @@ fn claim_tip_ensures() {
 				4,
 				query_data.clone(),
 			));
-			timestamps.try_push(Timestamp::get()).unwrap();
-			bad_timestamps.try_push(Timestamp::get()).unwrap();
+			timestamps.try_push(now()).unwrap();
+			bad_timestamps.try_push(now()).unwrap();
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -116,7 +113,7 @@ fn claim_tip_ensures() {
 				5,
 				query_data.clone(),
 			));
-			timestamps.try_push(Timestamp::get()).unwrap();
+			timestamps.try_push(now()).unwrap();
 		});
 
 		claimed_timestamp
@@ -166,7 +163,7 @@ fn claim_tip_ensures() {
 			);
 		});
 		// Advancing time 12 hours to satisfy hardcoded buffer time.
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(43_200, || {
 			// message sender not reporter for given queryId and timestamp
 			assert_noop!(
 				Tellor::claim_tip(
@@ -212,7 +209,7 @@ fn claim_tip_ensures() {
 				6,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 		with_block(|| {
 			assert_ok!(Tellor::begin_dispute(
@@ -221,7 +218,7 @@ fn claim_tip_ensures() {
 				timestamp
 			));
 		});
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(43_200 /* claim buffer */, || {
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -238,9 +235,9 @@ fn claim_tip_ensures() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600000 * SECONDS,
-				2 * SECONDS,
+				now(),
+				3_600_000,
+				2,
 				10_000,
 				0,
 				query_data.clone(),
@@ -264,9 +261,9 @@ fn claim_tip_ensures() {
 				8,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(43_200 /* claim buffer */, || {
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(reporter),
@@ -286,9 +283,9 @@ fn claim_tip_ensures() {
 				9,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_2 = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -296,21 +293,19 @@ fn claim_tip_ensures() {
 				10,
 				query_data.clone(),
 			));
-			Timestamp::get()
-		});
-		with_block_after(ClaimBuffer::get(), || {
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(reporter),
 					feed_id,
 					query_id,
-					bounded_vec![timestamp_1, timestamp_2]
+					bounded_vec![timestamp_1, now()]
 				),
 				Error::InsufficientFeedBalance
 			);
+			now()
 		});
 		// timestamp too old to claim tip
-		with_block_after(4 * WEEK_IN_MILLISECONDS, || {
+		with_block_after(86_400 * 7 * 4 * 6, || {
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(reporter),
@@ -345,16 +340,16 @@ fn claim_tip() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				0,
 				query_data.clone(),
 				token(1_000),
 			);
 		});
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -362,9 +357,9 @@ fn claim_tip() {
 				0,
 				query_data.clone(),
 			));
-			timestamps.push(Timestamp::get());
+			timestamps.push(now());
 		});
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -372,9 +367,9 @@ fn claim_tip() {
 				1,
 				query_data.clone(),
 			));
-			timestamps.push(Timestamp::get());
+			timestamps.push(now());
 		});
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -382,14 +377,14 @@ fn claim_tip() {
 				2,
 				query_data.clone(),
 			));
-			timestamps.push(Timestamp::get());
+			timestamps.push(now());
 		});
 	});
 
 	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L120
 	ext.execute_with(|| {
 		// Advancing time 12 hours to satisfy hardcoded buffer time.
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(43_200, || {
 			let payer_before = Tellor::get_data_feed(feed_id).unwrap();
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
@@ -443,9 +438,9 @@ fn _get_reward_amount() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				0,
 				query_data.clone(),
@@ -460,10 +455,10 @@ fn _get_reward_amount() {
 				query_data.clone(),
 			));
 
-			(Timestamp::get(), feed_id)
+			(now(), feed_id)
 		});
 
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(43_201, || {
 			// Variable updates
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
@@ -494,9 +489,9 @@ fn fund_feed() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				1,
 				3,
 				query_data.clone(),
@@ -575,15 +570,15 @@ fn setup_data_feed() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				600 * SECONDS,
-				60 * SECONDS,
+				now(),
+				600,
+				60,
 				0,
 				0,
 				query_data.clone(),
 				0,
 			);
-			Timestamp::get()
+			now()
 		})
 	});
 
@@ -596,8 +591,8 @@ fn setup_data_feed() {
 					query_id,
 					token(1),
 					timestamp,
-					3600 * SECONDS,
-					600 * SECONDS,
+					3600,
+					600,
 					0,
 					0,
 					query_data.clone(),
@@ -612,8 +607,8 @@ fn setup_data_feed() {
 					H256::random(),
 					token(1),
 					timestamp,
-					3600 * SECONDS,
-					600 * SECONDS,
+					3600,
+					600,
 					0,
 					0,
 					query_data.clone(),
@@ -628,8 +623,8 @@ fn setup_data_feed() {
 					query_id,
 					0,
 					timestamp,
-					3600 * SECONDS,
-					600 * SECONDS,
+					3600,
+					600,
 					0,
 					0,
 					query_data.clone(),
@@ -644,8 +639,8 @@ fn setup_data_feed() {
 					query_id,
 					token(1),
 					timestamp,
-					600 * SECONDS,
-					60 * SECONDS,
+					600,
+					60,
 					0,
 					0,
 					query_data.clone(),
@@ -660,8 +655,8 @@ fn setup_data_feed() {
 					query_id,
 					token(1),
 					timestamp,
-					600 * SECONDS,
-					3600 * SECONDS,
+					600,
+					3600,
 					0,
 					0,
 					query_data.clone(),
@@ -676,8 +671,8 @@ fn setup_data_feed() {
 					query_id,
 					token(1),
 					timestamp,
-					0 * SECONDS,
-					600 * SECONDS,
+					0,
+					600,
 					0,
 					0,
 					query_data.clone(),
@@ -691,8 +686,8 @@ fn setup_data_feed() {
 				query_id,
 				token(1),
 				timestamp,
-				3600 * SECONDS,
-				600 * SECONDS,
+				3600,
+				600,
 				1,
 				3,
 				query_data.clone(),
@@ -711,8 +706,8 @@ fn setup_data_feed() {
 			assert_eq!(result.reward, token(1));
 			assert_eq!(result.balance, 0);
 			assert_eq!(result.start_time, timestamp);
-			assert_eq!(result.interval, 3600 * SECONDS);
-			assert_eq!(result.window, 600 * SECONDS);
+			assert_eq!(result.interval, 3600);
+			assert_eq!(result.window, 600);
 			assert_eq!(result.price_threshold, 1);
 			assert_eq!(result.reward_increase_per_second, 3);
 			assert_eq!(result.feeds_with_funding_index, 0);
@@ -723,8 +718,8 @@ fn setup_data_feed() {
 				query_id,
 				token(1),
 				timestamp,
-				7600 * SECONDS,
-				600 * SECONDS,
+				7600,
+				600,
 				2,
 				4,
 				query_data.clone(),
@@ -739,8 +734,8 @@ fn setup_data_feed() {
 				query_id,
 				token(1),
 				timestamp,
-				3600 * SECONDS,
-				600 * SECONDS,
+				3600,
+				600,
 				1,
 				3,
 				query_data.clone(),
@@ -758,8 +753,8 @@ fn setup_data_feed() {
 				query_id,
 				token(1),
 				timestamp,
-				3600 * SECONDS,
-				1200 * SECONDS,
+				3600,
+				1200,
 				1,
 				3,
 				query_data.clone(),
@@ -789,15 +784,15 @@ fn get_reward_claimed_status() {
 		with_block(|| {
 			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
-			timestamp = Timestamp::get();
+			timestamp = super::now();
 			Balances::make_free_balance_be(&feed_creator, token(3));
 			feed_id = create_feed(
 				feed_creator,
 				query_id,
 				token(1),
 				timestamp,
-				3600 * SECONDS,
-				600 * SECONDS,
+				3600,
+				600,
 				0,
 				0,
 				query_data.clone(),
@@ -816,7 +811,7 @@ fn get_reward_claimed_status() {
 	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L190
 	ext.execute_with(|| {
 		assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap(), false);
-		with_block_after(86_400 * 1_000, || {
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
 				feed_id,
@@ -939,7 +934,7 @@ fn tip() {
 			);
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -1010,7 +1005,7 @@ fn claim_onetime_tip() {
 				0,
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
 		with_block(|| {
 			assert_noop!(
@@ -1022,7 +1017,7 @@ fn claim_onetime_tip() {
 				Error::ClaimBufferNotPassed
 			);
 		});
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(86_400 / 2, || {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -1045,13 +1040,12 @@ fn claim_onetime_tip() {
 				1,
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
-		let claim_buffer: u64 = ClaimBuffer::get();
-		with_block_after(claim_buffer / 2, || {
+		with_block_after((86_400 / 2) - 2 /* within reporting lock */, || {
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 		});
-		with_block_after(claim_buffer / 2, || {
+		with_block_after(86_400 / 2 /* rest of claim buffer */, || {
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -1077,9 +1071,9 @@ fn claim_onetime_tip() {
 				2,
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(86_400 / 2, || {
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(reporter),
@@ -1107,9 +1101,9 @@ fn claim_onetime_tip() {
 				3,
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_2 = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -1117,9 +1111,9 @@ fn claim_onetime_tip() {
 				4,
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(86_400 / 2, || {
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -1148,7 +1142,7 @@ fn claim_onetime_tip() {
 				0,
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
 		with_block(|| {
 			assert_ok!(Tellor::tip(
@@ -1158,7 +1152,7 @@ fn claim_onetime_tip() {
 				query_data.clone()
 			));
 		});
-		let timestamp_2 = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -1166,9 +1160,9 @@ fn claim_onetime_tip() {
 				1,
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(86_400 / 2, || {
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -1182,10 +1176,8 @@ fn claim_onetime_tip() {
 				query_id,
 				bounded_vec![timestamp_2]
 			));
-		});
 
-		// tip already claimed
-		with_block_after(ClaimBuffer::get(), || {
+			// tip already claimed
 			assert_noop!(
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
@@ -1217,9 +1209,9 @@ fn claim_onetime_tip() {
 				5,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(3_600 * 12, || {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1248,15 +1240,15 @@ fn get_data_feed() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				0,
 				query_data.clone(),
 				token(1_000),
 			);
-			Timestamp::get()
+			now()
 		})
 	});
 
@@ -1268,8 +1260,8 @@ fn get_data_feed() {
 				reward: token(1),
 				balance: token(1_000),
 				start_time: timestamp,
-				interval: 3600 * SECONDS,
-				window: 600 * SECONDS,
+				interval: 3600,
+				window: 600,
 				price_threshold: 0,
 				reward_increase_per_second: 0,
 				feeds_with_funding_index: 1,
@@ -1337,7 +1329,7 @@ fn get_past_tips() {
 				token(100),
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
 
 		with_block(|| {
@@ -1357,7 +1349,7 @@ fn get_past_tips() {
 				token(200),
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
 
 		assert_eq!(
@@ -1384,7 +1376,7 @@ fn get_past_tips() {
 				token(300),
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
 
 		assert_eq!(
@@ -1432,7 +1424,7 @@ fn get_past_tip_by_index() {
 				token(100),
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
 
 		with_block(|| {
@@ -1452,7 +1444,7 @@ fn get_past_tip_by_index() {
 				token(200),
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
 
 		assert_eq!(
@@ -1481,7 +1473,7 @@ fn get_past_tip_by_index() {
 				token(300),
 				query_data.clone()
 			));
-			Timestamp::get()
+			now()
 		});
 
 		assert_eq!(
@@ -1585,9 +1577,9 @@ fn get_funded_feeds() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				0,
 				query_data,
@@ -1614,9 +1606,9 @@ fn get_funded_feeds() {
 				feed_creator,
 				query_id_2,
 				token(1),
-				Timestamp::get(),
-				600 * SECONDS,
-				400 * SECONDS,
+				now(),
+				600,
+				400,
 				0,
 				0,
 				query_data_2.clone(),
@@ -1626,9 +1618,9 @@ fn get_funded_feeds() {
 				feed_creator,
 				query_id_3,
 				token(1),
-				Timestamp::get(),
-				600 * SECONDS,
-				400 * SECONDS,
+				now(),
+				600,
+				400,
 				0,
 				0,
 				query_data_3,
@@ -1651,7 +1643,7 @@ fn get_funded_feeds() {
 				0,
 				query_data_2,
 			));
-			Timestamp::get()
+			now()
 		});
 
 		// Check feed details
@@ -1668,7 +1660,7 @@ fn get_funded_feeds() {
 			)
 		}
 
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(43_200, || {
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
 				feed_2,
@@ -1702,18 +1694,8 @@ fn get_query_id_from_feed_id() {
 	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L386
 	new_test_ext().execute_with(|| {
 		with_block(|| {
-			let feed_id = create_feed(
-				feed_creator,
-				query_id,
-				token(1),
-				Timestamp::get(),
-				600 * SECONDS,
-				400 * SECONDS,
-				0,
-				0,
-				query_data,
-				0,
-			);
+			let feed_id =
+				create_feed(feed_creator, query_id, token(1), now(), 600, 400, 0, 0, query_data, 0);
 			assert_eq!(Tellor::get_query_id_from_feed_id(feed_id).unwrap(), query_id);
 		});
 	});
@@ -1820,7 +1802,7 @@ fn get_funded_query_ids() {
 			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 4);
 		});
 
-		let timestamp_1 = with_block_after(ReportingLock::get(), || {
+		let timestamp_1 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id_1,
@@ -1828,10 +1810,10 @@ fn get_funded_query_ids() {
 				1,
 				query_data_1.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		let timestamp_2 = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id_2,
@@ -1839,10 +1821,10 @@ fn get_funded_query_ids() {
 				0,
 				query_data_2.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		let timestamp_3 = with_block_after(ReportingLock::get(), || {
+		let timestamp_3 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id_3,
@@ -1850,10 +1832,10 @@ fn get_funded_query_ids() {
 				0,
 				query_data_3.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		let timestamp_4 = with_block_after(ReportingLock::get(), || {
+		let timestamp_4 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id_4,
@@ -1861,10 +1843,10 @@ fn get_funded_query_ids() {
 				0,
 				query_data_4.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(3_600 * 12, || {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_1,
@@ -1926,10 +1908,10 @@ fn get_funded_query_ids() {
 				1,
 				query_data_2.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(3_600 * 12, || {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_2,
@@ -1979,9 +1961,9 @@ fn get_tips_by_address() {
 				tipper,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				0,
 				query_data.clone(),
@@ -2003,7 +1985,7 @@ fn get_reward_amount() {
 	let reporter_3 = 4;
 	let mut ext = new_test_ext();
 
-	const INTERVAL: u64 = 3600 * SECONDS;
+	const INTERVAL: u64 = 3600;
 
 	// Prerequisites
 	ext.execute_with(|| {
@@ -2024,20 +2006,20 @@ fn get_reward_amount() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				token(1),
 				query_data.clone(),
 				token(1_000),
 			);
 
-			(Timestamp::get(), feed_id)
+			(now(), feed_id)
 		});
 
 		// advance some time within window
-		let timestamp_1 = with_block_after(10 * SECONDS, || {
+		let timestamp_1 = with_block_after(10, || {
 			// submit value within window
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter_1),
@@ -2046,11 +2028,11 @@ fn get_reward_amount() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
 		// advance some time to next window
-		let timestamp_2 = with_block_after(INTERVAL + 10 * SECONDS, || {
+		let timestamp_2 = with_block_after(INTERVAL + 10, || {
 			// submit value inside next window
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter_2),
@@ -2059,11 +2041,11 @@ fn get_reward_amount() {
 				1,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
 		// advance some time to next window
-		let timestamp_3 = with_block_after(INTERVAL + 10 * SECONDS, || {
+		let timestamp_3 = with_block_after(INTERVAL + 10, || {
 			// submit value inside next window
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter_3),
@@ -2072,7 +2054,7 @@ fn get_reward_amount() {
 				2,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
 		// query non-existent rewards
@@ -2080,7 +2062,7 @@ fn get_reward_amount() {
 
 		// query rewards
 		let fee: u16 = Fee::get();
-		let mut expected_reward = token(1) + token(1) * (timestamp_1 - timestamp_0) / SECONDS; // reward/sec vs timestamp in ms
+		let mut expected_reward = token(1) + token(1) * (timestamp_1 - timestamp_0);
 		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
 		let mut reward_sum = expected_reward;
 		assert_eq!(
@@ -2088,8 +2070,7 @@ fn get_reward_amount() {
 			expected_reward
 		);
 
-		expected_reward =
-			token(1) + token(1) * (timestamp_2 - (timestamp_0 + INTERVAL * 1)) / SECONDS; // reward/sec vs timestamp in ms
+		expected_reward = token(1) + token(1) * (timestamp_2 - (timestamp_0 + INTERVAL * 1));
 		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
 		reward_sum += expected_reward;
 		assert_eq!(
@@ -2097,8 +2078,7 @@ fn get_reward_amount() {
 			expected_reward
 		);
 
-		expected_reward =
-			token(1) + token(1) * (timestamp_3 - (timestamp_0 + INTERVAL * 2)) / SECONDS; // reward/sec vs timestamp in ms
+		expected_reward = token(1) + token(1) * (timestamp_3 - (timestamp_0 + INTERVAL * 2));
 		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
 		reward_sum += expected_reward;
 		assert_eq!(
@@ -2117,7 +2097,7 @@ fn get_reward_amount() {
 		);
 
 		// query rewards 1 week later
-		with_block_after(1 * WEEK_IN_MILLISECONDS, || {
+		with_block_after(86_400 * 7, || {
 			assert_eq!(
 				Tellor::get_reward_amount(
 					feed_id,
@@ -2129,7 +2109,7 @@ fn get_reward_amount() {
 		});
 
 		// query after 12 weeks
-		with_block_after(12 * WEEK_IN_MILLISECONDS, || {
+		with_block_after(86_400 * 7 * 12, || {
 			assert_eq!(
 				Tellor::get_reward_amount(
 					feed_id,
@@ -2210,9 +2190,9 @@ fn get_funded_feed_details() {
 				feed_creator,
 				query_id,
 				token(1),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				0,
 				query_data.clone(),
@@ -2223,9 +2203,9 @@ fn get_funded_feed_details() {
 				&FeedDetailsOf::<Test> {
 					reward: token(1),
 					balance: token(1_000),
-					start_time: Timestamp::get(),
-					interval: 3600 * SECONDS,
-					window: 600 * SECONDS,
+					start_time: now(),
+					interval: 3600,
+					window: 600,
 					price_threshold: 0,
 					reward_increase_per_second: 0,
 					feeds_with_funding_index: 1,
@@ -2264,9 +2244,9 @@ fn get_reward_claim_status_list() {
 				feed_creator,
 				query_id,
 				token(10),
-				Timestamp::get(),
-				3600 * SECONDS,
-				600 * SECONDS,
+				now(),
+				3600,
+				600,
 				0,
 				0,
 				query_data.clone(),
@@ -2283,9 +2263,9 @@ fn get_reward_claim_status_list() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_2 = with_block_after(ClaimBuffer::get(), || {
+		let timestamp_2 = with_block_after(3_600, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter_2),
 				query_id,
@@ -2293,9 +2273,9 @@ fn get_reward_claim_status_list() {
 				1,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_3 = with_block_after(ClaimBuffer::get(), || {
+		let timestamp_3 = with_block_after(3_600, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter_3),
 				query_id,
@@ -2303,7 +2283,7 @@ fn get_reward_claim_status_list() {
 				2,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
 		// check timestamps
@@ -2317,7 +2297,7 @@ fn get_reward_claim_status_list() {
 		);
 
 		// claim tip and check status
-		with_block_after(ClaimBuffer::get(), || {
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter_1),
 				feed_id,
@@ -2373,15 +2353,15 @@ fn get_current_feeds() {
 	new_test_ext().execute_with(|| {
 		with_block(|| {
 			// create multiple feeds for the same query id
-			let feeds: Vec<FeedIdOf<Test>> = (1..=5u8)
+			let feeds: Vec<FeedId> = (1..=5u8)
 				.map(|i| {
 					create_feed(
 						feed_creator,
 						query_id,
 						token(i),
-						Timestamp::get(),
-						600 * SECONDS,
-						60 * SECONDS,
+						now(),
+						600,
+						60,
 						0,
 						0,
 						query_data.clone(),
@@ -2398,16 +2378,16 @@ fn get_current_feeds() {
 // Helper function for creating feeds
 fn create_feed(
 	feed_creator: AccountIdOf<Test>,
-	query_id: QueryIdOf<Test>,
+	query_id: QueryId,
 	reward: AmountOf<Test>,
-	start_time: TimestampOf<Test>,
-	interval: TimestampOf<Test>,
-	window: TimestampOf<Test>,
+	start_time: Timestamp,
+	interval: Timestamp,
+	window: Timestamp,
 	price_threshold: u16,
 	reward_increase_per_second: AmountOf<Test>,
 	query_data: QueryDataOf<Test>,
 	amount: AmountOf<Test>,
-) -> FeedIdOf<Test> {
+) -> FeedId {
 	assert_ok!(Tellor::setup_data_feed(
 		RuntimeOrigin::signed(feed_creator),
 		query_id,
