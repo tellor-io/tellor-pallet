@@ -522,7 +522,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
 	/// All past tips.
-	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip<AmountOf<T>, Timestamp>> {
+	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip<AmountOf<T>>> {
 		<Tips<T>>::get(query_id).map_or_else(Vec::default, |t| t.to_vec())
 	}
 
@@ -532,10 +532,7 @@ impl<T: Config> Pallet<T> {
 	/// * `index` - The index of the tip.
 	/// # Returns
 	/// The past tip, if found.
-	pub fn get_past_tip_by_index(
-		query_id: QueryId,
-		index: u32,
-	) -> Option<Tip<AmountOf<T>, Timestamp>> {
+	pub fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<AmountOf<T>>> {
 		<Tips<T>>::get(query_id).and_then(|t| t.get(index as usize).cloned())
 	}
 

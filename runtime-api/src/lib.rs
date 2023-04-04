@@ -6,7 +6,7 @@ pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
 pub use governance::VoteInfo;
 use sp_std::vec::Vec;
-use tellor::{FeedDetails, Tip, VoteResult};
+use tellor::{DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, VoteResult};
 
 mod autopay;
 mod governance;
@@ -14,7 +14,7 @@ mod governance;
 mod tests;
 
 sp_api::decl_runtime_apis! {
-	pub trait TellorAutoPay<AccountId: Codec, Amount: Codec, FeedId: Codec, QueryId: Codec, Timestamp: Codec>
+	pub trait TellorAutoPay<AccountId: Codec, Amount: Codec>
 	{
 		/// Read current data feeds.
 		/// # Arguments
@@ -35,12 +35,12 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Unique feed identifier of parameters.
 		/// # Returns
 		/// Details of the specified feed.
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount, Timestamp>>;
+		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount>>;
 
 		/// Read currently funded feed details.
 		/// # Returns
 		/// Details for funded feeds.
-		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount, Timestamp>>;
+		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount>>;
 
 		/// Read currently funded feeds.
 		/// # Returns
@@ -69,7 +69,7 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
 		/// All past tips.
-		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount, Timestamp>>;
+		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount>>;
 
 		/// Read a past tip for a query identifier and index.
 		/// # Arguments
@@ -77,7 +77,7 @@ sp_api::decl_runtime_apis! {
 		/// * `index` - The index of the tip.
 		/// # Returns
 		/// The past tip, if found.
-		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount, Timestamp>>;
+		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount>>;
 
 		/// Look up a query identifier from a data feed identifier.
 		/// # Arguments
@@ -121,7 +121,7 @@ sp_api::decl_runtime_apis! {
 		fn get_tips_by_address(user: AccountId) -> Amount;
 	}
 
-	pub trait TellorOracle<AccountId: Codec, Amount: Codec, BlockNumber: Codec, QueryId: Codec, StakeInfo: Codec, Timestamp: Codec, Value: Codec> where
+	pub trait TellorOracle<AccountId: Codec, Amount: Codec, BlockNumber: Codec, StakeInfo: Codec, Value: Codec> where
 	{
 		/// Returns the block number at a given timestamp.
 		/// # Arguments
@@ -266,7 +266,7 @@ sp_api::decl_runtime_apis! {
 		fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Value>;
 	}
 
-	pub trait TellorGovernance<AccountId: Codec, Amount: Codec, BlockNumber: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec, Value: Codec> where
+	pub trait TellorGovernance<AccountId: Codec, Amount: Codec, BlockNumber: Codec, Value: Codec> where
 	{
 		/// Determines if an account voted for a specific dispute round.
 		/// # Arguments

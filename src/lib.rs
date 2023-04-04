@@ -16,13 +16,13 @@ use sp_runtime::{
 };
 use sp_std::vec::Vec;
 pub use traits::{SendXcm, UsingTellor};
+use types::*;
 pub use types::{
 	autopay::{FeedDetails, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
-	Address,
+	Address, DisputeId, FeedId, QueryId, Timestamp,
 };
-use types::{QueryId, *};
 
 #[cfg(test)]
 mod mock;

@@ -17,7 +17,10 @@ use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
-use tellor::{EnsureGovernance, EnsureStaking, FeedDetails, Tip, VoteResult};
+use tellor::{
+	DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp, Tip,
+	VoteResult,
+};
 use xcm::latest::prelude::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -26,13 +29,8 @@ type Block = frame_system::mocking::MockBlock<Test>;
 type AccountId = u64;
 type Amount = u64;
 type BlockNumber = u64;
-type DisputeId = H256;
-type QueryId = H256;
 type MaxValueLength = ConstU32<4>;
-type Moment = u64;
-type FeedId = H256;
-type StakeInfo =
-	tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter, QueryId, Moment>;
+type StakeInfo = tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter>;
 type Value = BoundedVec<u8, MaxValueLength>;
 
 // Configure a mock runtime to test implementation of the runtime-api
@@ -44,7 +42,7 @@ frame_support::construct_runtime!(
 	{
 		System: frame_system,
 		Balances: pallet_balances,
-		Timestamp: pallet_timestamp,
+		Time: pallet_timestamp,
 		Tellor: tellor,
 	}
 );
@@ -86,7 +84,7 @@ impl pallet_balances::Config for Test {
 	type ReserveIdentifier = [u8; 8];
 }
 impl pallet_timestamp::Config for Test {
-	type Moment = Moment;
+	type Moment = u64;
 	type OnTimestampSet = ();
 	type MinimumPeriod = ConstU64<1>;
 	type WeightInfo = ();
@@ -118,7 +116,7 @@ impl tellor::Config for Test {
 	type Registry = ();
 	type Staking = ();
 	type StakingOrigin = EnsureStaking;
-	type Time = Timestamp;
+	type Time = Time;
 	type Token = Balances;
 	type ValueConverter = ();
 	type Xcm = TestSendXcm;
@@ -139,7 +137,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 mock_impl_runtime_apis! {
-	impl crate::TellorAutoPay<Block, AccountId, Amount, FeedId, QueryId, Moment> for Test {
+	impl crate::TellorAutoPay<Block, AccountId, Amount> for Test {
 		fn get_current_feeds(query_id: QueryId) -> Vec<FeedId>{
 			tellor::Pallet::<Test>::get_current_feeds(query_id)
 		}
@@ -148,11 +146,11 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_current_tip(query_id)
 		}
 
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount, Moment>> {
+		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount>> {
 			tellor::Pallet::<Test>::get_data_feed(feed_id)
 		}
 
-		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount, Moment>> {
+		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount>> {
 			tellor::Pallet::<Test>::get_funded_feed_details().into_iter()
 			.map(|(details, query_data)| FeedDetailsWithQueryData {
 				details: details,
@@ -181,11 +179,11 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_past_tip_count(query_id)
 		}
 
-		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount, Moment>> {
+		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount>> {
 			tellor::Pallet::<Test>::get_past_tips(query_id)
 		}
 
-		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount, Moment>>{
+		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount>>{
 			tellor::Pallet::<Test>::get_past_tip_by_index(query_id, index)
 		}
 
@@ -193,15 +191,15 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_query_id_from_feed_id(feed_id)
 		}
 
-		fn get_reward_amount(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Moment>) -> Amount{
+		fn get_reward_amount(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Timestamp>) -> Amount{
 			tellor::Pallet::<Test>::get_reward_amount(feed_id, query_id, timestamps)
 		}
 
-		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Moment) -> Option<bool>{
+		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> Option<bool>{
 			tellor::Pallet::<Test>::get_reward_claimed_status(feed_id, query_id, timestamp)
 		}
 
-		fn get_reward_claim_status_list(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Moment>) -> Vec<bool>{
+		fn get_reward_claim_status_list(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Timestamp>) -> Vec<bool>{
 			tellor::Pallet::<Test>::get_reward_claim_status_list(feed_id, query_id, timestamps)
 		}
 
@@ -210,8 +208,8 @@ mock_impl_runtime_apis! {
 		}
 	}
 
-	impl crate::TellorOracle<Block, AccountId, Amount, BlockNumber, QueryId, StakeInfo, Moment, Value> for Test {
-		fn get_block_number_by_timestamp(query_id: QueryId, timestamp: Moment) -> Option<BlockNumber> {
+	impl crate::TellorOracle<Block, AccountId, Amount, BlockNumber, StakeInfo, Value> for Test {
+		fn get_block_number_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<BlockNumber> {
 			tellor::Pallet::<Test>::get_block_number_by_timestamp(query_id, timestamp)
 		}
 
@@ -219,7 +217,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_current_value(query_id)
 		}
 
-		fn get_data_before(query_id: QueryId, timestamp: Moment) -> Option<(Value, Moment)>{
+		fn get_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<(Value, Timestamp)>{
 			tellor::Pallet::<Test>::get_data_before(query_id, timestamp)
 		}
 
@@ -227,19 +225,19 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_new_value_count_by_query_id(query_id) as u32
 		}
 
-		fn get_report_details(query_id: QueryId, timestamp: Moment) -> Option<(AccountId, bool)>{
+		fn get_report_details(query_id: QueryId, timestamp: Timestamp) -> Option<(AccountId, bool)>{
 			tellor::Pallet::<Test>::get_report_details(query_id, timestamp)
 		}
 
-		fn get_reporter_by_timestamp(query_id: QueryId, timestamp: Moment) -> Option<AccountId>{
+		fn get_reporter_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<AccountId>{
 			tellor::Pallet::<Test>::get_reporter_by_timestamp(query_id, timestamp)
 		}
 
-		fn get_reporter_last_timestamp(reporter: AccountId) -> Option<Moment>{
+		fn get_reporter_last_timestamp(reporter: AccountId) -> Option<Timestamp>{
 			tellor::Pallet::<Test>::get_reporter_last_timestamp(reporter)
 		}
 
-		fn get_reporting_lock() -> Moment {
+		fn get_reporting_lock() -> Timestamp {
 			tellor::Pallet::<Test>::get_reporting_lock()
 		}
 
@@ -259,19 +257,19 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_staker_info(staker)
 		}
 
-		fn get_time_of_last_new_value() -> Option<Moment> {
+		fn get_time_of_last_new_value() -> Option<Timestamp> {
 			tellor::Pallet::<Test>::get_time_of_last_new_value()
 		}
 
-		fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Moment>{
+		fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp>{
 			tellor::Pallet::<Test>::get_timestamp_by_query_id_and_index(query_id, index as usize)
 		}
 
-		fn get_index_for_data_before(query_id: QueryId, timestamp: Moment) -> Option<u32> {
+		fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 			tellor::Pallet::<Test>::get_index_for_data_before(query_id, timestamp).map(|index| index as u32)
 		}
 
-		fn get_timestamp_index_by_timestamp(query_id: QueryId, timestamp: Moment) -> Option<u32> {
+		fn get_timestamp_index_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 			tellor::Pallet::<Test>::get_timestamp_index_by_timestamp(query_id, timestamp)
 		}
 
@@ -283,16 +281,16 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_total_stakers()
 		}
 
-		fn is_in_dispute(query_id: QueryId, timestamp: Moment) -> bool{
+		fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool{
 			tellor::Pallet::<Test>::is_in_dispute(query_id, timestamp)
 		}
 
-		fn retrieve_data(query_id: QueryId, timestamp: Moment) -> Option<Value>{
+		fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Value>{
 			tellor::Pallet::<Test>::retrieve_data(query_id, timestamp)
 		}
 	}
 
-	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, DisputeId, QueryId, Moment, Value> for Test {
+	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, Value> for Test {
 		fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountId) -> bool {
 			tellor::Pallet::<Test>::did_vote(dispute_id, vote_round, voter)
 		}
@@ -305,7 +303,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_disputes_by_reporter(reporter)
 		}
 
-		fn get_dispute_info(dispute_id: DisputeId) -> Option<(QueryId, Moment, Value, AccountId)> {
+		fn get_dispute_info(dispute_id: DisputeId) -> Option<(QueryId, Timestamp, Value, AccountId)> {
 			tellor::Pallet::<Test>::get_dispute_info(dispute_id)
 		}
 
@@ -317,7 +315,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_vote_count()
 		}
 
-		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Amount,BlockNumber, Moment>,bool,Option<VoteResult>,AccountId)> {
+		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)> {
 			tellor::Pallet::<Test>::get_vote_info(dispute_id, vote_round).map(|v| (
 			VoteInfo{
 					vote_round: v.vote_round,
@@ -453,7 +451,7 @@ mod autopay {
 					&BLOCKID,
 					FeedId::random(),
 					QueryId::random(),
-					Timestamp::get()
+					Time::get()
 				)
 				.unwrap(),
 				None
@@ -495,8 +493,7 @@ mod oracle {
 	fn get_block_number_by_timestamp() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_block_number_by_timestamp(&BLOCKID, QueryId::random(), Moment::default())
-					.unwrap(),
+				Test.get_block_number_by_timestamp(&BLOCKID, QueryId::random(), 0).unwrap(),
 				None
 			);
 		});
@@ -512,10 +509,7 @@ mod oracle {
 	#[test]
 	fn get_data_before() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.get_data_before(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
-				None
-			);
+			assert_eq!(Test.get_data_before(&BLOCKID, QueryId::random(), 0).unwrap(), None);
 		});
 	}
 
@@ -532,10 +526,7 @@ mod oracle {
 	#[test]
 	fn get_report_details() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.get_report_details(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
-				None
-			);
+			assert_eq!(Test.get_report_details(&BLOCKID, QueryId::random(), 0).unwrap(), None);
 		});
 	}
 
@@ -543,8 +534,7 @@ mod oracle {
 	fn get_reporter_by_timestamp() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_reporter_by_timestamp(&BLOCKID, QueryId::random(), Moment::default())
-					.unwrap(),
+				Test.get_reporter_by_timestamp(&BLOCKID, QueryId::random(), 0).unwrap(),
 				None
 			);
 		});
@@ -661,20 +651,14 @@ mod oracle {
 	#[test]
 	fn is_in_dispute() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.is_in_dispute(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
-				false
-			);
+			assert_eq!(Test.is_in_dispute(&BLOCKID, QueryId::random(), 0).unwrap(), false);
 		});
 	}
 
 	#[test]
 	fn retrieve_data() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.retrieve_data(&BLOCKID, QueryId::random(), Moment::default()).unwrap(),
-				None
-			);
+			assert_eq!(Test.retrieve_data(&BLOCKID, QueryId::random(), 0).unwrap(), None);
 		});
 	}
 }
