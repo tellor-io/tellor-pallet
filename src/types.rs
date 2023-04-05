@@ -9,52 +9,39 @@ pub type Address = H160;
 pub(crate) type Amount = U256;
 pub(crate) type AmountOf<T> = <T as Config>::Amount;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
-pub(crate) type DisputeIdOf<T> = <T as Config>::DisputeId;
-pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, QueryId, Timestamp, ValueOf<T>>;
-pub(crate) type FeedId = H256;
-pub(crate) type FeedOf<T> = autopay::Feed<AmountOf<T>, Timestamp, <T as Config>::MaxRewardClaims>;
-pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>, Timestamp>;
+pub type DisputeId = H256;
+pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, ValueOf<T>>;
+pub type FeedId = H256;
+pub(crate) type FeedOf<T> = autopay::Feed<AmountOf<T>, <T as Config>::MaxRewardClaims>;
+pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>>;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
 pub(crate) type PriceOf<T> = <T as Config>::Price;
 pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLength>;
-pub(crate) type QueryId = H256;
-pub(crate) type ReportOf<T> = oracle::Report<
-	AccountIdOf<T>,
-	BlockNumberOf<T>,
-	Timestamp,
-	ValueOf<T>,
-	<T as Config>::MaxTimestamps,
->;
+pub type QueryId = H256;
+pub(crate) type ReportOf<T> =
+	oracle::Report<AccountIdOf<T>, BlockNumberOf<T>, ValueOf<T>, <T as Config>::MaxTimestamps>;
 pub(crate) type StakeInfoOf<T> =
-	oracle::StakeInfo<AmountOf<T>, <T as Config>::MaxQueriesPerReporter, QueryId, Timestamp>;
-pub(crate) type Timestamp = u64;
-pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>, Timestamp>;
+	oracle::StakeInfo<AmountOf<T>, <T as Config>::MaxQueriesPerReporter>;
+pub type Timestamp = u64;
+pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
-pub(crate) type VoteCountOf<T> = DisputeIdOf<T>;
-pub(crate) type VoteId = H256;
-pub(crate) type VoteOf<T> = governance::Vote<
-	AccountIdOf<T>,
-	AmountOf<T>,
-	BlockNumberOf<T>,
-	Timestamp,
-	VoteId,
-	<T as Config>::MaxVotes,
->;
+pub(crate) type VoteOf<T> =
+	governance::Vote<AccountIdOf<T>, AmountOf<T>, BlockNumberOf<T>, <T as Config>::MaxVotes>;
 
 pub(crate) mod autopay {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxRewardClaims))]
-	pub struct Feed<Amount, Timestamp, MaxRewardClaims: Get<u32>> {
-		pub(crate) details: FeedDetails<Amount, Timestamp>,
+	pub struct Feed<Amount, MaxRewardClaims: Get<u32>> {
+		pub(crate) details: FeedDetails<Amount>,
 		/// Tracks which tips were already paid out.
 		pub(crate) reward_claimed: BoundedBTreeMap<Timestamp, bool, MaxRewardClaims>,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct FeedDetails<Amount, Timestamp> {
+	pub struct FeedDetails<Amount> {
 		/// Amount paid for each eligible data submission.
 		pub(crate) reward: Amount,
 		/// Account remaining balance.
@@ -74,7 +61,7 @@ pub(crate) mod autopay {
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct Tip<Amount, Timestamp> {
+	pub struct Tip<Amount> {
 		/// Amount tipped.
 		pub(crate) amount: Amount,
 		/// Time tipped.
@@ -89,7 +76,7 @@ pub(crate) mod oracle {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxTimestamps))]
-	pub struct Report<AccountId, BlockNumber, Timestamp, Value, MaxTimestamps: Get<u32>> {
+	pub struct Report<AccountId, BlockNumber, Value, MaxTimestamps: Get<u32>> {
 		/// All timestamps reported.
 		pub(crate) timestamps: BoundedVec<Timestamp, MaxTimestamps>,
 		/// Mapping of timestamps to respective indices.
@@ -105,8 +92,8 @@ pub(crate) mod oracle {
 		pub(crate) is_disputed: BoundedBTreeMap<Timestamp, bool, MaxTimestamps>,
 	}
 
-	impl<AccountId, BlockNumber, Timestamp: Ord, Value, MaxTimestamps: Get<u32>>
-		Report<AccountId, BlockNumber, Timestamp, Value, MaxTimestamps>
+	impl<AccountId, BlockNumber, Value, MaxTimestamps: Get<u32>>
+		Report<AccountId, BlockNumber, Value, MaxTimestamps>
 	{
 		pub(crate) fn new() -> Self {
 			Report {
@@ -122,7 +109,7 @@ pub(crate) mod oracle {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxQueries))]
-	pub struct StakeInfo<Amount, MaxQueries: Get<u32>, QueryId, Timestamp> {
+	pub struct StakeInfo<Amount, MaxQueries: Get<u32>> {
 		/// The address on the staking chain.
 		pub(crate) address: Address,
 		/// Stake or withdrawal request start date.
@@ -147,9 +134,7 @@ pub(crate) mod oracle {
 		pub(crate) reports_submitted_by_query_id: BoundedBTreeMap<QueryId, u128, MaxQueries>,
 	}
 
-	impl<Amount: Default, MaxQueries: Get<u32>, QueryId: Ord, Timestamp: Default>
-		StakeInfo<Amount, MaxQueries, QueryId, Timestamp>
-	{
+	impl<Amount: Default, MaxQueries: Get<u32>> StakeInfo<Amount, MaxQueries> {
 		pub(crate) fn new(address: Address) -> Self {
 			Self {
 				address,
@@ -172,7 +157,7 @@ pub(crate) mod governance {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct Dispute<AccountId, QueryId, Timestamp, Value> {
+	pub struct Dispute<AccountId, Value> {
 		/// Query identifier of disputed value
 		pub(crate) query_id: QueryId,
 		/// Timestamp of disputed value.
@@ -197,11 +182,11 @@ pub(crate) mod governance {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxVotes))]
-	pub struct Vote<AccountId, Amount, BlockNumber, Timestamp, VoteId, MaxVotes: Get<u32>> {
-		/// Identifier of the vote.
-		pub identifier: VoteId,
+	pub struct Vote<AccountId, Amount, BlockNumber, MaxVotes: Get<u32>> {
+		/// Identifier of the dispute.
+		pub identifier: DisputeId,
 		/// The round of voting on a given dispute or proposal.
-		pub vote_round: u32,
+		pub vote_round: u8,
 		/// Timestamp of when vote was initiated.
 		pub start_date: Timestamp,
 		/// Block number of when vote was initiated.

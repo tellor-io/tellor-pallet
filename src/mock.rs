@@ -24,8 +24,9 @@ type Balance = u64;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
+pub(crate) const EVM_PARA_ID: u32 = 2000;
 pub(crate) const PALLET_INDEX: u8 = 3;
-pub(crate) const PARA_ID: u32 = 2000;
+pub(crate) const PARA_ID: u32 = 3000;
 pub(crate) const UNIT: u64 = 1_000_000_000_000;
 
 // Configure a mock runtime to test the pallet.
@@ -96,16 +97,15 @@ static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 parameter_types! {
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
 	pub const ParachainId: u32 = PARA_ID;
-	pub TellorRegistry: ContractLocation = (PARA_ID, *REGISTRY).into();
-	pub TellorGovernance: ContractLocation = (PARA_ID, *GOVERNANCE).into();
-	pub TellorStaking: ContractLocation = (PARA_ID, *STAKING).into();
+	pub TellorRegistry: ContractLocation = (EVM_PARA_ID, *REGISTRY).into();
+	pub TellorGovernance: ContractLocation = (EVM_PARA_ID, *GOVERNANCE).into();
+	pub TellorStaking: ContractLocation = (EVM_PARA_ID, *STAKING).into();
 }
 
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = u64;
-	type DisputeId = u32;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
@@ -119,7 +119,6 @@ impl tellor::Config for Test {
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so ValueConverter needs to handle conversion to price for threshold checks
 	type MaxVotes = ConstU32<10>;
-	type MaxVoteRounds = ConstU32<10>;
 	type PalletId = TellorPalletId;
 	type ParachainId = ParachainId;
 	type Price = u128;

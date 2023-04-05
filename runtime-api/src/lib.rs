@@ -6,7 +6,7 @@ pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
 pub use governance::VoteInfo;
 use sp_std::vec::Vec;
-use tellor::{FeedDetails, Tip, VoteResult};
+use tellor::{DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, VoteResult};
 
 mod autopay;
 mod governance;
@@ -14,7 +14,7 @@ mod governance;
 mod tests;
 
 sp_api::decl_runtime_apis! {
-	pub trait TellorAutoPay<AccountId: Codec, Amount: Codec, FeedId: Codec, QueryId: Codec, Timestamp: Codec>
+	pub trait TellorAutoPay<AccountId: Codec, Amount: Codec>
 	{
 		/// Read current data feeds.
 		/// # Arguments
@@ -35,12 +35,12 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Unique feed identifier of parameters.
 		/// # Returns
 		/// Details of the specified feed.
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount, Timestamp>>;
+		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount>>;
 
 		/// Read currently funded feed details.
 		/// # Returns
 		/// Details for funded feeds.
-		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount, Timestamp>>;
+		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount>>;
 
 		/// Read currently funded feeds.
 		/// # Returns
@@ -69,7 +69,7 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
 		/// All past tips.
-		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount, Timestamp>>;
+		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount>>;
 
 		/// Read a past tip for a query identifier and index.
 		/// # Arguments
@@ -77,7 +77,7 @@ sp_api::decl_runtime_apis! {
 		/// * `index` - The index of the tip.
 		/// # Returns
 		/// The past tip, if found.
-		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount, Timestamp>>;
+		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount>>;
 
 		/// Look up a query identifier from a data feed identifier.
 		/// # Arguments
@@ -121,7 +121,7 @@ sp_api::decl_runtime_apis! {
 		fn get_tips_by_address(user: AccountId) -> Amount;
 	}
 
-	pub trait TellorOracle<AccountId: Codec, Amount: Codec, BlockNumber: Codec, QueryId: Codec, StakeInfo: Codec, Timestamp: Codec, Value: Codec> where
+	pub trait TellorOracle<AccountId: Codec, Amount: Codec, BlockNumber: Codec, StakeInfo: Codec, Value: Codec> where
 	{
 		/// Returns the block number at a given timestamp.
 		/// # Arguments
@@ -266,15 +266,16 @@ sp_api::decl_runtime_apis! {
 		fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Value>;
 	}
 
-	pub trait TellorGovernance<AccountId: Codec, Amount: Codec, BlockNumber: Codec, DisputeId: Codec, QueryId: Codec, Timestamp: Codec, Value: Codec, VoteCount: Codec, VoteId: Codec> where
+	pub trait TellorGovernance<AccountId: Codec, Amount: Codec, BlockNumber: Codec, Value: Codec> where
 	{
-		/// Determines if an account voted for a specific dispute.
+		/// Determines if an account voted for a specific dispute round.
 		/// # Arguments
 		/// * `dispute_id` - The identifier of the dispute.
+		/// * `vote_round` - The vote round.
 		/// * `voter` - The account of the voter to check.
 		/// # Returns
-		/// Whether or not the account voted for the specific dispute.
-		fn did_vote(dispute_id: DisputeId, voter: AccountId) -> bool;
+		/// Whether or not the account voted for the specific dispute round.
+		fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountId) -> bool;
 
 		/// Get the latest dispute fee.
 		/// # Returns
@@ -307,22 +308,23 @@ sp_api::decl_runtime_apis! {
 		/// Returns the total number of votes
 		/// # Returns
 		/// The total number of votes.
-		fn get_vote_count() -> VoteCount;
+		fn get_vote_count() -> u128;
 
 		/// Returns info on a vote for a given dispute identifier.
 		/// # Arguments
 		/// * `dispute_id` - Identifier of a specific dispute.
+		/// * `vote_round` - The vote round.
 		/// # Returns
 		/// Information on a vote for a given dispute identifier including: the vote identifier, the
 		/// vote information, whether it has been executed, the vote result and the dispute initiator.
-		fn get_vote_info(dispute_id: DisputeId) -> Option<(VoteId,VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)>;
+		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)>;
 
-		/// Returns the voting rounds for a given vote identifier.
+		/// Returns the voting rounds for a given dispute identifier.
 		/// # Arguments
-		/// * `vote_id` - Identifier for a vote.
+		/// * `dispute_id` - Identifier for a dispute.
 		/// # Returns
-		/// Dispute identifiers of the vote rounds.
-		fn get_vote_rounds(vote_id: VoteId) -> Vec<DisputeId>;
+		/// The number of vote rounds for the dispute identifier.
+		fn get_vote_rounds(dispute_id: DisputeId) -> u8;
 
 		/// Returns the total number of votes cast by a voter.
 		/// # Arguments

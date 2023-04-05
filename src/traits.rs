@@ -90,6 +90,11 @@ pub trait UsingTellor<AccountId, Price> {
 	/// Whether the value is disputed.
 	fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool;
 
+	/// Returns the duration since UNIX_EPOCH, in seconds.
+	/// # Returns
+	/// The duration since UNIX_EPOCH, in seconds.
+	fn now() -> Timestamp;
+
 	/// Retrieve value from the oracle based on timestamp.
 	/// # Arguments
 	/// * `query_id` - Identifier being requested.

@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-	constants::{DAYS, REPORTING_LOCK},
+	constants::REPORTING_LOCK,
 	types::{Nonce, QueryId, Timestamp},
 	Config,
 };
@@ -275,7 +275,13 @@ fn slash_reporter() {
 		let dispute_id = with_block(|| {
 			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_noop!(
-				Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, 0, STAKE_AMOUNT.into()),
+				Tellor::report_slash(
+					RuntimeOrigin::signed(reporter),
+					H256::zero(),
+					0,
+					0,
+					STAKE_AMOUNT.into()
+				),
 				BadOrigin
 			);
 
@@ -291,7 +297,7 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report slash after tally dispute period
@@ -335,7 +341,7 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report slash after tally dispute period
@@ -372,7 +378,7 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report slash after tally dispute period
@@ -434,7 +440,7 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report slash after tally dispute period
@@ -1608,7 +1614,6 @@ fn invalid_dispute() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
-	let dispute_id = 0;
 	let mut ext = new_test_ext();
 
 	// Prerequisites
@@ -1624,6 +1629,7 @@ fn invalid_dispute() {
 		Balances::make_free_balance_be(&reporter, token(1_000));
 		let balance_before_begin_dispute = Balances::free_balance(&reporter);
 		let dispute_id = with_block(|| {
+			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_noop!(
 				Tellor::report_invalid_dispute(RuntimeOrigin::signed(reporter), dispute_id),
 				BadOrigin
@@ -1634,7 +1640,7 @@ fn invalid_dispute() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report invalid dispute after tally dispute period
@@ -1653,7 +1659,6 @@ fn slash_dispute_initiator() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let another_reporter = 2;
-	let dispute_id = 0;
 	let mut ext = new_test_ext();
 
 	// Prerequisites
@@ -1664,6 +1669,7 @@ fn slash_dispute_initiator() {
 		Balances::make_free_balance_be(&another_reporter, token(1_000));
 		let balance_before_begin_dispute = Balances::free_balance(&another_reporter);
 		let dispute_id = with_block(|| {
+			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_noop!(
 				Tellor::report_invalid_dispute(RuntimeOrigin::signed(reporter), dispute_id),
 				BadOrigin
@@ -1705,7 +1711,7 @@ fn slash_dispute_initiator() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report invalid dispute after tally dispute period
@@ -1713,7 +1719,7 @@ fn slash_dispute_initiator() {
 			assert_ok!(Tellor::slash_dispute_initiator(Origin::Governance.into(), dispute_id));
 
 			// validate slashed balance of dispute initiator
-			let vote_info = Tellor::get_vote_info(dispute_id).unwrap();
+			let vote_info = Tellor::get_vote_info(dispute_id, 1).unwrap();
 			assert_eq!(
 				Balances::free_balance(another_reporter),
 				balance_before_begin_dispute - vote_info.fee
