@@ -1,18 +1,15 @@
 use super::*;
 use crate::{
-	types::{Nonce, QueryIdOf, TimestampOf},
-	Config, DAY_IN_MILLISECONDS,
+	constants::{DAYS, REPORTING_LOCK},
+	types::{Nonce, QueryId, Timestamp},
+	Config,
 };
 use frame_support::{assert_noop, assert_ok, traits::Currency};
-use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, Get, U256};
+use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, U256};
 use sp_runtime::traits::BadOrigin;
 
 type BoundedReportsSubmittedByQueryId =
-	BoundedBTreeMap<QueryIdOf<Test>, u128, <Test as Config>::MaxQueriesPerReporter>;
-type VoteRoundPeriod = <Test as Config>::VoteRoundPeriod;
-type ReportingLock = <Test as Config>::ReportingLock;
-type VoteTallyDisputePeriod = <Test as Config>::VoteTallyDisputePeriod;
-type WithdrawalPeriod = <Test as Config>::WithdrawalPeriod;
+	BoundedBTreeMap<QueryId, u128, <Test as Config>::MaxQueriesPerReporter>;
 
 #[test]
 fn deposit_stake() {
@@ -50,7 +47,7 @@ fn deposit_stake() {
 			assert_eq!(Tellor::get_total_stakers(), 1);
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.address, address);
-			assert_eq!(staker_details.start_date, Timestamp::get());
+			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.staked_balance, amount);
 			assert_eq!(staker_details.locked_balance, 0);
 			assert_eq!(staker_details.reward_debt, 0);
@@ -113,7 +110,7 @@ fn remove_value() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L127
 	ext.execute_with(|| {
 		with_block(|| {
-			let timestamp = Timestamp::get();
+			let timestamp = now();
 
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
@@ -192,7 +189,7 @@ fn request_stake_withdraw() {
 			));
 
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.start_date, Timestamp::get());
+			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.staked_balance, amount);
 			assert_eq!(staker_details.locked_balance, 0);
 			assert_eq!(staker_details.staked, true);
@@ -215,7 +212,7 @@ fn request_stake_withdraw() {
 				address
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.start_date, Timestamp::get());
+			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.reward_debt, 0);
 			assert_eq!(staker_details.staked_balance, token(990));
 			assert_eq!(staker_details.locked_balance, token(10));
@@ -240,7 +237,7 @@ fn request_stake_withdraw() {
 				address
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.start_date, Timestamp::get());
+			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.reward_debt, 0);
 			assert_eq!(staker_details.staked_balance, token(990));
 			assert_eq!(staker_details.locked_balance, token(10));
@@ -292,11 +289,13 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		let dispute_id = with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Report slash after tally dispute period
+		let dispute_id = with_block_after(86_400, || {
 			// Slash when locked balance = 0
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, amount);
@@ -334,11 +333,13 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		let dispute_id = with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Report slash after tally dispute period
+		let dispute_id = with_block_after(86_400, || {
 			// Slash when lockedBalance >= stakeAmount
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
@@ -369,11 +370,13 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Report slash after tally dispute period
+		with_block_after(86_400, || {
 			// Slash when 0 < locked balance < stake amount
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
@@ -413,7 +416,7 @@ fn slash_reporter() {
 			assert_eq!(Tellor::get_total_stake_amount(), token(75));
 		});
 
-		let dispute_id = with_block_after(WithdrawalPeriod::get(), || {
+		let dispute_id = with_block_after(604_800, || {
 			assert_ok!(Tellor::report_stake_withdrawn(
 				Origin::Staking.into(),
 				reporter,
@@ -429,11 +432,13 @@ fn slash_reporter() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data) // start dispute, required for slashing
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Report slash after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				dispute_id,
@@ -533,8 +538,8 @@ fn submit_value() {
 			);
 		});
 
-		with_block_after(WithdrawalPeriod::get(), || {
-			let timestamp = Timestamp::get();
+		with_block_after(3_600 /* 1 hour */, || {
+			let timestamp = now();
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -577,8 +582,8 @@ fn submit_value() {
 				query_data.clone()
 			));
 		});
-		with_block_after(ReportingLock::get(), || {
-			let timestamp = Timestamp::get();
+		with_block_after(REPORTING_LOCK, || {
+			let timestamp = now();
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -668,7 +673,7 @@ fn withdraw_stake() {
 			assert_eq!(staker_details.locked_balance, token(10));
 		});
 
-		with_block_after(WithdrawalPeriod::get(), || {
+		with_block_after(60 * 60 * 24 * 7, || {
 			assert_ok!(Tellor::report_stake_withdrawn(
 				Origin::Staking.into(),
 				reporter,
@@ -719,7 +724,7 @@ fn get_block_number_by_timestamp() {
 				query_data.clone(),
 			));
 			assert_eq!(
-				Tellor::get_block_number_by_timestamp(query_id, Timestamp::get()).unwrap(),
+				Tellor::get_block_number_by_timestamp(query_id, now()).unwrap(),
 				System::block_number()
 			)
 		});
@@ -785,7 +790,7 @@ fn get_new_value_count_by_query_id() {
 			));
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -824,10 +829,10 @@ fn get_report_details() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		let timestamp_2 = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -835,10 +840,10 @@ fn get_report_details() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		let timestamp_3 = with_block_after(ReportingLock::get(), || {
+		let timestamp_3 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -846,8 +851,8 @@ fn get_report_details() {
 				0,
 				query_data.clone(),
 			));
-			assert_ok!(Tellor::remove_value(query_id, Timestamp::get()));
-			Timestamp::get()
+			assert_ok!(Tellor::remove_value(query_id, now()));
+			now()
 		});
 
 		assert_eq!(Tellor::get_report_details(query_id, timestamp_1).unwrap(), (reporter, false));
@@ -860,7 +865,7 @@ fn get_report_details() {
 #[test]
 fn get_reporting_lock() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L398
-	let reporting_lock: TimestampOf<Test> = ReportingLock::get();
+	let reporting_lock: Timestamp = REPORTING_LOCK;
 	assert_eq!(Tellor::get_reporting_lock(), reporting_lock)
 }
 
@@ -890,10 +895,7 @@ fn get_reporter_by_timestamp() {
 				0,
 				query_data.clone(),
 			));
-			assert_eq!(
-				Tellor::get_reporter_by_timestamp(query_id, Timestamp::get()).unwrap(),
-				reporter
-			)
+			assert_eq!(Tellor::get_reporter_by_timestamp(query_id, now()).unwrap(), reporter)
 		});
 	});
 }
@@ -924,7 +926,7 @@ fn get_reporter_last_timestamp() {
 				0,
 				query_data.clone(),
 			));
-			assert_eq!(Tellor::get_reporter_last_timestamp(reporter).unwrap(), Timestamp::get())
+			assert_eq!(Tellor::get_reporter_last_timestamp(reporter).unwrap(), now())
 		});
 	});
 }
@@ -957,7 +959,7 @@ fn get_reports_submitted_by_address() {
 			));
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -998,7 +1000,7 @@ fn get_reports_submitted_by_address_and_query_id() {
 			));
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1058,11 +1060,11 @@ fn get_staker_info() {
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.address, address);
-			assert_eq!(staker_details.start_date, Timestamp::get());
+			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.staked_balance, token(900));
 			assert_eq!(staker_details.locked_balance, token(100));
 			assert_eq!(staker_details.reward_debt, 0);
-			assert_eq!(staker_details.reporter_last_timestamp, Timestamp::get());
+			assert_eq!(staker_details.reporter_last_timestamp, now());
 			assert_eq!(staker_details.reports_submitted, 1);
 			assert_eq!(staker_details.start_vote_count, 0);
 			assert_eq!(staker_details.start_vote_tally, 0);
@@ -1100,7 +1102,7 @@ fn get_time_of_last_new_value() {
 				0,
 				query_data.clone(),
 			));
-			assert_eq!(Tellor::get_time_of_last_new_value().unwrap(), Timestamp::get())
+			assert_eq!(Tellor::get_time_of_last_new_value().unwrap(), now())
 		});
 	});
 }
@@ -1133,7 +1135,7 @@ fn get_timestamp_by_query_and_index() {
 			));
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1141,10 +1143,7 @@ fn get_timestamp_by_query_and_index() {
 				0,
 				query_data.clone(),
 			));
-			assert_eq!(
-				Tellor::get_timestamp_by_query_id_and_index(query_id, 1).unwrap(),
-				Timestamp::get()
-			)
+			assert_eq!(Tellor::get_timestamp_by_query_id_and_index(query_id, 1).unwrap(), now())
 		})
 	});
 }
@@ -1177,7 +1176,7 @@ fn get_timestamp_index_by_timestamp() {
 			));
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1185,10 +1184,7 @@ fn get_timestamp_index_by_timestamp() {
 				0,
 				query_data.clone(),
 			));
-			assert_eq!(
-				Tellor::get_timestamp_index_by_timestamp(query_id, Timestamp::get()).unwrap(),
-				1
-			)
+			assert_eq!(Tellor::get_timestamp_index_by_timestamp(query_id, now()).unwrap(), 1)
 		})
 	});
 }
@@ -1295,7 +1291,7 @@ fn is_in_dispute() {
 				query_data.clone(),
 			));
 
-			let timestamp = Timestamp::get();
+			let timestamp = now();
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
 			Balances::make_free_balance_be(&reporter, token(1_000));
 			// Value can only be removed via dispute
@@ -1333,7 +1329,7 @@ fn retrieve_data() {
 			));
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1341,14 +1337,11 @@ fn retrieve_data() {
 				0,
 				query_data.clone(),
 			));
-			assert_eq!(
-				Tellor::retrieve_data(query_id, Timestamp::get()).unwrap(),
-				uint_value(4001)
-			);
+			assert_eq!(Tellor::retrieve_data(query_id, now()).unwrap(), uint_value(4001));
 
 			// Test max/min values for _timestamp arg
 			assert_eq!(Tellor::retrieve_data(query_id, 0), None);
-			assert_eq!(Tellor::retrieve_data(query_id, <TimestampOf<Test>>::MAX), None);
+			assert_eq!(Tellor::retrieve_data(query_id, Timestamp::MAX), None);
 		})
 	});
 }
@@ -1364,13 +1357,6 @@ fn get_total_time_based_rewards_balance() {
 #[ignore]
 fn add_staking_rewards() {
 	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L539
-	todo!()
-}
-
-#[test]
-#[ignore]
-fn get_pending_reward_by_staker() {
-	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L561
 	todo!()
 }
 
@@ -1400,9 +1386,9 @@ fn get_index_for_data_before() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_1 = with_block_after(ReportingLock::get(), || {
+		let timestamp_1 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1410,9 +1396,9 @@ fn get_index_for_data_before() {
 				1,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_2 = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1420,20 +1406,20 @@ fn get_index_for_data_before() {
 				2,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 
 		// advance time and test
 		for year in 1..2 {
-			with_block_after(year * 365 * DAY_IN_MILLISECONDS, || {
+			with_block_after(year * 365 * 86_400, || {
 				assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 			});
 		}
 
 		for i in 0..50 {
-			with_block_after(ReportingLock::get(), || {
+			with_block_after(REPORTING_LOCK, || {
 				assert_ok!(Tellor::submit_value(
 					RuntimeOrigin::signed(reporter),
 					query_id,
@@ -1443,7 +1429,7 @@ fn get_index_for_data_before() {
 				));
 			});
 		}
-		let timestamp_52 = Timestamp::get();
+		let timestamp_52 = now();
 
 		// test last value disputed
 		with_block(|| {
@@ -1468,7 +1454,7 @@ fn get_index_for_data_before() {
 		let query_data: QueryDataOf<Test> = spot_price("ksm", "usd").try_into().unwrap();
 		let query_id = keccak_256(query_data.as_ref()).into();
 
-		let timestamp_0 = with_block_after(ReportingLock::get(), || {
+		let timestamp_0 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1476,9 +1462,9 @@ fn get_index_for_data_before() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_1 = with_block_after(ReportingLock::get(), || {
+		let timestamp_1 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1488,14 +1474,14 @@ fn get_index_for_data_before() {
 			));
 
 			assert_ok!(Tellor::remove_value(query_id, timestamp_0));
-			assert_ok!(Tellor::remove_value(query_id, Timestamp::get()));
-			Timestamp::get()
+			assert_ok!(Tellor::remove_value(query_id, now()));
+			now()
 		});
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), None);
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_0 + 1), None);
 
-		let timestamp_2 = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1503,10 +1489,10 @@ fn get_index_for_data_before() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
-		with_block_after(ReportingLock::get(), || {
+		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1547,9 +1533,9 @@ fn get_data_before() {
 				0,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_2 = with_block_after(ReportingLock::get(), || {
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1557,9 +1543,9 @@ fn get_data_before() {
 				1,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
-		let timestamp_3 = with_block_after(ReportingLock::get(), || {
+		let timestamp_3 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1567,7 +1553,7 @@ fn get_data_before() {
 				2,
 				query_data.clone(),
 			));
-			Timestamp::get()
+			now()
 		});
 
 		assert_eq!(
@@ -1581,7 +1567,7 @@ fn get_data_before() {
 
 		// advance time one year and test
 		for year in 1..2 {
-			with_block_after(year * 365 * DAY_IN_MILLISECONDS, || {
+			with_block_after(year * 365 * 86_400, || {
 				assert_eq!(
 					Tellor::get_data_before(query_id, timestamp_3 + 1),
 					Some((uint_value(170), timestamp_3))
@@ -1595,7 +1581,7 @@ fn get_data_before() {
 
 		// submit 50 values and test
 		for i in 0..50 {
-			with_block_after(ReportingLock::get(), || {
+			with_block_after(REPORTING_LOCK, || {
 				assert_ok!(Tellor::submit_value(
 					RuntimeOrigin::signed(reporter),
 					query_id,
@@ -1649,11 +1635,13 @@ fn invalid_dispute() {
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone())
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Report invalid dispute after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(
 				Tellor::report_invalid_dispute(
 					Origin::Governance.into(),
@@ -1717,7 +1705,7 @@ fn slash_dispute_initiator() {
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
-				Timestamp::get()
+				now()
 			));
 
 			match System::events().last().unwrap().event {
@@ -1726,11 +1714,13 @@ fn slash_dispute_initiator() {
 			}
 		});
 
-		with_block_after(VoteRoundPeriod::get(), || {
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
 			assert_ok!(Tellor::tally_votes(dispute_id));
 		});
 
-		with_block_after(VoteTallyDisputePeriod::get(), || {
+		// Report invalid dispute after tally dispute period
+		with_block_after(86_400, || {
 			assert_ok!(
 				Tellor::slash_dispute_initiator(
 					Origin::Governance.into(),
@@ -1763,11 +1753,5 @@ fn update_rewards() {
 #[test]
 #[ignore]
 fn update_stake_and_pay_rewards() {
-	todo!()
-}
-
-#[test]
-#[ignore]
-fn get_real_staking_rewards_balance() {
 	todo!()
 }

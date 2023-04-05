@@ -1,7 +1,7 @@
 # Tellor
 
-[![Check Set-Up & Build](https://github.com/evilrobot-01/substrate-pallets/actions/workflows/check.yml/badge.svg?branch=tellor)](https://github.com/evilrobot-01/substrate-pallets/actions/workflows/check.yml)
-[![Run Tests](https://github.com/evilrobot-01/substrate-pallets/actions/workflows/test.yml/badge.svg?branch=tellor)](https://github.com/evilrobot-01/substrate-pallets/actions/workflows/test.yml)
+[![Check Set-Up & Build](https://github.com/tellor-io/tellor-pallet/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/tellor-io/tellor-pallet/actions/workflows/check.yml)
+[![Run Tests](https://github.com/tellor-io/tellor-pallet/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/tellor-io/tellor-pallet/actions/workflows/test.yml)
 
 License: Unlicense
 
@@ -49,8 +49,8 @@ This repo is a clone of this work [here](https://github.com/evilrobot-01/substra
 | :white_check_mark: `get_current_value`                             |  :white_check_mark:   |       |
 | :white_check_mark: `get_data_before`                               |  :white_check_mark:   |       |
 | :white_check_mark: `get_new_value_count_by_query_id`               |  :white_check_mark:   |       |
-| :white_square_button: `get_pending_reward_by_staker`?              | :white_square_button: |       |
-| :white_square_button: `get_real_staking_rewards_balance`?          | :white_square_button: |       |
+| ~~`get_pending_reward_by_staker`~~                                 |                       |       |
+| ~~`get_real_staking_rewards_balance`~~                             |                       |       |
 | :white_check_mark: `get_report_details`                            |  :white_check_mark:   |       |
 | :white_check_mark: `get_reporter_by_timestamp`                     |  :white_check_mark:   |       |
 | :white_check_mark: `get_reporter_last_timestamp`                   |  :white_check_mark:   |       |
@@ -99,22 +99,4 @@ This repo is a clone of this work [here](https://github.com/evilrobot-01/substra
 | :heavy_check_mark: `report_slash`                    |  :heavy_check_mark:   | 99% implemented                                                |
 | :heavy_check_mark: `report_invalid_dispute`          | :white_square_button: |                                                                |
 | :heavy_check_mark: `slash_dispute_initiator`         | :white_square_button: | Partially implemented, needs clarification on dispute fee      |
-| :white_square_button: `deregister`                   | :white_square_button: |                                                                |
-
-## Todo List
-- [ ] Pending todo's within code
-- [ ] Clarify outstanding items
-  - Dispute fees charged on parachain vs staking chain
-  - Standardise on dispute_id being hash(para_id, query_id, timestamp)
-  - Time-based rewards required on parachain?
-- [ ] Implement XCM fees
-- [ ] Ensure test coverage
-- [ ] Additional Features
-  - [ ] Support `assets` pallet
-  - [ ] Add dispatchable function for a verified oracle user to flag a value for dispute
-- [ ] Benchmarking
-- [ ] Define invariants
-- [ ] Fuzzing
-- [ ] Complete integration tests
-- [ ] Update license as applicable, including source files
-- [ ] Move repository
+| :heavy_check_mark: `deregister`                      | :white_square_button: |                                                                |

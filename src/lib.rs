@@ -1,11 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use crate::constants::{DAYS, HOURS, REPORTING_LOCK, WEEKS};
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
 use codec::Encode;
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
 	ensure,
-	traits::{fungible::Transfer, EnsureOrigin, Len, Time},
+	traits::{fungible::Transfer, EnsureOrigin, Len, UnixTime},
 };
 pub use pallet::*;
 use sp_core::Get;
@@ -15,13 +16,13 @@ use sp_runtime::{
 };
 use sp_std::vec::Vec;
 pub use traits::{SendXcm, UsingTellor};
-use types::*;
 pub use types::{
 	autopay::{FeedDetails, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
 	Address,
 };
+use types::{QueryId, *};
 
 #[cfg(test)]
 mod mock;
@@ -31,22 +32,18 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+mod constants;
 mod contracts;
 mod impls;
 pub mod traits;
 mod types;
 pub mod xcm;
 
-pub const MINUTE_IN_MILLISECONDS: u64 = 60 * 1_000;
-pub const HOUR_IN_MILLISECONDS: u64 = 60 * MINUTE_IN_MILLISECONDS;
-pub const DAY_IN_MILLISECONDS: u64 = 24 * HOUR_IN_MILLISECONDS;
-pub const WEEK_IN_MILLISECONDS: u64 = 7 * DAY_IN_MILLISECONDS;
-
 #[frame_support::pallet(dev_mode)]
 pub mod pallet {
 	use super::{
 		contracts::{governance, registry},
-		types::*,
+		types::{QueryId, *},
 		xcm::{self, ethereum_xcm},
 		*,
 	};
@@ -55,8 +52,7 @@ pub mod pallet {
 	use frame_support::{
 		pallet_prelude::*,
 		sp_runtime::traits::{
-			AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, MaybeSerializeDeserialize,
-			Member, SimpleBitOps,
+			AtLeast32BitUnsigned, Hash, MaybeDisplay, MaybeSerializeDeserialize, Member,
 		},
 		traits::{
 			fungible::{Inspect, Transfer},
@@ -68,6 +64,7 @@ pub mod pallet {
 	use sp_core::{bounded::BoundedBTreeMap, U256};
 	use sp_runtime::traits::{AccountIdConversion, CheckedAdd, SaturatedConversion};
 	use sp_std::{fmt::Debug, prelude::*, result};
+	use crate::constants::DISPUTE_SUB_ACCOUNT_ID;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -93,15 +90,7 @@ pub mod pallet {
 			+ MaxEncodedLen
 			+ TypeInfo
 			+ Into<U256>
-			+ From<<Self::Time as Time>::Moment>;
-
-		/// The claim buffer time.
-		#[pallet::constant]
-		type ClaimBuffer: Get<<Self::Time as Time>::Moment>;
-
-		/// The claim period.
-		#[pallet::constant]
-		type ClaimPeriod: Get<<Self::Time as Time>::Moment>;
+			+ From<u64>;
 
 		/// The identifier used for disputes.
 		type DisputeId: Member
@@ -126,25 +115,6 @@ pub mod pallet {
 
 		/// Origin that handles dispute resolution (governance).
 		type GovernanceOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
-
-		/// The output of the `Hasher` function.
-		type Hash: Parameter
-			+ Member
-			+ MaybeSerializeDeserialize
-			+ Debug
-			+ MaybeDisplay
-			+ SimpleBitOps
-			+ Ord
-			+ Default
-			+ Copy
-			+ CheckEqual
-			+ sp_std::hash::Hash
-			+ AsRef<[u8]>
-			+ AsMut<[u8]>
-			+ MaxEncodedLen;
-
-		/// The hashing system (algorithm) to be used (e.g. keccak256).
-		type Hasher: Hash<Output = <Self as Config>::Hash> + TypeInfo;
 
 		/// The maximum number of timestamps per claim.
 		#[pallet::constant]
@@ -207,10 +177,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type Registry: Get<ContractLocation>;
 
-		/// Base amount of time before a reporter is able to submit a value again.
-		#[pallet::constant]
-		type ReportingLock: Get<TimestampOf<Self>>;
-
 		/// The location of the staking controller contract.
 		#[pallet::constant]
 		type Staking: Get<ContractLocation>;
@@ -219,24 +185,12 @@ pub mod pallet {
 		type StakingOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
 		/// The on-chain time provider.
-		type Time: Time;
+		type Time: UnixTime;
 
 		type Token: Inspect<Self::AccountId, Balance = Self::Amount> + Transfer<Self::AccountId>;
 
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
-
-		/// The dispute period.
-		#[pallet::constant]
-		type VoteRoundPeriod: Get<<Self::Time as Time>::Moment>;
-
-		/// The dispute period after a vote has been tallied.
-		#[pallet::constant]
-		type VoteTallyDisputePeriod: Get<<Self::Time as Time>::Moment>;
-
-		/// The withdrawal period.
-		#[pallet::constant]
-		type WithdrawalPeriod: Get<<Self::Time as Time>::Moment>;
 
 		type Xcm: traits::SendXcm;
 	}
@@ -246,35 +200,29 @@ pub mod pallet {
 	pub type CurrentFeeds<T> = StorageMap<
 		_,
 		Blake2_128Concat,
-		QueryIdOf<T>,
-		BoundedVec<FeedIdOf<T>, <T as Config>::MaxFeedsPerQuery>,
+		QueryId,
+		BoundedVec<FeedId, <T as Config>::MaxFeedsPerQuery>,
 	>;
 	#[pallet::storage]
-	pub type DataFeeds<T> = StorageDoubleMap<
-		_,
-		Blake2_128Concat,
-		QueryIdOf<T>,
-		Blake2_128Concat,
-		FeedIdOf<T>,
-		FeedOf<T>,
-	>;
+	pub type DataFeeds<T> =
+		StorageDoubleMap<_, Blake2_128Concat, QueryId, Blake2_128Concat, FeedId, FeedOf<T>>;
 	#[pallet::storage]
 	pub type FeedsWithFunding<T> =
-		StorageValue<_, BoundedVec<FeedIdOf<T>, <T as Config>::MaxFundedFeeds>, ValueQuery>;
+		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
-	pub type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedIdOf<T>, QueryIdOf<T>>;
+	pub type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedId, QueryId>;
 	#[pallet::storage]
 	pub type QueryIdsWithFunding<T> =
-		StorageValue<_, BoundedVec<QueryIdOf<T>, <T as Config>::MaxFundedFeeds>, ValueQuery>;
+		StorageValue<_, BoundedVec<QueryId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
 	#[pallet::getter(fn query_ids_with_funding_index)]
-	pub type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, u32>;
+	pub type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryId, u32>;
 	#[pallet::storage]
 	#[pallet::getter(fn tips)]
 	pub type Tips<T> = StorageMap<
 		_,
 		Blake2_128Concat,
-		QueryIdOf<T>,
+		QueryId,
 		BoundedVec<TipOf<T>, <T as Config>::MaxTipsPerQuery>,
 	>;
 	#[pallet::storage]
@@ -282,7 +230,7 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, AmountOf<T>, ValueQuery>;
 	// Oracle
 	#[pallet::storage]
-	pub type Reports<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, ReportOf<T>>;
+	pub type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
 	#[pallet::storage]
 	pub type RewardRate<T> = StorageValue<_, AmountOf<T>>;
 	#[pallet::storage]
@@ -293,7 +241,7 @@ pub mod pallet {
 	pub type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_new_value)]
-	pub type TimeOfLastNewValue<T> = StorageValue<_, TimestampOf<T>>;
+	pub type TimeOfLastNewValue<T> = StorageValue<_, Timestamp>;
 	#[pallet::storage]
 	pub type TotalStakeAmount<T> = StorageValue<_, AmountOf<T>, ValueQuery>;
 	#[pallet::storage]
@@ -305,7 +253,7 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, DisputeOf<T>>;
 	#[pallet::storage]
-	pub type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, u128>;
+	pub type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryId, u128>;
 	#[pallet::storage]
 	pub type VoteCount<T> = StorageValue<_, DisputeIdOf<T>, ValueQuery>;
 	#[pallet::storage]
@@ -314,7 +262,7 @@ pub mod pallet {
 	pub type VoteRounds<T> = StorageMap<
 		_,
 		Blake2_128Concat,
-		VoteIdOf<T>,
+		VoteId,
 		BoundedVec<DisputeIdOf<T>, <T as Config>::MaxVoteRounds>,
 		ValueQuery,
 	>;
@@ -323,7 +271,7 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
 	// Query Data
 	#[pallet::storage]
-	pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryIdOf<T>, QueryDataOf<T>>;
+	pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryId, QueryDataOf<T>>;
 	// Configuration
 	#[pallet::storage]
 	pub type Configuration<T> = StorageValue<_, types::Configuration>;
@@ -334,32 +282,32 @@ pub mod pallet {
 		// AutoPay
 		/// Emitted when a data feed is funded.
 		DataFeedFunded {
-			query_id: QueryIdOf<T>,
-			feed_id: FeedIdOf<T>,
+			query_id: QueryId,
+			feed_id: FeedId,
 			amount: AmountOf<T>,
 			feed_funder: AccountIdOf<T>,
 			feed_details: FeedDetailsOf<T>,
 		},
 		/// Emitted when a data feed is set up.
 		NewDataFeed {
-			query_id: QueryIdOf<T>,
-			feed_id: FeedIdOf<T>,
+			query_id: QueryId,
+			feed_id: FeedId,
 			query_data: QueryDataOf<T>,
 			feed_creator: AccountIdOf<T>,
 		},
 		/// Emitted when a onetime tip is claimed.
-		OneTimeTipClaimed { query_id: QueryIdOf<T>, amount: AmountOf<T>, reporter: AccountIdOf<T> },
+		OneTimeTipClaimed { query_id: QueryId, amount: AmountOf<T>, reporter: AccountIdOf<T> },
 		/// Emitted when a tip is added.
 		TipAdded {
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			amount: AmountOf<T>,
 			query_data: QueryDataOf<T>,
 			tipper: AccountIdOf<T>,
 		},
 		/// Emitted when a tip is claimed.
 		TipClaimed {
-			feed_id: FeedIdOf<T>,
-			query_id: QueryIdOf<T>,
+			feed_id: FeedId,
+			query_id: QueryId,
 			amount: AmountOf<T>,
 			reporter: AccountIdOf<T>,
 		},
@@ -367,8 +315,8 @@ pub mod pallet {
 		// Oracle
 		/// Emitted when a new value is submitted.
 		NewReport {
-			query_id: QueryIdOf<T>,
-			time: TimestampOf<T>,
+			query_id: QueryId,
+			time: Timestamp,
 			value: ValueOf<T>,
 			nonce: Nonce,
 			query_data: QueryDataOf<T>,
@@ -387,14 +335,14 @@ pub mod pallet {
 			address: Address,
 		},
 		/// Emitted when a value is removed (via governance).
-		ValueRemoved { query_id: QueryIdOf<T>, timestamp: TimestampOf<T> },
+		ValueRemoved { query_id: QueryId, timestamp: Timestamp },
 
 		// Governance
 		/// Emitted when a new dispute is opened.
 		NewDispute {
 			dispute_id: DisputeIdOf<T>,
-			query_id: QueryIdOf<T>,
-			timestamp: TimestampOf<T>,
+			query_id: QueryId,
+			timestamp: Timestamp,
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when an address casts their vote.
@@ -410,7 +358,7 @@ pub mod pallet {
 
 		// Query Data
 		/// Emitted when query data is stored.
-		QueryDataStored { query_id: QueryIdOf<T> },
+		QueryDataStored { query_id: QueryId },
 
 		// Registration
 		/// Emitted when the pallet is (re-)configured.
@@ -462,7 +410,6 @@ pub mod pallet {
 		PriceChangeCalculationError,
 		/// Price threshold not met.
 		PriceThresholdNotMet,
-		RewardCalculationError,
 		/// Timestamp not eligible for tip.
 		TimestampIneligibleForTip,
 		/// Tip already claimed.
@@ -502,7 +449,7 @@ pub mod pallet {
 		AlreadyVoted,
 		/// Dispute must be started within reporting lock time.
 		DisputeReportingPeriodExpired,
-		/// New dispute round must be started within the dispute round reporting time.
+		/// New dispute round must be started within a day.
 		DisputeRoundReportingPeriodExpired,
 		/// Dispute does not exist.
 		InvalidDispute,
@@ -518,7 +465,7 @@ pub mod pallet {
 		NotReporter,
 		/// No value exists at given timestamp.
 		NoValueExists,
-		/// Sufficient time has to pass after tally to allow for disputes.
+		/// One day has to pass after tally to allow for disputes.
 		TallyDisputePeriodActive,
 		/// Vote has already been executed.
 		VoteAlreadyExecuted,
@@ -627,8 +574,8 @@ pub mod pallet {
 		#[pallet::call_index(1)]
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
-			timestamps: BoundedVec<TimestampOf<T>, T::MaxClaimTimestamps>,
+			query_id: QueryId,
+			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
 			ensure!(
@@ -698,9 +645,9 @@ pub mod pallet {
 		#[pallet::call_index(2)]
 		pub fn claim_tip(
 			origin: OriginFor<T>,
-			feed_id: FeedIdOf<T>,
-			query_id: QueryIdOf<T>,
-			timestamps: BoundedVec<TimestampOf<T>, T::MaxClaimTimestamps>,
+			feed_id: FeedId,
+			query_id: QueryId,
+			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
 
@@ -711,7 +658,7 @@ pub mod pallet {
 			let mut cumulative_reward = AmountOf::<T>::default();
 			for timestamp in &timestamps {
 				ensure!(
-					T::Time::now().saturating_sub(*timestamp) > T::ClaimBuffer::get(),
+					Self::now().saturating_sub(*timestamp) > 12 * HOURS,
 					Error::<T>::ClaimBufferNotPassed
 				);
 				ensure!(
@@ -798,8 +745,8 @@ pub mod pallet {
 		#[pallet::call_index(3)]
 		pub fn fund_feed(
 			origin: OriginFor<T>,
-			feed_id: FeedIdOf<T>,
-			query_id: QueryIdOf<T>,
+			feed_id: FeedId,
+			query_id: QueryId,
 			amount: AmountOf<T>,
 		) -> DispatchResult {
 			let feed_funder = ensure_signed(origin)?;
@@ -820,22 +767,19 @@ pub mod pallet {
 		#[pallet::call_index(4)]
 		pub fn setup_data_feed(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			reward: AmountOf<T>,
-			start_time: TimestampOf<T>,
-			interval: TimestampOf<T>,
-			window: TimestampOf<T>,
+			start_time: Timestamp,
+			interval: Timestamp,
+			window: Timestamp,
 			price_threshold: u16,
 			reward_increase_per_second: AmountOf<T>,
 			query_data: QueryDataOf<T>,
 			amount: AmountOf<T>,
 		) -> DispatchResult {
 			let feed_creator = ensure_signed(origin)?;
-			ensure!(
-				query_id == HasherOf::<T>::hash(query_data.as_ref()),
-				Error::<T>::InvalidQueryId
-			);
-			let feed_id = HasherOf::<T>::hash(
+			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
+			let feed_id = Keccak256::hash(
 				&contracts::Abi::default()
 					.fixed_bytes(query_id.as_ref())
 					.uint(reward)
@@ -849,7 +793,7 @@ pub mod pallet {
 			let feed = <DataFeeds<T>>::get(query_id, feed_id);
 			ensure!(feed.is_none(), Error::<T>::FeedAlreadyExists);
 			ensure!(reward > <AmountOf<T>>::default(), Error::<T>::InvalidReward);
-			ensure!(interval > <TimestampOf<T>>::default(), Error::<T>::InvalidInterval);
+			ensure!(interval > 0, Error::<T>::InvalidInterval);
 			ensure!(window < interval, Error::<T>::InvalidWindow);
 
 			let feed = FeedDetailsOf::<T> {
@@ -903,15 +847,12 @@ pub mod pallet {
 		#[pallet::call_index(5)]
 		pub fn tip(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			amount: AmountOf<T>,
 			query_data: QueryDataOf<T>,
 		) -> DispatchResult {
 			let tipper = ensure_signed(origin)?;
-			ensure!(
-				query_id == HasherOf::<T>::hash(query_data.as_ref()),
-				Error::<T>::InvalidQueryId
-			);
+			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			ensure!(amount > AmountOf::<T>::default(), Error::<T>::InvalidAmount);
 
 			<Tips<T>>::try_mutate(query_id, |mut maybe_tips| -> DispatchResult {
@@ -920,7 +861,7 @@ pub mod pallet {
 						*maybe_tips = Some(
 							BoundedVec::try_from(vec![TipOf::<T> {
 								amount,
-								timestamp: T::Time::now().saturating_add(1u8.into()),
+								timestamp: Self::now().saturating_add(1u8.into()),
 								cumulative_tips: amount,
 							}])
 							.map_err(|_| Error::<T>::MaxTipsReached)?,
@@ -929,11 +870,11 @@ pub mod pallet {
 						Ok(())
 					},
 					Some(tips) => {
-						let timestamp_retrieved = Self::_get_current_value(query_id)
-							.map_or(<TimestampOf<T>>::default(), |v| v.1);
+						let timestamp_retrieved =
+							Self::_get_current_value(query_id).map_or(0, |v| v.1);
 						match tips.last_mut() {
 							Some(last_tip) if timestamp_retrieved < last_tip.timestamp => {
-								last_tip.timestamp = T::Time::now().saturating_add(1u8.into());
+								last_tip.timestamp = Self::now().saturating_add(1u8.into());
 								last_tip.amount.saturating_accrue(amount);
 								last_tip.cumulative_tips.saturating_accrue(amount);
 							},
@@ -943,7 +884,7 @@ pub mod pallet {
 									.map_or(<AmountOf<T>>::default(), |t| t.cumulative_tips);
 								tips.try_push(Tip {
 									amount,
-									timestamp: T::Time::now().saturating_add(1u8.into()),
+									timestamp: Self::now().saturating_add(1u8.into()),
 									cumulative_tips: cumulative_tips.saturating_add(amount),
 								})
 								.map_err(|_| Error::<T>::MaxTipsReached)?;
@@ -985,7 +926,7 @@ pub mod pallet {
 		#[pallet::call_index(6)]
 		pub fn submit_value(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
+			query_id: QueryId,
 			value: ValueOf<T>,
 			nonce: Nonce,
 			query_data: QueryDataOf<T>,
@@ -1015,13 +956,13 @@ pub mod pallet {
 				Error::<T>::InsufficientStake
 			);
 			// Require reporter to abide by given reporting lock
-			let timestamp = T::Time::now();
+			let timestamp = Self::now();
 			ensure!(
 				// todo: refactor to remove saturated_into()
 				(timestamp.saturating_sub(staker.reporter_last_timestamp))
 					.saturated_into::<u128>()
 					.saturating_mul(1_000) >
-					(T::ReportingLock::get().saturated_into::<u128>().saturating_mul(1_000))
+					((REPORTING_LOCK as u128).saturating_mul(1_000))
 						.checked_div(
 							staker
 								.staked_balance
@@ -1034,10 +975,7 @@ pub mod pallet {
 						.ok_or(Error::<T>::ReportingLockCalculationError)?,
 				Error::<T>::ReporterTimeLocked
 			);
-			ensure!(
-				query_id == HasherOf::<T>::hash(query_data.as_ref()),
-				Error::<T>::InvalidQueryId
-			);
+			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			staker.reporter_last_timestamp = timestamp;
 			// Checks for no double reporting of timestamps
 			ensure!(
@@ -1118,8 +1056,8 @@ pub mod pallet {
 		#[pallet::call_index(7)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
-			query_id: QueryIdOf<T>,
-			timestamp: TimestampOf<T>,
+			query_id: QueryId,
+			timestamp: Timestamp,
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
 			// Only reporters can begin disputes due to requiring an account on staking chain to potentially receive slash amount if dispute successful
@@ -1129,7 +1067,7 @@ pub mod pallet {
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
 				Error::<T>::NoValueExists
 			);
-			let vote_id: VoteIdOf<T> = HasherOf::<T>::hash(
+			let vote_id: VoteId = Keccak256::hash(
 				&contracts::Abi::default()
 					.uint(T::ParachainId::get())
 					.fixed_bytes(query_id.as_ref())
@@ -1154,10 +1092,10 @@ pub mod pallet {
 			let mut vote = VoteOf::<T> {
 				identifier: vote_id,
 				vote_round: vote_rounds.len() as u32,
-				start_date: T::Time::now(),
+				start_date: Self::now(),
 				block_number: frame_system::Pallet::<T>::block_number(),
 				fee: Self::get_dispute_fee(),
-				tally_date: <TimestampOf<T>>::default(),
+				tally_date: 0,
 				users: Tally::default(),
 				reporters: Tally::default(),
 				executed: false,
@@ -1175,7 +1113,7 @@ pub mod pallet {
 			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 			if vote_rounds.len() == 1 {
 				ensure!(
-					T::Time::now().saturating_sub(timestamp) < T::ReportingLock::get(),
+					Self::now().saturating_sub(timestamp) < REPORTING_LOCK,
 					Error::<T>::DisputeReportingPeriodExpired
 				);
 				<OpenDisputesOnId<T>>::mutate(query_id, |open_disputes| {
@@ -1199,9 +1137,9 @@ pub mod pallet {
 				let prev_id =
 					vote_rounds.get(vote_rounds.len() - 2).ok_or(Error::<T>::InvalidIndex)?;
 				ensure!(
-					T::Time::now() -
+					Self::now() -
 						<VoteInfo<T>>::get(prev_id).ok_or(Error::<T>::InvalidVote)?.tally_date <
-						T::VoteRoundPeriod::get(),
+						1 * DAYS,
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
 				vote.fee = vote.fee.saturating_mul(
@@ -1224,7 +1162,7 @@ pub mod pallet {
 			let pallet_id = T::PalletId::get();
 			T::Token::transfer(
 				&dispute_initiator,
-				&pallet_id.into_sub_account_truncating(b"dispute"),
+				&pallet_id.into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID),
 				dispute_fee,
 				false,
 			)?;
@@ -1293,10 +1231,7 @@ pub mod pallet {
 				match maybe {
 					None => Err(Error::<T>::InvalidVote.into()),
 					Some(vote) => {
-						ensure!(
-							vote.tally_date == <TimestampOf<T>>::default(),
-							Error::<T>::VoteAlreadyTallied
-						);
+						ensure!(vote.tally_date == 0, Error::<T>::VoteAlreadyTallied);
 						ensure!(!vote.voted.contains_key(&voter), Error::<T>::AlreadyVoted);
 						// Update voting status and increment total queries for support, invalid, or against based on vote
 						vote.voted
@@ -1381,7 +1316,7 @@ pub mod pallet {
 					}
 				}
 				Self::update_stake_and_pay_rewards(&mut staker, staked_balance + amount)?;
-				staker.start_date = T::Time::now(); // This resets the staker start date to now
+				staker.start_date = Self::now(); // This resets the staker start date to now
 				*maybe = Some(staker);
 				Ok(())
 			})?;
@@ -1416,7 +1351,7 @@ pub mod pallet {
 						// todo: safe math
 						let stake_amount = staker.staked_balance - amount;
 						Self::update_stake_and_pay_rewards(staker, stake_amount)?;
-						staker.start_date = T::Time::now();
+						staker.start_date = Self::now();
 						staker.locked_balance.saturating_accrue(amount);
 						// toWithdraw += _amount; // <- todo: check whether this is required here
 						Ok(())
@@ -1474,8 +1409,7 @@ pub mod pallet {
 							Error::<T>::NoWithdrawalRequested
 						);
 						ensure!(
-							T::Time::now().saturating_sub(staker.start_date) >=
-								T::WithdrawalPeriod::get(),
+							Self::now().saturating_sub(staker.start_date) >= 7 * DAYS,
 							Error::<T>::WithdrawalPeriodPending
 						);
 						// toWithdraw -= _staker.lockedBalance; // todo: required?

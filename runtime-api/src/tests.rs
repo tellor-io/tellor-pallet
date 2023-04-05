@@ -6,7 +6,6 @@ use crate::{
 use codec::Encode;
 use frame_support::{
 	parameter_types,
-	sp_runtime::traits::Keccak256,
 	traits::{ConstU16, ConstU64},
 	BoundedVec, PalletId,
 };
@@ -100,14 +99,10 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = Amount;
-	type ClaimBuffer = ();
-	type ClaimPeriod = ();
 	type DisputeId = DisputeId;
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
-	type Hash = H256;
-	type Hasher = Keccak256;
 	type MaxClaimTimestamps = ();
 	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ();
@@ -124,15 +119,11 @@ impl tellor::Config for Test {
 	type Price = u32;
 	type RegistrationOrigin = frame_system::EnsureRoot<AccountId>;
 	type Registry = ();
-	type ReportingLock = ConstU64<42>;
 	type Staking = ();
 	type StakingOrigin = EnsureStaking;
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ();
-	type VoteRoundPeriod = ();
-	type VoteTallyDisputePeriod = ();
-	type WithdrawalPeriod = ();
 	type Xcm = TestSendXcm;
 }
 pub struct TestSendXcm;
@@ -575,7 +566,7 @@ mod oracle {
 	#[test]
 	fn get_reporting_lock() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_reporting_lock(&BLOCKID).unwrap(), 42);
+			assert_eq!(Test.get_reporting_lock(&BLOCKID).unwrap(), 43200);
 		});
 	}
 

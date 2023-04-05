@@ -1,13 +1,8 @@
 use crate as tellor;
-use crate::{
-	types::{Address, MomentOf},
-	xcm::ContractLocation,
-	EnsureGovernance, EnsureStaking, DAY_IN_MILLISECONDS, HOUR_IN_MILLISECONDS,
-	WEEK_IN_MILLISECONDS,
-};
+use crate::{types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking};
 use frame_support::{
 	assert_ok, log, parameter_types,
-	traits::{ConstU16, ConstU64, OnFinalize},
+	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},
 	PalletId,
 };
 use frame_system as system;
@@ -15,12 +10,12 @@ use once_cell::sync::Lazy;
 use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	testing::Header,
-	traits::{BlakeTwo256, Convert, IdentityLookup, Keccak256},
+	traits::{BlakeTwo256, Convert, IdentityLookup},
 };
 use sp_std::cell::RefCell;
 use std::{
 	convert::Into,
-	time::{SystemTime, UNIX_EPOCH},
+	time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use xcm::latest::prelude::*;
 
@@ -110,14 +105,10 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Amount = u64;
-	type ClaimBuffer = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
-	type ClaimPeriod = ConstU64<{ 4 * WEEK_IN_MILLISECONDS }>;
 	type DisputeId = u32;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
-	type Hash = H256;
-	type Hasher = Keccak256;
 	type MaxClaimTimestamps = ConstU32<10>;
 	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;
@@ -134,15 +125,11 @@ impl tellor::Config for Test {
 	type Price = u128;
 	type RegistrationOrigin = system::EnsureRoot<AccountId>;
 	type Registry = TellorRegistry;
-	type ReportingLock = ConstU64<{ 12 * HOUR_IN_MILLISECONDS }>;
 	type Staking = TellorStaking;
 	type StakingOrigin = EnsureStaking;
 	type Time = Timestamp;
 	type Token = Balances;
 	type ValueConverter = ValueConverter;
-	type VoteRoundPeriod = ConstU64<{ 1 * DAY_IN_MILLISECONDS }>;
-	type VoteTallyDisputePeriod = ConstU64<{ 1 * DAY_IN_MILLISECONDS }>;
-	type WithdrawalPeriod = ConstU64<{ 7 * DAY_IN_MILLISECONDS }>;
 	type Xcm = TestSendXcm;
 }
 
@@ -196,7 +183,7 @@ pub(crate) fn with_block<R>(execute: impl FnOnce() -> R) -> R {
 }
 
 /// Starts a new block after some time, executing the supplied closure thereafter.
-pub(crate) fn with_block_after<R>(time: MomentOf<Test>, execute: impl FnOnce() -> R) -> R {
+pub(crate) fn with_block_after<R>(time_in_secs: u64, execute: impl FnOnce() -> R) -> R {
 	let block = System::block_number();
 	match block {
 		0 => {
@@ -212,7 +199,11 @@ pub(crate) fn with_block_after<R>(time: MomentOf<Test>, execute: impl FnOnce() -
 		_ => {
 			Timestamp::on_finalize(block);
 			System::set_block_number(block + 1);
-			assert_ok!(Timestamp::set(RuntimeOrigin::none(), Timestamp::get() + 1 + time));
+			assert_ok!(Timestamp::set(
+				RuntimeOrigin::none(),
+				(<Timestamp as UnixTime>::now() + Duration::from_secs(1 + time_in_secs)).as_millis()
+					as u64
+			));
 		},
 	}
 	execute()
