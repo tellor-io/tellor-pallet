@@ -101,7 +101,7 @@ pub(crate) mod tests {
 	use super::Call;
 	use crate::types::Address;
 	use ethabi::{encode, Param, ParamType, Token};
-	use sp_core::U256;
+	use sp_core::{keccak_256, U256};
 
 	// Helper for creating a parameter
 	pub(crate) fn param(name: &str, kind: ParamType) -> Param {
@@ -123,6 +123,15 @@ pub(crate) mod tests {
 		assert_eq!(
 			encode(&[Token::Uint(U256::from(value))])[..],
 			Call::new(&[0; 4]).uint(value).encode()[4..]
+		);
+	}
+
+	#[test]
+	fn encodes_fixed_bytes() {
+		let value = keccak_256(b"hello");
+		assert_eq!(
+			encode(&[Token::FixedBytes(value.to_vec())])[..],
+			Call::new(&[0; 4]).fixed_bytes(&value).encode()[4..]
 		);
 	}
 }

@@ -1,4 +1,5 @@
 use super::*;
+use sp_runtime::traits::Hash;
 
 impl<T: Config> Pallet<T> {
 	pub(super) fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
@@ -16,14 +17,15 @@ impl<T: Config> Pallet<T> {
 		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
 	}
 
-	/// Determines if an account voted for a specific dispute.
+	/// Determines if an account voted for a specific dispute round.
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.
+	/// * `vote_round` - The vote round.
 	/// * `voter` - The account of the voter to check.
 	/// # Returns
-	/// Whether or not the account voted for the specific dispute.
-	pub fn did_vote(dispute_id: DisputeIdOf<T>, voter: AccountIdOf<T>) -> bool {
-		<VoteInfo<T>>::get(dispute_id)
+	/// Whether or not the account voted for the specific dispute round.
+	pub fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountIdOf<T>) -> bool {
+		<VoteInfo<T>>::get(dispute_id, vote_round)
 			.and_then(|v| v.voted.get(&voter).copied())
 			.unwrap_or_default()
 	}
@@ -31,14 +33,21 @@ impl<T: Config> Pallet<T> {
 	/// Executes the vote.
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.
+	/// * `vote_round` - The vote round.
 	/// * `result` - The result of the dispute, as determined by governance.
-	pub(super) fn execute_vote(dispute_id: DisputeIdOf<T>, result: VoteResult) -> DispatchResult {
+	pub(super) fn execute_vote(
+		dispute_id: DisputeId,
+		vote_round: u8,
+		result: VoteResult,
+	) -> DispatchResult {
 		// Ensure validity of id
 		ensure!(
-			dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),
+			dispute_id != <DisputeId>::default() &&
+				dispute_id != Keccak256::hash(&[]) &&
+				<DisputeInfo<T>>::contains_key(dispute_id),
 			Error::<T>::InvalidDispute
 		);
-		<VoteInfo<T>>::try_mutate(dispute_id, |maybe| match maybe {
+		<VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidVote),
 			Some(vote) => {
 				// Ensure vote has not already been executed, and vote must be tallied
@@ -46,7 +55,7 @@ impl<T: Config> Pallet<T> {
 				ensure!(vote.tally_date > 0, Error::<T>::VoteNotTallied);
 				// Ensure vote must be final vote and that time has to be pass after the vote is tallied
 				ensure!(
-					<VoteRounds<T>>::get(vote.identifier).len() == vote.vote_round as usize,
+					<VoteRounds<T>>::get(vote.identifier) == vote.vote_round,
 					Error::VoteNotFinal
 				);
 				ensure!(
@@ -236,7 +245,7 @@ impl<T: Config> Pallet<T> {
 	/// query identifier of disputed value, timestamp of disputed value, value being disputed,
 	/// reporter of the disputed value.
 	pub fn get_dispute_info(
-		dispute_id: DisputeIdOf<T>,
+		dispute_id: DisputeId,
 	) -> Option<(QueryId, Timestamp, ValueOf<T>, AccountIdOf<T>)> {
 		<DisputeInfo<T>>::get(dispute_id)
 			.map(|d| (d.query_id, d.timestamp, d.value, d.disputed_reporter))
@@ -246,8 +255,8 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `reporter` - The account of the reporter to check for.
 	/// # Returns
-	/// Dispute identifiers for a reporter.
-	pub fn get_disputes_by_reporter(reporter: AccountIdOf<T>) -> Vec<DisputeIdOf<T>> {
+	/// Dispute identifiers for a reporter, in no particular order.
+	pub fn get_disputes_by_reporter(reporter: AccountIdOf<T>) -> Vec<DisputeId> {
 		<DisputeIdsByReporter<T>>::iter_key_prefix(reporter).collect()
 	}
 
@@ -513,7 +522,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
 	/// All past tips.
-	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip<AmountOf<T>, Timestamp>> {
+	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip<AmountOf<T>>> {
 		<Tips<T>>::get(query_id).map_or_else(Vec::default, |t| t.to_vec())
 	}
 
@@ -523,10 +532,7 @@ impl<T: Config> Pallet<T> {
 	/// * `index` - The index of the tip.
 	/// # Returns
 	/// The past tip, if found.
-	pub fn get_past_tip_by_index(
-		query_id: QueryId,
-		index: u32,
-	) -> Option<Tip<AmountOf<T>, Timestamp>> {
+	pub fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<AmountOf<T>>> {
 		<Tips<T>>::get(query_id).and_then(|t| t.get(index as usize).cloned())
 	}
 
@@ -823,27 +829,28 @@ impl<T: Config> Pallet<T> {
 	/// Returns the total number of votes
 	/// # Returns
 	/// The total number of votes.
-	pub fn get_vote_count() -> VoteCountOf<T> {
+	pub fn get_vote_count() -> u128 {
 		<VoteCount<T>>::get()
 	}
 
 	/// Returns info on a vote for a given dispute identifier.
 	/// # Arguments
 	/// * `dispute_id` - Identifier of a specific dispute.
+	/// * `vote_round` - The vote round.
 	/// # Returns
 	/// Information on a vote for a given dispute identifier including: the vote identifier, the
 	/// vote information, whether it has been executed, the vote result and the dispute initiator.
-	pub fn get_vote_info(dispute_id: DisputeIdOf<T>) -> Option<VoteOf<T>> {
-		<VoteInfo<T>>::get(dispute_id)
+	pub fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<VoteOf<T>> {
+		<VoteInfo<T>>::get(dispute_id, vote_round)
 	}
 
-	/// Returns the voting rounds for a given vote identifier.
+	/// Returns the voting rounds for a given dispute identifier.
 	/// # Arguments
-	/// * `vote_id` - Identifier for a vote.
+	/// * `dispute_id` - Identifier for a dispute.
 	/// # Returns
-	/// Dispute identifiers of the vote rounds.
-	pub fn get_vote_rounds(vote_id: VoteId) -> Vec<DisputeIdOf<T>> {
-		<VoteRounds<T>>::get(vote_id).into_inner()
+	/// The number of vote rounds for the dispute identifier.
+	pub fn get_vote_rounds(dispute_id: DisputeId) -> u8 {
+		<VoteRounds<T>>::get(dispute_id)
 	}
 
 	/// Returns the total number of votes cast by a voter.
@@ -924,14 +931,17 @@ impl<T: Config> Pallet<T> {
 	/// Tallies the votes and begins the challenge period.
 	/// # Arguments
 	/// * `dispute_id` - The dispute identifier.
-	pub(crate) fn tally_votes(dispute_id: DisputeIdOf<T>) -> DispatchResult {
+	/// * `vote_round` - The vote round.
+	pub(crate) fn tally_votes(dispute_id: DisputeId, vote_round: u8) -> DispatchResult {
 		// Ensure vote has not been executed and that vote has not been tallied
-		let initiator = <VoteInfo<T>>::try_mutate(dispute_id, |maybe| match maybe {
+		let initiator = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidDispute),
 			Some(vote) => {
 				ensure!(vote.tally_date == 0, Error::VoteAlreadyTallied);
 				ensure!(
-					dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),
+					dispute_id != DisputeId::default() &&
+						dispute_id != Keccak256::hash(&[]) &&
+						<DisputeInfo<T>>::contains_key(dispute_id),
 					Error::InvalidDispute
 				);
 				// Determine appropriate vote duration dispute round

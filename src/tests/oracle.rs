@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-	constants::{DAYS, REPORTING_LOCK},
+	constants::REPORTING_LOCK,
 	types::{Nonce, QueryId, Timestamp},
 	Config,
 };
@@ -273,7 +273,13 @@ fn slash_reporter() {
 	ext.execute_with(|| {
 		let dispute_id = with_block(|| {
 			assert_noop!(
-				Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, 0, STAKE_AMOUNT.into()),
+				Tellor::report_slash(
+					RuntimeOrigin::signed(reporter),
+					H256::zero(),
+					0,
+					0,
+					STAKE_AMOUNT.into()
+				),
 				BadOrigin
 			);
 
@@ -289,7 +295,7 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report slash after tally dispute period
@@ -333,7 +339,7 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report slash after tally dispute period
@@ -370,7 +376,7 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report slash after tally dispute period
@@ -432,7 +438,7 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id));
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
 		});
 
 		// Report slash after tally dispute period

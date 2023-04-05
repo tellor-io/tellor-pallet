@@ -16,13 +16,13 @@ use sp_runtime::{
 };
 use sp_std::vec::Vec;
 pub use traits::{SendXcm, UsingTellor};
+use types::*;
 pub use types::{
 	autopay::{FeedDetails, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
-	Address,
+	Address, DisputeId, FeedId, QueryId, Timestamp,
 };
-use types::{QueryId, *};
 
 #[cfg(test)]
 mod mock;
@@ -51,9 +51,7 @@ pub mod pallet {
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
-		sp_runtime::traits::{
-			AtLeast32BitUnsigned, Hash, MaybeDisplay, MaybeSerializeDeserialize, Member,
-		},
+		sp_runtime::traits::{AtLeast32BitUnsigned, Hash, MaybeSerializeDeserialize, Member},
 		traits::{
 			fungible::{Inspect, Transfer},
 			PalletInfoAccess,
@@ -62,8 +60,8 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
-	use sp_runtime::traits::{AccountIdConversion, CheckedAdd, SaturatedConversion};
-	use sp_std::{fmt::Debug, prelude::*, result};
+	use sp_runtime::traits::{AccountIdConversion, SaturatedConversion};
+	use sp_std::{prelude::*, result};
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -90,19 +88,6 @@ pub mod pallet {
 			+ TypeInfo
 			+ Into<U256>
 			+ From<u64>;
-
-		/// The identifier used for disputes.
-		type DisputeId: Member
-			+ Parameter
-			+ AtLeast32BitUnsigned
-			+ Default
-			+ Copy
-			+ MaybeSerializeDeserialize
-			+ Debug
-			+ MaybeDisplay
-			+ Ord
-			+ MaxEncodedLen
-			+ Into<U256>;
 
 		/// Percentage, 1000 is 100%, 50 is 5%, etc
 		#[pallet::constant]
@@ -154,10 +139,6 @@ pub mod pallet {
 		/// The maximum number of votes.
 		#[pallet::constant]
 		type MaxVotes: Get<u32>;
-
-		/// The maximum number of vote rounds (per dispute).
-		#[pallet::constant]
-		type MaxVoteRounds: Get<u32>;
 
 		/// The identifier of the pallet within the runtime.
 		#[pallet::constant]
@@ -248,23 +229,18 @@ pub mod pallet {
 	// Governance
 	#[pallet::storage]
 	pub type DisputeIdsByReporter<T> =
-		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Blake2_128Concat, DisputeIdOf<T>, ()>;
+		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Blake2_128Concat, DisputeId, ()>;
 	#[pallet::storage]
-	pub type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, DisputeOf<T>>;
+	pub type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeId, DisputeOf<T>>;
 	#[pallet::storage]
 	pub type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryId, u128>;
 	#[pallet::storage]
-	pub type VoteCount<T> = StorageValue<_, DisputeIdOf<T>, ValueQuery>;
+	pub type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
 	#[pallet::storage]
-	pub type VoteInfo<T> = StorageMap<_, Blake2_128Concat, DisputeIdOf<T>, VoteOf<T>>;
+	pub type VoteInfo<T> =
+		StorageDoubleMap<_, Blake2_128Concat, DisputeId, Blake2_128Concat, u8, VoteOf<T>>;
 	#[pallet::storage]
-	pub type VoteRounds<T> = StorageMap<
-		_,
-		Blake2_128Concat,
-		VoteId,
-		BoundedVec<DisputeIdOf<T>, <T as Config>::MaxVoteRounds>,
-		ValueQuery,
-	>;
+	pub type VoteRounds<T> = StorageMap<_, Blake2_128Concat, DisputeId, u8, ValueQuery>;
 	#[pallet::storage]
 	pub type VoteTallyByAddress<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
@@ -339,21 +315,17 @@ pub mod pallet {
 		// Governance
 		/// Emitted when a new dispute is opened.
 		NewDispute {
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 			query_id: QueryId,
 			timestamp: Timestamp,
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when an address casts their vote.
-		Voted { dispute_id: DisputeIdOf<T>, supports: Option<bool>, voter: AccountIdOf<T> },
+		Voted { dispute_id: DisputeId, supports: Option<bool>, voter: AccountIdOf<T> },
 		/// Emitted when all casting for a vote is tallied.
-		VoteTallied {
-			dispute_id: DisputeIdOf<T>,
-			initiator: AccountIdOf<T>,
-			reporter: AccountIdOf<T>,
-		},
+		VoteTallied { dispute_id: DisputeId, initiator: AccountIdOf<T>, reporter: AccountIdOf<T> },
 		/// Emitted when a vote is executed.
-		VoteExecuted { dispute_id: DisputeIdOf<T>, result: VoteResult },
+		VoteExecuted { dispute_id: DisputeId, result: VoteResult },
 
 		// Query Data
 		/// Emitted when query data is stored.
@@ -931,7 +903,7 @@ pub mod pallet {
 			let reporter = ensure_signed(origin)?;
 			ensure!(
 				// todo: confirm replacement with Tellor
-				//HasherOf::<T>::hash(value.as_ref()) != HasherOf::<T>::hash(&[]),
+				//Keccak256::hash(value.as_ref()) != Keccak256::<T>::hash(&[]),
 				!value.is_empty(),
 				Error::<T>::InvalidValue
 			);
@@ -1064,7 +1036,7 @@ pub mod pallet {
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
 				Error::<T>::NoValueExists
 			);
-			let vote_id: VoteId = Keccak256::hash(
+			let dispute_id: DisputeId = Keccak256::hash(
 				&contracts::Abi::default()
 					.uint(T::ParachainId::get())
 					.fixed_bytes(query_id.as_ref())
@@ -1072,23 +1044,15 @@ pub mod pallet {
 					.encode(),
 			);
 			// Push new vote round
-			let dispute_id = <VoteCount<T>>::get()
-				.checked_add(&1u8.into())
-				.ok_or(Error::<T>::MaxDisputesReached)?;
-			let vote_rounds = <VoteRounds<T>>::try_mutate(
-				vote_id,
-				|vote_rounds| -> Result<Vec<DisputeIdOf<T>>, DispatchError> {
-					vote_rounds
-						.try_push(dispute_id)
-						.map_err(|_| Error::<T>::MaxVoteRoundsReached)?;
-					Ok(vote_rounds.to_vec())
-				},
-			)?;
+			let vote_round = <VoteRounds<T>>::mutate(dispute_id, |vote_rounds| {
+				vote_rounds.saturating_inc();
+				*vote_rounds
+			});
 
 			// Create new vote and dispute
 			let mut vote = VoteOf::<T> {
-				identifier: vote_id,
-				vote_round: vote_rounds.len() as u32,
+				identifier: dispute_id,
+				vote_round,
 				start_date: Self::now(),
 				block_number: frame_system::Pallet::<T>::block_number(),
 				fee: Self::get_dispute_fee(),
@@ -1100,6 +1064,7 @@ pub mod pallet {
 				initiator: dispute_initiator.clone(),
 				voted: BoundedBTreeMap::default(),
 			};
+			// todo: optimise to only write if not already existing
 			let mut dispute = DisputeOf::<T> {
 				query_id,
 				timestamp,
@@ -1108,7 +1073,7 @@ pub mod pallet {
 					.ok_or(Error::<T>::NoValueExists)?,
 			};
 			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
-			if vote_rounds.len() == 1 {
+			if vote_round == 1 {
 				ensure!(
 					Self::now().saturating_sub(timestamp) < REPORTING_LOCK,
 					Error::<T>::DisputeReportingPeriodExpired
@@ -1130,23 +1095,20 @@ pub mod pallet {
 					Self::retrieve_data(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
 				Self::remove_value(query_id, timestamp)?;
 			} else {
-				// todo: safe math
-				let prev_id =
-					vote_rounds.get(vote_rounds.len() - 2).ok_or(Error::<T>::InvalidIndex)?;
+				let prev_id = vote_round.saturating_sub(1);
 				ensure!(
 					Self::now() -
-						<VoteInfo<T>>::get(prev_id).ok_or(Error::<T>::InvalidVote)?.tally_date <
-						1 * DAYS,
+						<VoteInfo<T>>::get(dispute_id, prev_id)
+							.ok_or(Error::<T>::InvalidVote)?
+							.tally_date < 1 * DAYS,
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
 				vote.fee = vote.fee.saturating_mul(
 					<AmountOf<T>>::from(2u8)
-						.saturating_pow(vote_rounds.len().saturating_sub(1).saturated_into()),
+						.saturating_pow(vote_round.saturating_sub(1).saturated_into()),
 				);
 				dispute.value =
-					<DisputeInfo<T>>::get(vote_rounds.first().ok_or(Error::<T>::InvalidDispute)?)
-						.ok_or(Error::<T>::InvalidDispute)?
-						.value;
+					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
 			}
 			let stake_amount = <StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?;
 			if vote.fee > stake_amount {
@@ -1159,7 +1121,7 @@ pub mod pallet {
 			// 	"Fee must be paid"
 			// ); // This is the dispute fee. Returned if dispute passes
 			let dispute_fee = vote.fee;
-			<VoteInfo<T>>::insert(dispute_id, vote);
+			<VoteInfo<T>>::insert(dispute_id, vote_round, vote);
 			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {
 				dispute_id,
@@ -1212,16 +1174,19 @@ pub mod pallet {
 		#[pallet::call_index(8)]
 		pub fn vote(
 			origin: OriginFor<T>,
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 			supports: Option<bool>,
 		) -> DispatchResult {
 			let voter = ensure_signed(origin)?;
 			// Ensure that dispute has not been executed and that vote does not exist and is not tallied
 			ensure!(
-				dispute_id <= <VoteCount<T>>::get() && dispute_id > <DisputeIdOf<T>>::default(),
+				dispute_id != <DisputeId>::default() &&
+					dispute_id != Keccak256::hash(&[]) &&
+					<DisputeInfo<T>>::contains_key(dispute_id),
 				Error::<T>::InvalidVote
 			);
-			<VoteInfo<T>>::try_mutate(dispute_id, |maybe| -> DispatchResult {
+			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
+			<VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
 				match maybe {
 					None => Err(Error::<T>::InvalidVote.into()),
 					Some(vote) => {
@@ -1425,7 +1390,7 @@ pub mod pallet {
 		#[pallet::call_index(12)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 			reporter: AccountIdOf<T>,
 			recipient: AccountIdOf<T>,
 			amount: Amount,
@@ -1438,7 +1403,8 @@ pub mod pallet {
 				.saturated_into::<AmountOf<T>>();
 
 			// execute vote, inferring result based on function called
-			Self::execute_vote(dispute_id, VoteResult::Passed)?;
+			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
+			Self::execute_vote(dispute_id, vote_round, VoteResult::Passed)?;
 
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
@@ -1485,12 +1451,13 @@ pub mod pallet {
 		#[pallet::call_index(13)]
 		pub fn report_invalid_dispute(
 			origin: OriginFor<T>,
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote, inferring result based on function called
-			Self::execute_vote(dispute_id, VoteResult::Invalid)?;
+			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
+			Self::execute_vote(dispute_id, vote_round, VoteResult::Invalid)?;
 			Ok(())
 		}
 
@@ -1500,12 +1467,13 @@ pub mod pallet {
 		#[pallet::call_index(14)]
 		pub fn slash_dispute_initiator(
 			origin: OriginFor<T>,
-			dispute_id: DisputeIdOf<T>,
+			dispute_id: DisputeId,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote, inferring result based on function called
-			Self::execute_vote(dispute_id, VoteResult::Failed)?;
+			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
+			Self::execute_vote(dispute_id, vote_round, VoteResult::Failed)?;
 			// todo: slash dispute initiator
 			Ok(())
 		}

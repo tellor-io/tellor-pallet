@@ -3,9 +3,9 @@ use sp_std::vec::Vec;
 use tellor::FeedDetails;
 
 #[derive(Encode, Debug, Decode, Eq, PartialEq)]
-pub struct FeedDetailsWithQueryData<Amount, Timestamp> {
+pub struct FeedDetailsWithQueryData<Amount> {
 	/// Feed details for feed identifier with funding.
-	pub details: FeedDetails<Amount, Timestamp>,
+	pub details: FeedDetails<Amount>,
 	/// Query data for requested data
 	pub query_data: Vec<u8>,
 }

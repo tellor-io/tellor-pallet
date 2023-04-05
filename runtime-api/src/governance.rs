@@ -2,7 +2,7 @@ use codec::{Decode, Encode};
 
 #[derive(Encode, Debug, Decode, Eq, PartialEq)]
 pub struct VoteInfo<Amount, BlockNumber, Timestamp> {
-	pub vote_round: u32,
+	pub vote_round: u8,
 	pub start_date: Timestamp,
 	pub block_number: BlockNumber,
 	pub fee: Amount,
