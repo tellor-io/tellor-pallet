@@ -451,8 +451,6 @@ pub mod pallet {
 		VoteNotTallied,
 		/// Time for voting has not elapsed.
 		VotingPeriodActive,
-		/// Balance must be greater than transferring amount
-		InsufficientBalance,
 
 		// Registration
 		NotRegistered,
