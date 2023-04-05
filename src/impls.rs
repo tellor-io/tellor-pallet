@@ -867,6 +867,8 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Returns the duration since UNIX_EPOCH, in seconds.
+	/// # Returns
+	/// The duration since UNIX_EPOCH, in seconds.
 	pub(super) fn now() -> u64 {
 		// Use seconds to match EVM smart contracts
 		T::Time::now().as_secs()
@@ -1083,6 +1085,10 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>> for Pallet<T> {
 
 	fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool {
 		Self::is_in_dispute(query_id, timestamp)
+	}
+
+	fn now() -> Timestamp {
+		Self::now()
 	}
 
 	fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Vec<u8>> {
