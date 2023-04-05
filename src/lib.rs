@@ -451,8 +451,6 @@ pub mod pallet {
 		VoteNotTallied,
 		/// Time for voting has not elapsed.
 		VotingPeriodActive,
-		/// Balance must be greater than transferring amount
-		InsufficientBalance,
 
 		// Registration
 		NotRegistered,
@@ -1120,9 +1118,7 @@ pub mod pallet {
 				vote.fee = stake_amount;
 			}
 			<VoteCount<T>>::mutate(|count| count.saturating_inc());
-			// todo: confirm dispute fee handling with Tellor
 			let dispute_fee = vote.fee;
-			// should we check for funds availability?
 			let pallet_id = T::PalletId::get();
 			T::Token::transfer(
 				&dispute_initiator,

@@ -53,6 +53,11 @@ fn begin_dispute() {
 		});
 
 		let dispute_id = with_block(|| {
+			// await h.expectThrow(gov.connect(accounts[4]).beginDispute(ETH_QUERY_ID, blocky.timestamp)) // must have tokens to pay/begin dispute
+			assert_noop!(
+				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, timestamp),
+				pallet_balances::Error::<Test>::InsufficientBalance
+			);
 			Balances::make_free_balance_be(&another_reporter, token(1_000));
 			let balance_before_begin_dispute = Balances::free_balance(&another_reporter);
 			assert_ok!(Tellor::begin_dispute(
@@ -1025,4 +1030,121 @@ fn get_tips_by_address() {
 fn sort(mut disputes: Vec<DisputeId>) -> Vec<DisputeId> {
 	disputes.sort();
 	disputes
+}
+
+#[test]
+fn invalid_dispute() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			super::deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+		})
+	});
+
+	ext.execute_with(|| {
+		Balances::make_free_balance_be(&reporter, token(1_000));
+		let balance_before_begin_dispute = Balances::free_balance(&reporter);
+		let dispute_id = with_block(|| {
+			let dispute_id = dispute_id(PARA_ID, query_id, now());
+			assert_noop!(
+				Tellor::report_invalid_dispute(RuntimeOrigin::signed(reporter), dispute_id),
+				BadOrigin
+			);
+
+			submit_value_and_begin_dispute(reporter, query_id, query_data.clone())
+		});
+
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
+		});
+
+		// Report invalid dispute after tally dispute period
+		with_block_after(86_400, || {
+			assert_ok!(Tellor::report_invalid_dispute(Origin::Governance.into(), dispute_id));
+
+			// validate updated balance of dispute initiator
+			assert_eq!(Balances::free_balance(reporter), balance_before_begin_dispute);
+		});
+	});
+}
+
+#[test]
+fn slash_dispute_initiator() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let another_reporter = 2;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	ext.execute_with(|| {
+		Balances::make_free_balance_be(&another_reporter, token(1_000));
+		let balance_before_begin_dispute = Balances::free_balance(&another_reporter);
+		let dispute_id = with_block(|| {
+			let dispute_id = dispute_id(PARA_ID, query_id, now());
+			assert_noop!(
+				Tellor::report_invalid_dispute(RuntimeOrigin::signed(reporter), dispute_id),
+				BadOrigin
+			);
+
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data,
+			));
+
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				another_reporter,
+				STAKE_AMOUNT.into(),
+				Address::random()
+			));
+
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				now()
+			));
+
+			match System::events().last().unwrap().event {
+				RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) => dispute_id,
+				_ => panic!(),
+			}
+		});
+
+		// Tally votes after vote duration
+		with_block_after(86_400, || {
+			assert_ok!(Tellor::tally_votes(dispute_id, 1));
+		});
+
+		// Report invalid dispute after tally dispute period
+		with_block_after(86_400, || {
+			assert_ok!(Tellor::slash_dispute_initiator(Origin::Governance.into(), dispute_id));
+
+			// validate slashed balance of dispute initiator
+			let vote_info = Tellor::get_vote_info(dispute_id, 1).unwrap();
+			assert_eq!(
+				Balances::free_balance(another_reporter),
+				balance_before_begin_dispute - vote_info.fee
+			);
+		});
+	});
 }
