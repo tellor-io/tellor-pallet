@@ -47,7 +47,10 @@ pub mod pallet {
 		xcm::{self, ethereum_xcm},
 		*,
 	};
-	use crate::{contracts::staking, types::oracle::Report, xcm::ContractLocation, Tip};
+	use crate::{
+		constants::DISPUTE_SUB_ACCOUNT_ID, contracts::staking, types::oracle::Report,
+		xcm::ContractLocation, Tip,
+	};
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
@@ -64,7 +67,6 @@ pub mod pallet {
 	use sp_core::{bounded::BoundedBTreeMap, U256};
 	use sp_runtime::traits::{AccountIdConversion, CheckedAdd, SaturatedConversion};
 	use sp_std::{fmt::Debug, prelude::*, result};
-	use crate::constants::DISPUTE_SUB_ACCOUNT_ID;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]

@@ -1,5 +1,5 @@
-use crate::constants::DISPUTE_SUB_ACCOUNT_ID;
 use super::*;
+use crate::constants::DISPUTE_SUB_ACCOUNT_ID;
 
 impl<T: Config> Pallet<T> {
 	pub(super) fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
@@ -65,17 +65,14 @@ impl<T: Config> Pallet<T> {
 				vote.result = Some(result);
 
 				// handling transfer of dispute fee
-				let pallet_id = &T::PalletId::get().into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID);
+				let pallet_id =
+					&T::PalletId::get().into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID);
 				let dest = match result {
 					VoteResult::Passed | VoteResult::Invalid => &vote.initiator,
 					VoteResult::Failed => &dispute.disputed_reporter,
 				};
-				T::Token::transfer(
-					pallet_id,
-					dest,
-					vote.fee,
-					false,
-				).or(Err(Error::<T>::InsufficientBalance))?;
+				T::Token::transfer(pallet_id, dest, vote.fee, false)
+					.or(Err(Error::<T>::InsufficientBalance))?;
 
 				Ok(())
 			},
