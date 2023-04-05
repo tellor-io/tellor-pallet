@@ -3,8 +3,6 @@
 [![Check Set-Up & Build](https://github.com/tellor-io/tellor-pallet/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/tellor-io/tellor-pallet/actions/workflows/check.yml)
 [![Run Tests](https://github.com/tellor-io/tellor-pallet/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/tellor-io/tellor-pallet/actions/workflows/test.yml)
 
-License: Unlicense
-
 This repo is a clone of this work [here](https://github.com/evilrobot-01/substrate-pallets/tree/tellor).
 
 ## Porting Progress
