@@ -231,11 +231,10 @@ fn execute_vote() {
 				query_data.clone(),
 			));
 			let timestamp_1 = now();
-			// todo
-			// assert_noop!(
-			// 	Tellor::begin_dispute(RuntimeOrigin::signed(4), query_id, now()),
-			// 	pallet_balances::Error::<Test>::InsufficientBalance
-			// ); // must have tokens to pay for dispute
+			assert_noop!(
+				Tellor::begin_dispute(RuntimeOrigin::signed(dispute_reporter), query_id, now()),
+				pallet_balances::Error::<Test>::InsufficientBalance
+			); // must have tokens to pay for dispute
 			Balances::make_free_balance_be(&dispute_reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_reporter),
@@ -278,7 +277,12 @@ fn execute_vote() {
 
 		// Execute after tally dispute period
 		let (timestamp_2, dispute_2) = with_block_after(86_400 * 2, || {
+			let previous_balance = Balances::free_balance(&dispute_reporter);
 			assert_ok!(Tellor::execute_vote(dispute_1, 1, result));
+			let dispute_fee = Tellor::get_vote_info(dispute_1, 1).unwrap().fee;
+
+			assert_eq!(previous_balance + dispute_fee, Balances::free_balance(&dispute_reporter));
+
 			assert_noop!(Tellor::execute_vote(dispute_1, 1, result), Error::VoteAlreadyExecuted);
 			// vote already executed
 			assert_noop!(
@@ -342,7 +346,14 @@ fn execute_vote() {
 		});
 
 		with_block_after(86_400, || {
+			let previous_balance = Balances::free_balance(&dispute_reporter);
 			assert_ok!(Tellor::execute_vote(dispute_3, 2, result));
+			let first_round_fee = Tellor::get_vote_info(dispute_3, 1).unwrap().fee;
+			let second_round_fee = Tellor::get_vote_info(dispute_3, 2).unwrap().fee;
+			assert_eq!(
+				previous_balance + first_round_fee + second_round_fee,
+				Balances::free_balance(&dispute_reporter)
+			);
 		});
 	});
 }
