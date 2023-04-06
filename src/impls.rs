@@ -18,7 +18,7 @@ use super::*;
 use sp_runtime::traits::Hash;
 
 impl<T: Config> Pallet<T> {
-	pub(super) fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
+	pub(super) fn add_staking_rewards(amount: Amount) -> DispatchResult {
 		let pallet_id = T::PalletId::get();
 		T::Token::transfer(
 			&pallet_id.into_account_truncating(),
@@ -98,13 +98,13 @@ impl<T: Config> Pallet<T> {
 		feed_funder: AccountIdOf<T>,
 		feed_id: FeedId,
 		query_id: QueryId,
-		amount: AmountOf<T>,
+		amount: Amount,
 	) -> DispatchResult {
 		let Some(mut feed) = <DataFeeds<T>>::get(query_id, feed_id) else {
 			return Err(Error::<T>::InvalidFeed.into());
 		};
 
-		ensure!(amount > <AmountOf<T>>::default(), Error::<T>::InvalidAmount);
+		ensure!(amount > 0, Error::<T>::InvalidAmount);
 		feed.details.balance.saturating_accrue(amount);
 		T::Token::transfer(
 			&feed_funder,
@@ -113,9 +113,7 @@ impl<T: Config> Pallet<T> {
 			true,
 		)?;
 		// Add to array of feeds with funding
-		if feed.details.feeds_with_funding_index == 0 &&
-			feed.details.balance > <AmountOf<T>>::default()
-		{
+		if feed.details.feeds_with_funding_index == 0 && feed.details.balance > 0 {
 			let index = <FeedsWithFunding<T>>::try_mutate(
 				|feeds_with_funding| -> Result<usize, DispatchError> {
 					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
@@ -165,19 +163,19 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
 	/// Amount of tip.
-	pub fn get_current_tip(query_id: QueryId) -> AmountOf<T> {
+	pub fn get_current_tip(query_id: QueryId) -> Amount {
 		// todo: optimise
 		// if no tips, return 0
 		if <Tips<T>>::get(query_id).map_or(0, |t| t.len()) == 0 {
-			return AmountOf::<T>::default()
+			return 0
 		}
 		let timestamp_retrieved = Self::_get_current_value(query_id).map_or(0, |v| v.1);
 		match <Tips<T>>::get(query_id) {
 			Some(tips) => match tips.last() {
 				Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
-				_ => AmountOf::<T>::default(),
+				_ => 0,
 			},
-			_ => AmountOf::<T>::default(),
+			_ => 0,
 		}
 	}
 
@@ -239,7 +237,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Unique feed identifier of parameters.
 	/// # Returns
 	/// Details of the specified feed.
-	pub fn get_data_feed(feed_id: FeedId) -> Option<FeedDetailsOf<T>> {
+	pub fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails> {
 		<QueryIdFromDataFeedId<T>>::get(feed_id)
 			.and_then(|query_id| <DataFeeds<T>>::get(query_id, feed_id))
 			.map(|f| f.details)
@@ -248,9 +246,9 @@ impl<T: Config> Pallet<T> {
 	/// Get the latest dispute fee.
 	/// # Returns
 	/// The latest dispute fee.
-	pub fn get_dispute_fee() -> AmountOf<T> {
+	pub fn get_dispute_fee() -> Amount {
 		// todo: make configurable and use safe math
-		<StakeAmount<T>>::get().unwrap_or_default() / 10u8.into()
+		<StakeAmount<T>>::get().unwrap_or_default() / 10
 	}
 
 	/// Returns information on a dispute for a given identifier.
@@ -279,7 +277,7 @@ impl<T: Config> Pallet<T> {
 	/// Read currently funded feed details.
 	/// # Returns
 	/// Details for funded feeds.
-	pub fn get_funded_feed_details() -> Vec<(FeedDetailsOf<T>, QueryDataOf<T>)> {
+	pub fn get_funded_feed_details() -> Vec<(FeedDetails, QueryDataOf<T>)> {
 		Self::get_funded_feeds()
 			.into_iter()
 			.filter_map(|feed_id| {
@@ -309,7 +307,7 @@ impl<T: Config> Pallet<T> {
 	/// Read currently funded single tips with query data.
 	/// # Returns
 	/// The current single tips.
-	pub fn get_funded_single_tips_info() -> Vec<(QueryDataOf<T>, AmountOf<T>)> {
+	pub fn get_funded_single_tips_info() -> Vec<(QueryDataOf<T>, Amount)> {
 		Self::get_funded_query_ids()
 			.into_iter()
 			.filter_map(|query_id| {
@@ -420,7 +418,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 		claimer: &AccountIdOf<T>,
-	) -> Result<AmountOf<T>, Error<T>> {
+	) -> Result<Amount, Error<T>> {
 		ensure!(
 			Self::now().saturating_sub(timestamp) > 12 * HOURS,
 			Error::<T>::ClaimBufferNotPassed
@@ -452,14 +450,11 @@ impl<T: Config> Pallet<T> {
 					let min_tip = &mut tips.get_mut(min).ok_or(Error::<T>::InvalidIndex)?;
 					ensure!(timestamp_before < min_tip.timestamp, Error::<T>::TipAlreadyEarned);
 					ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
-					ensure!(
-						min_tip.amount > <AmountOf<T>>::default(),
-						Error::<T>::TipAlreadyClaimed
-					);
+					ensure!(min_tip.amount > 0, Error::<T>::TipAlreadyClaimed);
 
 					// todo: add test to ensure storage updated accordingly
 					let mut tip_amount = min_tip.amount;
-					min_tip.amount = <AmountOf<T>>::default();
+					min_tip.amount = 0;
 					let min_backup = min;
 
 					// check whether eligible for previous tips in array due to disputes
@@ -538,7 +533,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
 	/// All past tips.
-	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip<AmountOf<T>>> {
+	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip> {
 		<Tips<T>>::get(query_id).map_or_else(Vec::default, |t| t.to_vec())
 	}
 
@@ -548,7 +543,7 @@ impl<T: Config> Pallet<T> {
 	/// * `index` - The index of the tip.
 	/// # Returns
 	/// The past tip, if found.
-	pub fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<AmountOf<T>>> {
+	pub fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip> {
 		<Tips<T>>::get(query_id).and_then(|t| t.get(index as usize).cloned())
 	}
 
@@ -642,7 +637,7 @@ impl<T: Config> Pallet<T> {
 		feed_id: FeedId,
 		query_id: QueryId,
 		timestamp: Timestamp,
-	) -> Result<AmountOf<T>, Error<T>> {
+	) -> Result<Amount, Error<T>> {
 		ensure!(Self::now().saturating_sub(timestamp) < 4 * WEEKS, Error::<T>::ClaimPeriodExpired);
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
@@ -704,11 +699,11 @@ impl<T: Config> Pallet<T> {
 		feed_id: FeedId,
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
-	) -> AmountOf<T> {
+	) -> Amount {
 		// todo: use boundedvec for timestamps
 
-		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return <AmountOf<T>>::default()};
-		let mut cumulative_reward = <AmountOf<T>>::default();
+		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return 0};
+		let mut cumulative_reward = 0;
 		for timestamp in timestamps {
 			cumulative_reward.saturating_accrue(
 				Self::_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
@@ -717,9 +712,8 @@ impl<T: Config> Pallet<T> {
 		if cumulative_reward > feed.details.balance {
 			cumulative_reward = feed.details.balance;
 		}
-		cumulative_reward.saturating_reduce(
-			(cumulative_reward.saturating_mul(T::Fee::get().into())) / 1000u16.into(),
-		);
+		cumulative_reward
+			.saturating_reduce((cumulative_reward.saturating_mul(T::Fee::get().into())) / 1_000);
 		cumulative_reward
 	}
 
@@ -763,7 +757,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the amount required to report oracle values.
 	/// # Returns
 	/// The stake amount.
-	pub fn get_stake_amount() -> AmountOf<T> {
+	pub fn get_stake_amount() -> Amount {
 		<StakeAmount<T>>::get().unwrap_or_default()
 	}
 
@@ -815,14 +809,14 @@ impl<T: Config> Pallet<T> {
 	/// * `user` - Address of user to query.
 	/// # Returns
 	/// Total amount of tips paid by a user.
-	pub fn get_tips_by_address(user: &AccountIdOf<T>) -> AmountOf<T> {
+	pub fn get_tips_by_address(user: &AccountIdOf<T>) -> Amount {
 		<UserTipsTotal<T>>::get(user)
 	}
 
 	/// Returns the total amount staked for reporting.
 	/// # Returns
 	/// The total amount of token staked.
-	pub fn get_total_stake_amount() -> AmountOf<T> {
+	pub fn get_total_stake_amount() -> Amount {
 		<TotalStakeAmount<T>>::get()
 	}
 
@@ -985,11 +979,11 @@ impl<T: Config> Pallet<T> {
 
 	pub(super) fn update_stake_and_pay_rewards(
 		staker: &mut StakeInfoOf<T>,
-		new_staked_balance: AmountOf<T>,
+		new_staked_balance: Amount,
 	) -> Result<(), Error<T>> {
 		// todo: complete implementation
 		// _updateRewards();
-		if staker.staked_balance > <AmountOf<T>>::default() {
+		if staker.staked_balance > 0 {
 			// todo
 			// if address already has a staked balance, calculate and transfer pending rewards
 			// 	uint256 _pendingReward = (_staker.stakedBalance *

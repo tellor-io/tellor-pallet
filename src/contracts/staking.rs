@@ -18,7 +18,7 @@ use super::*;
 
 pub(crate) fn confirm_parachain_stake_withdraw_request(
 	address: impl Into<Address>,
-	amount: impl Into<Amount>,
+	amount: impl Into<U256>,
 ) -> Vec<u8> {
 	const FUNCTION: [u8; 4] = [116, 48, 87, 226];
 	Call::new(&FUNCTION).address(address.into()).uint(amount.into()).encode()

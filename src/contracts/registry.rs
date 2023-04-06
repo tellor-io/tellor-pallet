@@ -19,7 +19,7 @@ use super::*;
 pub(crate) fn register(
 	para_id: ParaId,
 	pallet_index: u8,
-	stake_amount: impl Into<Amount>,
+	stake_amount: impl Into<U256>,
 ) -> Vec<u8> {
 	const FUNCTION: [u8; 4] = [40, 162, 149, 29];
 	Call::new(&FUNCTION)

@@ -15,17 +15,18 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use codec::{Decode, Encode};
+use tellor::{Amount, Timestamp};
 
 #[derive(Encode, Debug, Decode, Eq, PartialEq)]
-pub struct VoteInfo<Amount, BlockNumber, Timestamp> {
+pub struct VoteInfo<BlockNumber> {
 	pub vote_round: u8,
 	pub start_date: Timestamp,
 	pub block_number: BlockNumber,
 	pub fee: Amount,
 	pub tally_date: Timestamp,
-	pub users_does_support: Amount,
-	pub users_against: Amount,
-	pub users_invalid_query: Amount,
+	pub users_does_support: u128,
+	pub users_against: u128,
+	pub users_invalid_query: u128,
 	pub reporters_does_support: u128,
 	pub reporters_against: u128,
 	pub reporters_invalid_query: u128,

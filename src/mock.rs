@@ -23,7 +23,7 @@ use frame_support::{
 };
 use frame_system as system;
 use once_cell::sync::Lazy;
-use sp_core::{ConstU32, H256};
+use sp_core::{ConstU128, ConstU32, H256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, Convert, IdentityLookup},
@@ -36,14 +36,14 @@ use std::{
 use xcm::latest::prelude::*;
 
 pub(crate) type AccountId = u128; // u64 is not enough to hold bytes used to generate bounty account
-type Balance = u64;
+type Balance = u128;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 pub(crate) const EVM_PARA_ID: u32 = 2000;
 pub(crate) const PALLET_INDEX: u8 = 3;
 pub(crate) const PARA_ID: u32 = 3000;
-pub(crate) const UNIT: u64 = 1_000_000_000_000;
+pub(crate) const UNIT: u128 = 1_000_000_000_000_000_000;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -78,7 +78,7 @@ impl system::Config for Test {
 	type DbWeight = ();
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = pallet_balances::AccountData<u64>;
+	type AccountData = pallet_balances::AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -91,7 +91,7 @@ impl pallet_balances::Config for Test {
 	type Balance = Balance;
 	type DustRemoval = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ExistentialDeposit = ConstU64<1>;
+	type ExistentialDeposit = ConstU128<1>;
 	type AccountStore = System;
 	type WeightInfo = ();
 	type MaxLocks = ();
@@ -121,7 +121,6 @@ parameter_types! {
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
-	type Amount = u64;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;

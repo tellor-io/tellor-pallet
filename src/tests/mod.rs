@@ -19,7 +19,7 @@ use crate::{
 	mock,
 	mock::*,
 	types::{
-		AccountIdOf, Address, Amount, AmountOf, DisputeId, QueryDataOf, QueryId, Timestamp, ValueOf,
+		AccountIdOf, Address, Amount, DisputeId, QueryDataOf, QueryId, Timestamp, ValueOf, U256,
 	},
 	xcm::{ethereum_xcm, XcmConfig},
 	Event, Origin, StakeAmount,
@@ -75,7 +75,7 @@ fn submit_value_and_begin_dispute(
 	}
 }
 
-fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address: Address) {
+fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<U256>, address: Address) {
 	assert_ok!(Tellor::report_stake_deposited(
 		Origin::Staking.into(),
 		reporter,
@@ -84,8 +84,8 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address
 	));
 }
 
-const STAKE_AMOUNT: AmountOf<Test> = 100 * UNIT;
-fn register_parachain(stake_amount: AmountOf<Test>) {
+const STAKE_AMOUNT: Amount = 100 * UNIT;
+fn register_parachain(stake_amount: Amount) {
 	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 	assert_ok!(Tellor::register(
 		RuntimeOrigin::root(),
@@ -107,8 +107,8 @@ fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 	])
 }
 
-fn token(amount: impl Into<f64>) -> AmountOf<Test> {
-	(amount.into() * UNIT as f64) as u64
+fn token(amount: impl Into<f64>) -> Amount {
+	(amount.into() * UNIT as f64) as u128
 }
 
 fn uint_value(value: impl Into<Uint>) -> ValueOf<Test> {
@@ -138,7 +138,7 @@ fn xcm_transact(
 
 #[test]
 fn converts_token() {
-	assert_eq!(token(2.97), 2_970_000_000_000)
+	assert_eq!(token(2.97), 2_970_000_000_000_000_000)
 }
 
 #[test]

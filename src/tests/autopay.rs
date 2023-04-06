@@ -17,7 +17,7 @@
 use super::*;
 use crate::{
 	constants::REPORTING_LOCK,
-	types::{FeedDetailsOf, FeedId, QueryDataOf, QueryId, Timestamp, TipOf},
+	types::{autopay::Tip, Amount, FeedDetails, FeedId, QueryDataOf, QueryId, Timestamp},
 	Config,
 };
 use frame_support::{
@@ -1272,7 +1272,7 @@ fn get_data_feed() {
 	ext.execute_with(|| {
 		assert_eq!(
 			Tellor::get_data_feed(feed_id).unwrap(),
-			FeedDetailsOf::<Test> {
+			FeedDetails {
 				reward: token(1),
 				balance: token(1_000),
 				start_time: timestamp,
@@ -1371,16 +1371,8 @@ fn get_past_tips() {
 		assert_eq!(
 			Tellor::get_past_tips(query_id),
 			vec![
-				TipOf::<Test> {
-					amount: token(100),
-					timestamp: timestamp_1 + 1,
-					cumulative_tips: token(100)
-				},
-				TipOf::<Test> {
-					amount: token(200),
-					timestamp: timestamp_2 + 1,
-					cumulative_tips: token(300)
-				}
+				Tip { amount: token(100), timestamp: timestamp_1 + 1, cumulative_tips: token(100) },
+				Tip { amount: token(200), timestamp: timestamp_2 + 1, cumulative_tips: token(300) }
 			],
 			"past tips should be correct"
 		);
@@ -1398,16 +1390,8 @@ fn get_past_tips() {
 		assert_eq!(
 			Tellor::get_past_tips(query_id),
 			vec![
-				TipOf::<Test> {
-					amount: token(100),
-					timestamp: timestamp_1 + 1,
-					cumulative_tips: token(100)
-				},
-				TipOf::<Test> {
-					amount: token(500),
-					timestamp: timestamp_3 + 1,
-					cumulative_tips: token(600)
-				}
+				Tip { amount: token(100), timestamp: timestamp_1 + 1, cumulative_tips: token(100) },
+				Tip { amount: token(500), timestamp: timestamp_3 + 1, cumulative_tips: token(600) }
 			],
 			"past tips should be correct"
 		);
@@ -1465,20 +1449,12 @@ fn get_past_tip_by_index() {
 
 		assert_eq!(
 			Tellor::get_past_tip_by_index(query_id, 0).unwrap(),
-			TipOf::<Test> {
-				amount: token(100),
-				timestamp: timestamp_1 + 1,
-				cumulative_tips: token(100),
-			},
+			Tip { amount: token(100), timestamp: timestamp_1 + 1, cumulative_tips: token(100) },
 			"past tip should be correct"
 		);
 		assert_eq!(
 			Tellor::get_past_tip_by_index(query_id, 1).unwrap(),
-			TipOf::<Test> {
-				amount: token(200),
-				timestamp: timestamp_2 + 1,
-				cumulative_tips: token(300),
-			},
+			Tip { amount: token(200), timestamp: timestamp_2 + 1, cumulative_tips: token(300) },
 			"past tip should be correct"
 		);
 
@@ -1494,20 +1470,12 @@ fn get_past_tip_by_index() {
 
 		assert_eq!(
 			Tellor::get_past_tip_by_index(query_id, 0).unwrap(),
-			TipOf::<Test> {
-				amount: token(100),
-				timestamp: timestamp_1 + 1,
-				cumulative_tips: token(100),
-			},
+			Tip { amount: token(100), timestamp: timestamp_1 + 1, cumulative_tips: token(100) },
 			"past tip should be correct"
 		);
 		assert_eq!(
 			Tellor::get_past_tip_by_index(query_id, 1).unwrap(),
-			TipOf::<Test> {
-				amount: token(500),
-				timestamp: timestamp_3 + 1,
-				cumulative_tips: token(600),
-			},
+			Tip { amount: token(500), timestamp: timestamp_3 + 1, cumulative_tips: token(600) },
 			"past tip should be correct"
 		);
 	});
@@ -2078,24 +2046,26 @@ fn get_reward_amount() {
 
 		// query rewards
 		let fee: u16 = Fee::get();
-		let mut expected_reward = token(1) + token(1) * (timestamp_1 - timestamp_0);
-		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
+		let mut expected_reward = token(1) + token(1) * (timestamp_1 - timestamp_0) as Amount;
+		expected_reward = expected_reward - (expected_reward * fee as Amount / (1_000)); // fee
 		let mut reward_sum = expected_reward;
 		assert_eq!(
 			Tellor::get_reward_amount(feed_id, query_id, vec![timestamp_1]),
 			expected_reward
 		);
 
-		expected_reward = token(1) + token(1) * (timestamp_2 - (timestamp_0 + INTERVAL * 1));
-		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
+		expected_reward =
+			token(1) + token(1) * (timestamp_2 - (timestamp_0 + INTERVAL * 1)) as Amount;
+		expected_reward = expected_reward - (expected_reward * fee as Amount / (1_000)); // fee
 		reward_sum += expected_reward;
 		assert_eq!(
 			Tellor::get_reward_amount(feed_id, query_id, vec![timestamp_2]),
 			expected_reward
 		);
 
-		expected_reward = token(1) + token(1) * (timestamp_3 - (timestamp_0 + INTERVAL * 2));
-		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
+		expected_reward =
+			token(1) + token(1) * (timestamp_3 - (timestamp_0 + INTERVAL * 2)) as Amount;
+		expected_reward = expected_reward - (expected_reward * fee as Amount / (1_000)); // fee
 		reward_sum += expected_reward;
 		assert_eq!(
 			Tellor::get_reward_amount(feed_id, query_id, vec![timestamp_3]),
@@ -2216,7 +2186,7 @@ fn get_funded_feed_details() {
 			);
 			assert_eq!(
 				&Tellor::get_funded_feed_details()[0].0,
-				&FeedDetailsOf::<Test> {
+				&FeedDetails {
 					reward: token(1),
 					balance: token(1_000),
 					start_time: now(),
@@ -2395,14 +2365,14 @@ fn get_current_feeds() {
 fn create_feed(
 	feed_creator: AccountIdOf<Test>,
 	query_id: QueryId,
-	reward: AmountOf<Test>,
+	reward: Amount,
 	start_time: Timestamp,
 	interval: Timestamp,
 	window: Timestamp,
 	price_threshold: u16,
-	reward_increase_per_second: AmountOf<Test>,
+	reward_increase_per_second: Amount,
 	query_data: QueryDataOf<Test>,
-	amount: AmountOf<Test>,
+	amount: Amount,
 ) -> FeedId {
 	assert_ok!(Tellor::setup_data_feed(
 		RuntimeOrigin::signed(feed_creator),

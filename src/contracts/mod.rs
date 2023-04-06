@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{Address, Amount, ParaId};
+use crate::types::{Address, ParaId};
 use sp_core::U256;
 use sp_std::{vec, vec::Vec};
 

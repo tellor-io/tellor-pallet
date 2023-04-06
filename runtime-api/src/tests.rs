@@ -26,7 +26,7 @@ use frame_support::{
 	BoundedVec, PalletId,
 };
 use sp_api::mock_impl_runtime_apis;
-use sp_core::{ConstU32, H256};
+use sp_core::{ConstU128, ConstU32, H256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
@@ -34,8 +34,8 @@ use sp_runtime::{
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
-	DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp, Tip,
-	VoteResult,
+	Amount, DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp,
+	Tip, VoteResult,
 };
 use xcm::latest::prelude::*;
 
@@ -43,10 +43,9 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 type AccountId = u64;
-type Amount = u64;
 type BlockNumber = u64;
 type MaxValueLength = ConstU32<4>;
-type StakeInfo = tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter>;
+type StakeInfo = tellor::StakeInfo<<Test as tellor::Config>::MaxQueriesPerReporter>;
 type Value = BoundedVec<u8, MaxValueLength>;
 
 // Configure a mock runtime to test implementation of the runtime-api
@@ -80,7 +79,7 @@ impl frame_system::Config for Test {
 	type DbWeight = ();
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = pallet_balances::AccountData<u64>;
+	type AccountData = pallet_balances::AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -89,10 +88,10 @@ impl frame_system::Config for Test {
 	type MaxConsumers = ConstU32<16>;
 }
 impl pallet_balances::Config for Test {
-	type Balance = u64;
+	type Balance = u128;
 	type DustRemoval = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ExistentialDeposit = ConstU64<1>;
+	type ExistentialDeposit = ConstU128<1>;
 	type AccountStore = System;
 	type WeightInfo = ();
 	type MaxLocks = ();
@@ -111,7 +110,6 @@ parameter_types! {
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
-	type Amount = Amount;
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
@@ -153,7 +151,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 mock_impl_runtime_apis! {
-	impl crate::TellorAutoPay<Block, AccountId, Amount> for Test {
+	impl crate::TellorAutoPay<Block, AccountId> for Test {
 		fn get_current_feeds(query_id: QueryId) -> Vec<FeedId>{
 			tellor::Pallet::<Test>::get_current_feeds(query_id)
 		}
@@ -162,11 +160,11 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_current_tip(query_id)
 		}
 
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount>> {
+		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails> {
 			tellor::Pallet::<Test>::get_data_feed(feed_id)
 		}
 
-		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount>> {
+		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData> {
 			tellor::Pallet::<Test>::get_funded_feed_details().into_iter()
 			.map(|(details, query_data)| FeedDetailsWithQueryData {
 				details: details,
@@ -182,7 +180,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_funded_query_ids()
 		}
 
-		fn get_funded_single_tips_info() -> Vec<SingleTipWithQueryData<Amount>> {
+		fn get_funded_single_tips_info() -> Vec<SingleTipWithQueryData> {
 			tellor::Pallet::<Test>::get_funded_single_tips_info().into_iter()
 			.map(|( query_data, tip)| SingleTipWithQueryData {
 				query_data: query_data.to_vec(),
@@ -195,11 +193,11 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_past_tip_count(query_id)
 		}
 
-		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount>> {
+		fn get_past_tips(query_id: QueryId) -> Vec<Tip> {
 			tellor::Pallet::<Test>::get_past_tips(query_id)
 		}
 
-		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount>>{
+		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip>{
 			tellor::Pallet::<Test>::get_past_tip_by_index(query_id, index)
 		}
 
@@ -224,7 +222,7 @@ mock_impl_runtime_apis! {
 		}
 	}
 
-	impl crate::TellorOracle<Block, AccountId, Amount, BlockNumber, StakeInfo, Value> for Test {
+	impl crate::TellorOracle<Block, AccountId, BlockNumber, StakeInfo, Value> for Test {
 		fn get_block_number_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<BlockNumber> {
 			tellor::Pallet::<Test>::get_block_number_by_timestamp(query_id, timestamp)
 		}
@@ -306,7 +304,7 @@ mock_impl_runtime_apis! {
 		}
 	}
 
-	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, Value> for Test {
+	impl crate::TellorGovernance<Block, AccountId, BlockNumber, Value> for Test {
 		fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountId) -> bool {
 			tellor::Pallet::<Test>::did_vote(dispute_id, vote_round, voter)
 		}
@@ -331,7 +329,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_vote_count()
 		}
 
-		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)> {
+		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<BlockNumber>,bool,Option<VoteResult>,AccountId)> {
 			tellor::Pallet::<Test>::get_vote_info(dispute_id, vote_round).map(|v| (
 			VoteInfo{
 					vote_round: v.vote_round,
@@ -494,10 +492,7 @@ mod autopay {
 	#[test]
 	fn get_tips_by_address() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.get_tips_by_address(&BLOCKID, AccountId::default()).unwrap(),
-				Amount::default()
-			);
+			assert_eq!(Test.get_tips_by_address(&BLOCKID, AccountId::default()).unwrap(), 0);
 		});
 	}
 }

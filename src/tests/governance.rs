@@ -442,11 +442,7 @@ fn vote() {
 			); // Vote has already been tallied
 
 			let vote_info = Tellor::get_vote_info(dispute_id, 1).unwrap();
-			assert_eq!(
-				vote_info.users,
-				Tally::<AmountOf<Test>>::default(),
-				"users tally should be correct"
-			);
+			assert_eq!(vote_info.users, Tally::default(), "users tally should be correct");
 			assert_eq!(
 				vote_info.reporters.does_support, 0,
 				"reporters does_support tally should be correct"
@@ -823,14 +819,10 @@ fn get_vote_info() {
 			assert_eq!(vote.block_number, disputed_block, "vote block number should be correct");
 			assert_eq!(vote.fee, token(10), "vote fee should be correct");
 			assert_eq!(vote.tally_date, tallied, "vote tally date should be correct");
-			assert_eq!(
-				vote.users,
-				Tally::<AmountOf<Test>>::default(),
-				"vote users should be correct"
-			);
+			assert_eq!(vote.users, Tally::default(), "vote users should be correct");
 			assert_eq!(
 				vote.reporters,
-				Tally::<u128> { does_support: 1, against: 0, invalid_query: 0 },
+				Tally { does_support: 1, against: 0, invalid_query: 0 },
 				"vote reporters should be correct"
 			);
 			assert_eq!(vote.executed, true, "vote executed should be correct");
@@ -1003,7 +995,7 @@ fn get_tips_by_address() {
 			assert_ok!(Tellor::execute_vote(dispute_id, 1, VoteResult::Passed));
 			assert_eq!(
 				Tellor::get_vote_info(dispute_id, 1).unwrap().users,
-				Tally::<AmountOf<Test>> { does_support: token(20), against: 0, invalid_query: 0 },
+				Tally { does_support: token(20), against: 0, invalid_query: 0 },
 				"vote users does_support weight should be based on tip total"
 			)
 		});
