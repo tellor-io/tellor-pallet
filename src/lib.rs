@@ -1025,15 +1025,24 @@ pub mod pallet {
 		///
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
+		/// - 'address`: EVM address of user, None indicates dispute has been initiated by a reporter
 		#[pallet::call_index(7)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			timestamp: Timestamp,
+			address: Option<Address>,
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
-			// Only reporters can begin disputes due to requiring an account on staking chain to potentially receive slash amount if dispute successful
-			ensure!(<StakerDetails<T>>::contains_key(&dispute_initiator), Error::<T>::NotReporter);
+
+			// the Reporter can only be validated when address field is None
+			if address.is_none() {
+				ensure!(
+					<StakerDetails<T>>::contains_key(&dispute_initiator),
+					Error::<T>::NotReporter
+				);
+			}
+
 			// Ensure value actually exists
 			ensure!(
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
@@ -1136,16 +1145,18 @@ pub mod pallet {
 			});
 
 			// Lookup corresponding addresses on controller chain
-			let dispute_initiator = <StakerDetails<T>>::get(&dispute_initiator)
-				.ok_or(Error::<T>::NotReporter)?
-				.address;
+			let dispute_initiator = match address {
+				Some(address) => address,
+				None =>
+					<StakerDetails<T>>::get(&dispute_initiator)
+						.ok_or(Error::<T>::NotReporter)?
+						.address,
+			};
 			let disputed_reporter = <StakerDetails<T>>::get(&dispute.disputed_reporter)
 				.ok_or(Error::<T>::NotReporter)?
 				.address;
 
 			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
-
-			// todo: charge dispute initiator corresponding fees
 
 			let governance_contract = T::Governance::get();
 			let message = xcm::transact_with_config(

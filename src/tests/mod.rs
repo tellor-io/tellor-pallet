@@ -51,7 +51,7 @@ fn submit_value_and_begin_dispute(
 		0,
 		query_data
 	));
-	assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now()));
+	assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now(), None));
 
 	match System::events().last().unwrap().event {
 		RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) => dispute_id,

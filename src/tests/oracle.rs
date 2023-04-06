@@ -136,7 +136,8 @@ fn remove_value() {
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
-				timestamp
+				timestamp,
+				None
 			));
 			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 1);
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp), None);
@@ -1301,7 +1302,12 @@ fn is_in_dispute() {
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
 			Balances::make_free_balance_be(&reporter, token(1_000));
 			// Value can only be removed via dispute
-			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				timestamp,
+				None
+			));
 			assert!(Tellor::is_in_dispute(query_id, timestamp));
 		});
 	});
