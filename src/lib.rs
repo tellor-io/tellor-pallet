@@ -536,13 +536,9 @@ pub mod pallet {
 				require_weight_at_most,
 				ethereum_xcm::transact(
 					registry_contract.address,
-					registry::register(
-						T::ParachainId::get(),
-						Pallet::<T>::index() as u8,
-						stake_amount,
-					)
-					.try_into()
-					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+					registry::register(T::ParachainId::get(), Pallet::<T>::index() as u8)
+						.try_into()
+						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
 					gas_limit,
 					None,
 				),
