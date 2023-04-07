@@ -63,7 +63,10 @@ pub mod pallet {
 		xcm::{self, ethereum_xcm},
 		*,
 	};
-	use crate::{contracts::staking, types::oracle::Report, xcm::ContractLocation, Tip};
+	use crate::{
+		constants::DISPUTE_SUB_ACCOUNT_ID, contracts::staking, types::oracle::Report,
+		xcm::ContractLocation, Tip,
+	};
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
@@ -1131,12 +1134,14 @@ pub mod pallet {
 				vote.fee = stake_amount;
 			}
 			<VoteCount<T>>::mutate(|count| count.saturating_inc());
-			// todo: confirm dispute fee handling with Tellor
-			// require(
-			// 	token.transferFrom(msg.sender, address(this), _disputeFee),
-			// 	"Fee must be paid"
-			// ); // This is the dispute fee. Returned if dispute passes
 			let dispute_fee = vote.fee;
+			let pallet_id = T::PalletId::get();
+			T::Token::transfer(
+				&dispute_initiator,
+				&pallet_id.into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID),
+				dispute_fee,
+				false,
+			)?;
 			<VoteInfo<T>>::insert(dispute_id, vote_round, vote);
 			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {
@@ -1168,7 +1173,6 @@ pub mod pallet {
 						&dispute.value,
 						disputed_reporter,
 						dispute_initiator,
-						dispute_fee,
 						<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
 					)
 					.try_into()
@@ -1490,7 +1494,6 @@ pub mod pallet {
 			// execute vote, inferring result based on function called
 			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
 			Self::execute_vote(dispute_id, vote_round, VoteResult::Failed)?;
-			// todo: slash dispute initiator
 			Ok(())
 		}
 

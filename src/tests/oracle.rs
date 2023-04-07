@@ -20,7 +20,7 @@ use crate::{
 	types::{Nonce, QueryId, Timestamp},
 	Config,
 };
-use frame_support::{assert_noop, assert_ok};
+use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, U256};
 use sp_runtime::traits::BadOrigin;
 
@@ -147,6 +147,7 @@ fn remove_value() {
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(100));
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
 
+			Balances::make_free_balance_be(&another_reporter, token(1_000));
 			// Value can only be removed via dispute
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
@@ -288,6 +289,7 @@ fn slash_reporter() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
 	ext.execute_with(|| {
 		let dispute_id = with_block(|| {
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_noop!(
 				Tellor::report_slash(
 					RuntimeOrigin::signed(reporter),
@@ -1292,7 +1294,6 @@ fn is_in_dispute() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let mut ext = new_test_ext();
-
 	// Prerequisites
 	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
@@ -1314,6 +1315,7 @@ fn is_in_dispute() {
 
 			let timestamp = now();
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
+			Balances::make_free_balance_be(&reporter, token(1_000));
 			// Value can only be removed via dispute
 			assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp));
 			assert!(Tellor::is_in_dispute(query_id, timestamp));

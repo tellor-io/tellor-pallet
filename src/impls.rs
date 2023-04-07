@@ -15,6 +15,7 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
+use crate::constants::DISPUTE_SUB_ACCOUNT_ID;
 use sp_runtime::traits::Hash;
 
 impl<T: Config> Pallet<T> {
@@ -63,33 +64,50 @@ impl<T: Config> Pallet<T> {
 				<DisputeInfo<T>>::contains_key(dispute_id),
 			Error::<T>::InvalidDispute
 		);
-		<VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| match maybe {
-			None => Err(Error::<T>::InvalidVote),
-			Some(vote) => {
-				// Ensure vote has not already been executed, and vote must be tallied
-				ensure!(!vote.executed, Error::<T>::VoteAlreadyExecuted);
-				ensure!(vote.tally_date > 0, Error::<T>::VoteNotTallied);
-				// Ensure vote must be final vote and that time has to be pass after the vote is tallied
-				ensure!(
-					<VoteRounds<T>>::get(vote.identifier) == vote.vote_round,
-					Error::VoteNotFinal
-				);
-				ensure!(
-					Self::now().saturating_sub(vote.tally_date) >= 1 * DAYS,
-					Error::<T>::TallyDisputePeriodActive
-				);
-				vote.executed = true;
-				let dispute =
-					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?;
-				<OpenDisputesOnId<T>>::mutate(dispute.query_id, |maybe| {
-					if let Some(disputes) = maybe {
-						disputes.saturating_dec();
-					}
-				});
-				vote.result = Some(result);
-				Ok(())
-			},
-		})?;
+
+		for round in (1..=vote_round).rev() {
+			<VoteInfo<T>>::try_mutate(dispute_id, round, |maybe| -> DispatchResult {
+				match maybe {
+					None => Err(Error::<T>::InvalidVote.into()),
+					Some(vote) => {
+						// Ensure vote has not already been executed, and vote must be tallied
+						ensure!(!vote.executed, Error::<T>::VoteAlreadyExecuted);
+						ensure!(vote.tally_date > 0, Error::<T>::VoteNotTallied);
+						// Ensure vote must be final vote and that time has to be pass after the vote is tallied
+						if round == vote_round {
+							ensure!(
+								<VoteRounds<T>>::get(vote.identifier) == vote.vote_round,
+								Error::<T>::VoteNotFinal
+							);
+						}
+						ensure!(
+							Self::now().saturating_sub(vote.tally_date) >= 1 * DAYS,
+							Error::<T>::TallyDisputePeriodActive
+						);
+						vote.executed = true;
+						let dispute =
+							<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?;
+						<OpenDisputesOnId<T>>::mutate(dispute.query_id, |maybe| {
+							if let Some(disputes) = maybe {
+								disputes.saturating_dec();
+							}
+						});
+						vote.result = Some(result);
+
+						// handling transfer of dispute fee
+						let dispute_account =
+							&T::PalletId::get().into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID);
+						let dest = match result {
+							VoteResult::Passed | VoteResult::Invalid => &vote.initiator,
+							VoteResult::Failed => &dispute.disputed_reporter,
+						};
+						T::Token::transfer(dispute_account, dest, vote.fee, false)?;
+
+						Ok(())
+					},
+				}
+			})?;
+		}
 		Self::deposit_event(Event::VoteExecuted { dispute_id, result });
 		Ok(())
 	}

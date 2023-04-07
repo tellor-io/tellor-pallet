@@ -22,10 +22,9 @@ pub(crate) fn begin_parachain_dispute(
 	value: &[u8],
 	disputed_reporter: Address,
 	dispute_initiator: Address,
-	dispute_fee: impl Into<U256>,
 	slash_amount: impl Into<U256>,
 ) -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [186, 124, 60, 48];
+	const FUNCTION: [u8; 4] = [29, 93, 54, 159];
 
 	Call::new(&FUNCTION)
 		.fixed_bytes(query_id)
@@ -33,7 +32,6 @@ pub(crate) fn begin_parachain_dispute(
 		.bytes(value)
 		.address(disputed_reporter)
 		.address(dispute_initiator)
-		.uint(dispute_fee)
 		.uint(slash_amount)
 		.encode()
 }
@@ -77,7 +75,6 @@ mod tests {
 				param("_value", ParamType::Bytes),
 				param("_disputedReporter", ParamType::Address),
 				param("_disputeInitiator", ParamType::Address),
-				param("_disputeFee", ParamType::Uint(256)),
 				param("_slashAmount", ParamType::Uint(256)),
 			],
 			outputs: vec![],
@@ -106,7 +103,6 @@ mod tests {
 		];
 		let disputed_reporter = Address::random();
 		let dispute_initiator = Address::random();
-		let dispute_fee = 12345;
 		let slash_amount = 54321;
 
 		assert_eq!(
@@ -117,7 +113,6 @@ mod tests {
 					Token::Bytes(value.into()),
 					Token::Address(disputed_reporter),
 					Token::Address(dispute_initiator),
-					Token::Uint(dispute_fee.into()),
 					Token::Uint(slash_amount.into()),
 				])
 				.unwrap()[..],
@@ -127,7 +122,6 @@ mod tests {
 				&value,
 				disputed_reporter,
 				dispute_initiator,
-				dispute_fee,
 				slash_amount
 			)[..]
 		)

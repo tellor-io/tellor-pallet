@@ -23,3 +23,5 @@ pub(crate) const WEEKS: Timestamp = 7 * DAYS;
 
 /// Base amount of time before a reporter is able to submit a value again.
 pub(crate) const REPORTING_LOCK: Timestamp = 12 * HOURS;
+
+pub(crate) const DISPUTE_SUB_ACCOUNT_ID: &[u8; 7] = b"dispute";
