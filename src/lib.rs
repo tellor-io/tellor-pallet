@@ -1,3 +1,19 @@
+// Copyright 2023 Tellor Inc.
+// This file is part of Tellor.
+
+// Tellor is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Tellor is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Tellor. If not, see <http://www.gnu.org/licenses/>.
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use crate::constants::{DAYS, HOURS, REPORTING_LOCK, WEEKS};
@@ -520,13 +536,9 @@ pub mod pallet {
 				require_weight_at_most,
 				ethereum_xcm::transact(
 					registry_contract.address,
-					registry::register(
-						T::ParachainId::get(),
-						Pallet::<T>::index() as u8,
-						stake_amount,
-					)
-					.try_into()
-					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+					registry::register(T::ParachainId::get(), Pallet::<T>::index() as u8)
+						.try_into()
+						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
 					gas_limit,
 					None,
 				),
@@ -1025,23 +1037,20 @@ pub mod pallet {
 		///
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
-		/// - 'address`: EVM address of user, None indicates dispute has been initiated by a reporter
+		/// - 'beneficiary`: beneficiary address of user to receive the slash winning
 		#[pallet::call_index(7)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			timestamp: Timestamp,
-			address: Option<Address>,
+			beneficiary: Option<Address>,
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
 
 			// the Reporter can only be validated when address field is None
-			if address.is_none() {
-				ensure!(
-					<StakerDetails<T>>::contains_key(&dispute_initiator),
-					Error::<T>::NotReporter
-				);
-			}
+			let beneficiary = beneficiary
+				.or_else(|| <StakerDetails<T>>::get(&dispute_initiator).map(|s| s.address))
+				.ok_or(Error::<T>::NotReporter)?;
 
 			// Ensure value actually exists
 			ensure!(
@@ -1141,17 +1150,9 @@ pub mod pallet {
 				dispute_id,
 				query_id,
 				timestamp,
-				reporter: dispute_initiator.clone(),
+				reporter: dispute_initiator,
 			});
 
-			// Lookup corresponding addresses on controller chain
-			let dispute_initiator = match address {
-				Some(address) => address,
-				None =>
-					<StakerDetails<T>>::get(&dispute_initiator)
-						.ok_or(Error::<T>::NotReporter)?
-						.address,
-			};
 			let disputed_reporter = <StakerDetails<T>>::get(&dispute.disputed_reporter)
 				.ok_or(Error::<T>::NotReporter)?
 				.address;
@@ -1167,7 +1168,7 @@ pub mod pallet {
 						timestamp.saturated_into::<u128>(),
 						&dispute.value,
 						disputed_reporter,
-						dispute_initiator,
+						beneficiary,
 						<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
 					)
 					.try_into()

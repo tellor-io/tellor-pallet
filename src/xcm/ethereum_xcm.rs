@@ -1,3 +1,19 @@
+// Copyright 2023 Tellor Inc.
+// This file is part of Tellor.
+
+// Tellor is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Tellor is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Tellor. If not, see <http://www.gnu.org/licenses/>.
+
 use frame_support::{dispatch::Encode, traits::ConstU32, BoundedVec};
 use scale_info::TypeInfo;
 use sp_core::{H160, H256, U256};
@@ -24,7 +40,7 @@ pub enum EthereumXcmCall {
 	TransactThroughProxy { transact_as: H160, xcm_transaction: EthereumXcmTransaction },
 }
 
-// Various helper types from https://github.com/PureStake/moonbeam/tree/master/pallets/ethereum-xcm to ease transact call encoding.
+// Various helper types from https://github.com/PureStake/moonbeam/tree/master/pallets/ethereum-xcm to ease transact call encoding without taking a dependency.
 #[derive(Clone, Debug, Eq, PartialEq, Encode, TypeInfo)]
 pub struct ManualEthereumXcmFee {
 	pub gas_price: Option<U256>,
