@@ -461,8 +461,6 @@ pub mod pallet {
 		VoteAlreadyExecuted,
 		/// Vote has already been tallied.
 		VoteAlreadyTallied,
-		/// Must be the final vote.
-		VoteNotFinal,
 		/// Vote must be tallied.
 		VoteNotTallied,
 		/// Time for voting has not elapsed.
@@ -1419,8 +1417,7 @@ pub mod pallet {
 				.saturated_into::<AmountOf<T>>();
 
 			// execute vote, inferring result based on function called
-			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
-			Self::execute_vote(dispute_id, vote_round, VoteResult::Passed)?;
+			Self::execute_vote(dispute_id, VoteResult::Passed)?;
 
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
@@ -1472,8 +1469,7 @@ pub mod pallet {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote, inferring result based on function called
-			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
-			Self::execute_vote(dispute_id, vote_round, VoteResult::Invalid)?;
+			Self::execute_vote(dispute_id, VoteResult::Invalid)?;
 			Ok(())
 		}
 
@@ -1488,8 +1484,7 @@ pub mod pallet {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote, inferring result based on function called
-			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
-			Self::execute_vote(dispute_id, vote_round, VoteResult::Failed)?;
+			Self::execute_vote(dispute_id, VoteResult::Failed)?;
 			Ok(())
 		}
 
