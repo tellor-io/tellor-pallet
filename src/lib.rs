@@ -1037,7 +1037,7 @@ pub mod pallet {
 		///
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
-		/// - 'beneficiary`: beneficiary address of user to receive the slash winning
+		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
 		#[pallet::call_index(7)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
@@ -1047,7 +1047,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
 
-			// the Reporter can only be validated when address field is None
+			// Lookup dispute initiator's corresponding address on controller chain (if available) when no beneficiary address specified
 			let beneficiary = beneficiary
 				.or_else(|| <StakerDetails<T>>::get(&dispute_initiator).map(|s| s.address))
 				.ok_or(Error::<T>::NotReporter)?;

@@ -72,7 +72,6 @@ fn begin_dispute() {
 		});
 
 		let dispute_id = with_block(|| {
-			// await h.expectThrow(gov.connect(accounts[4]).beginDispute(ETH_QUERY_ID, blocky.timestamp)) // must have tokens to pay/begin dispute
 			assert_noop!(
 				Tellor::begin_dispute(
 					RuntimeOrigin::signed(another_reporter),
