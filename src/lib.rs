@@ -1397,14 +1397,12 @@ pub mod pallet {
 
 		/// Reports a slashing of a reporter, due to a passing vote.
 		///
-		/// - `dispute_id`: The dispute identifier which resulted in the slashing.
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
 		#[pallet::call_index(12)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
-			dispute_id: DisputeId,
 			reporter: AccountIdOf<T>,
 			recipient: AccountIdOf<T>,
 			amount: Amount,
@@ -1415,9 +1413,6 @@ pub mod pallet {
 			let amount = amount
 				.saturated_into::<u128>() // todo: handle in single call skipping u128
 				.saturated_into::<AmountOf<T>>();
-
-			// execute vote, inferring result based on function called
-			Self::execute_vote(dispute_id, VoteResult::Passed)?;
 
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
@@ -1458,38 +1453,24 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Reports the result of a dispute as invalid.
+		/// Reports the result of a dispute.
 		///
 		/// - `dispute_id`: The identifier of the dispute.
+		/// - `result`: The result of the dispute.
 		#[pallet::call_index(13)]
-		pub fn report_invalid_dispute(
+		pub fn report_vote_executed(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
+			result: VoteResult,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
-			// execute vote, inferring result based on function called
-			Self::execute_vote(dispute_id, VoteResult::Invalid)?;
-			Ok(())
-		}
-
-		/// Slashes a dispute initiator, due to a failed vote.
-		///
-		/// - `dispute_id`: The identifier of the dispute.
-		#[pallet::call_index(14)]
-		pub fn slash_dispute_initiator(
-			origin: OriginFor<T>,
-			dispute_id: DisputeId,
-		) -> DispatchResult {
-			// ensure origin is governance controller contract
-			T::GovernanceOrigin::ensure_origin(origin)?;
-			// execute vote, inferring result based on function called
-			Self::execute_vote(dispute_id, VoteResult::Failed)?;
-			Ok(())
+			// execute vote
+			Self::execute_vote(dispute_id, result)
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(15)]
+		#[pallet::call_index(14)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 			ensure!(

@@ -136,7 +136,6 @@ fn begin_dispute() {
 		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
-				dispute_id,
 				reporter,
 				another_reporter,
 				STAKE_AMOUNT.into()
@@ -1337,7 +1336,11 @@ fn invalid_dispute() {
 		let dispute_id = with_block(|| {
 			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_noop!(
-				Tellor::report_invalid_dispute(RuntimeOrigin::signed(reporter), dispute_id),
+				Tellor::report_vote_executed(
+					RuntimeOrigin::signed(reporter),
+					dispute_id,
+					VoteResult::Invalid
+				),
 				BadOrigin
 			);
 
@@ -1351,7 +1354,11 @@ fn invalid_dispute() {
 
 		// Report invalid dispute after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::report_invalid_dispute(Origin::Governance.into(), dispute_id));
+			assert_ok!(Tellor::report_vote_executed(
+				Origin::Governance.into(),
+				dispute_id,
+				VoteResult::Invalid
+			));
 
 			// validate updated balance of dispute initiator
 			assert_eq!(Balances::free_balance(reporter), balance_before_begin_dispute);
@@ -1376,7 +1383,11 @@ fn slash_dispute_initiator() {
 		let dispute_id = with_block(|| {
 			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_noop!(
-				Tellor::report_invalid_dispute(RuntimeOrigin::signed(reporter), dispute_id),
+				Tellor::report_vote_executed(
+					RuntimeOrigin::signed(reporter),
+					dispute_id,
+					VoteResult::Failed
+				),
 				BadOrigin
 			);
 
@@ -1422,7 +1433,11 @@ fn slash_dispute_initiator() {
 
 		// Report invalid dispute after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::slash_dispute_initiator(Origin::Governance.into(), dispute_id));
+			assert_ok!(Tellor::report_vote_executed(
+				Origin::Governance.into(),
+				dispute_id,
+				VoteResult::Failed
+			));
 
 			// validate slashed balance of dispute initiator
 			let vote_info = Tellor::get_vote_info(dispute_id, 1).unwrap();
