@@ -1090,6 +1090,7 @@ pub mod pallet {
 				value: <ValueOf<T>>::default(),
 				disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp)
 					.ok_or(Error::<T>::NoValueExists)?,
+				slashed_amount: <StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
 			};
 			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 			if vote_round == 1 {
@@ -1151,11 +1152,14 @@ pub mod pallet {
 				reporter: dispute_initiator,
 			});
 
+			// Lookup corresponding address on controller chain
 			let disputed_reporter = <StakerDetails<T>>::get(&dispute.disputed_reporter)
 				.ok_or(Error::<T>::NotReporter)?
 				.address;
 
 			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+
+			// todo: charge dispute initiator corresponding xcm fees
 
 			let governance_contract = T::Governance::get();
 			let message = xcm::transact_with_config(
@@ -1167,7 +1171,7 @@ pub mod pallet {
 						&dispute.value,
 						disputed_reporter,
 						beneficiary,
-						<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+						dispute.slashed_amount,
 					)
 					.try_into()
 					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
