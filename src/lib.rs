@@ -1037,15 +1037,21 @@ pub mod pallet {
 		///
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
+		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
 		#[pallet::call_index(7)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			timestamp: Timestamp,
+			beneficiary: Option<Address>,
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
-			// Only reporters can begin disputes due to requiring an account on staking chain to potentially receive slash amount if dispute successful
-			ensure!(<StakerDetails<T>>::contains_key(&dispute_initiator), Error::<T>::NotReporter);
+
+			// Lookup dispute initiator's corresponding address on controller chain (if available) when no beneficiary address specified
+			let beneficiary = beneficiary
+				.or_else(|| <StakerDetails<T>>::get(&dispute_initiator).map(|s| s.address))
+				.ok_or(Error::<T>::NotReporter)?;
+
 			// Ensure value actually exists
 			ensure!(
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
@@ -1144,20 +1150,14 @@ pub mod pallet {
 				dispute_id,
 				query_id,
 				timestamp,
-				reporter: dispute_initiator.clone(),
+				reporter: dispute_initiator,
 			});
 
-			// Lookup corresponding addresses on controller chain
-			let dispute_initiator = <StakerDetails<T>>::get(&dispute_initiator)
-				.ok_or(Error::<T>::NotReporter)?
-				.address;
 			let disputed_reporter = <StakerDetails<T>>::get(&dispute.disputed_reporter)
 				.ok_or(Error::<T>::NotReporter)?
 				.address;
 
 			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
-
-			// todo: charge dispute initiator corresponding fees
 
 			let governance_contract = T::Governance::get();
 			let message = xcm::transact_with_config(
@@ -1168,7 +1168,7 @@ pub mod pallet {
 						timestamp.saturated_into::<u128>(),
 						&dispute.value,
 						disputed_reporter,
-						dispute_initiator,
+						beneficiary,
 						<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
 					)
 					.try_into()
