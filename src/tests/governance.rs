@@ -16,7 +16,7 @@
 
 use super::*;
 use crate::{constants::REPORTING_LOCK, mock::AccountId, types::Tally, Config, VoteResult};
-use frame_support::{assert_err, assert_noop, assert_ok, traits::Currency};
+use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map};
 use sp_runtime::traits::BadOrigin;
 
@@ -293,7 +293,6 @@ fn begin_dispute_by_non_reporter() {
 		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
-				dispute_id,
 				reporter,
 				another_reporter,
 				STAKE_AMOUNT.into()
