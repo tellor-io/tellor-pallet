@@ -30,12 +30,12 @@ use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
-	traits::{BlakeTwo256, IdentityLookup},
+	traits::{BlakeTwo256, IdentityLookup, Zero},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
-	DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp, Tip,
-	VoteResult,
+	Amount, DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp,
+	Tip, VoteResult,
 };
 use xcm::latest::prelude::*;
 
@@ -224,7 +224,7 @@ mock_impl_runtime_apis! {
 		}
 	}
 
-	impl crate::TellorOracle<Block, AccountId, Balance, BlockNumber, StakeInfo, Value> for Test {
+	impl crate::TellorOracle<Block, AccountId, BlockNumber, StakeInfo, Value> for Test {
 		fn get_block_number_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<BlockNumber> {
 			tellor::Pallet::<Test>::get_block_number_by_timestamp(query_id, timestamp)
 		}
@@ -265,7 +265,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reports_submitted_by_address_and_query_id(reporter, query_id)
 		}
 
-		fn get_stake_amount() -> Balance {
+		fn get_stake_amount() -> Amount {
 			tellor::Pallet::<Test>::get_stake_amount()
 		}
 
@@ -289,7 +289,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_timestamp_index_by_timestamp(query_id, timestamp)
 		}
 
-		fn get_total_stake_amount() -> Balance {
+		fn get_total_stake_amount() -> Amount {
 			tellor::Pallet::<Test>::get_total_stake_amount()
 		}
 
@@ -598,7 +598,7 @@ mod oracle {
 	#[test]
 	fn get_stake_amount() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), 0);
+			assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), Amount::zero());
 		});
 	}
 
@@ -650,7 +650,7 @@ mod oracle {
 	#[test]
 	fn get_total_stake_amount() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), 0);
+			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), Amount::zero());
 		});
 	}
 

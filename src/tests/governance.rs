@@ -115,7 +115,7 @@ fn begin_dispute() {
 			assert!(
 				balance_before_begin_dispute -
 					balance_after_begin_dispute -
-					StakeAmount::<Test>::get().unwrap() / 10 ==
+					Tellor::convert(StakeAmount::<Test>::get().unwrap()) / 10 ==
 					0,
 				"dispute fee paid should be correct"
 			);
@@ -272,7 +272,7 @@ fn begin_dispute_by_non_reporter() {
 			assert!(
 				balance_before_begin_dispute -
 					balance_after_begin_dispute -
-					StakeAmount::<Test>::get().unwrap() / 10 ==
+					Tellor::convert(StakeAmount::<Test>::get().unwrap()) / 10 ==
 					0,
 				"dispute fee paid should be correct"
 			);

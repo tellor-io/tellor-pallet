@@ -26,11 +26,11 @@ use sp_runtime::{
 
 pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 pub type Address = H160;
-pub(crate) type Amount = U256;
+pub type Amount = U256;
 pub(crate) type BalanceOf<T> = <T as Config>::Balance;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
 pub type DisputeId = H256;
-pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, AmountOf<T>, ValueOf<T>>;
+pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, ValueOf<T>>;
 pub type FeedId = H256;
 pub(crate) type FeedOf<T> = autopay::Feed<BalanceOf<T>, <T as Config>::MaxRewardClaims>;
 pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<BalanceOf<T>>;
@@ -135,9 +135,9 @@ pub(crate) mod oracle {
 		/// Stake or withdrawal request start date.
 		pub(crate) start_date: Timestamp,
 		/// Staked token balance
-		pub(crate) staked_balance: Balance,
+		pub(crate) staked_balance: Amount,
 		/// Amount locked for withdrawal.
-		pub(crate) locked_balance: Balance,
+		pub(crate) locked_balance: Amount,
 		/// Used for staking reward calculation.
 		pub(crate) reward_debt: Balance,
 		/// Timestamp of reporter's last reported value.
@@ -159,8 +159,8 @@ pub(crate) mod oracle {
 			Self {
 				address,
 				start_date: Zero::zero(),
-				staked_balance: Zero::zero(),
-				locked_balance: Zero::zero(),
+				staked_balance: Amount::zero(),
+				locked_balance: Amount::zero(),
 				reward_debt: Zero::zero(),
 				reporter_last_timestamp: Zero::zero(),
 				reports_submitted: 0,
@@ -177,7 +177,7 @@ pub(crate) mod governance {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct Dispute<AccountId, Amount, Value> {
+	pub struct Dispute<AccountId, Value> {
 		/// Query identifier of disputed value
 		pub(crate) query_id: QueryId,
 		/// Timestamp of disputed value.

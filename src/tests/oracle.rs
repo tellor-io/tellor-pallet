@@ -31,7 +31,7 @@ type BoundedReportsSubmittedByQueryId =
 fn deposit_stake() {
 	let reporter = 1;
 	let address = Address::random();
-	let amount = token(100);
+	let amount = trb(100);
 	let another_reporter = 2;
 	let mut ext = new_test_ext();
 
@@ -45,7 +45,7 @@ fn deposit_stake() {
 				Tellor::report_stake_deposited(
 					RuntimeOrigin::signed(another_reporter),
 					reporter,
-					amount.into(),
+					amount,
 					address
 				),
 				BadOrigin
@@ -53,7 +53,7 @@ fn deposit_stake() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				amount.into(),
+				amount,
 				address
 			));
 			System::assert_last_event(
@@ -65,7 +65,7 @@ fn deposit_stake() {
 			assert_eq!(staker_details.address, address);
 			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.staked_balance, amount);
-			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(staker_details.locked_balance, trb(0));
 			assert_eq!(staker_details.reward_debt, 0);
 			assert_eq!(staker_details.reporter_last_timestamp, 0);
 			assert_eq!(staker_details.reports_submitted, 0);
@@ -80,7 +80,7 @@ fn deposit_stake() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				another_reporter,
-				0.into(),
+				trb(0),
 				Address::random()
 			));
 			assert_eq!(Tellor::get_total_stakers(), 1);
@@ -88,20 +88,20 @@ fn deposit_stake() {
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(5).into(),
+				trb(5),
 				address
 			));
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				token(10).into(),
+				trb(10),
 				address
 			));
 			assert_eq!(Tellor::get_total_stakers(), 1); // Ensure only unique addresses add to total stakers
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(105));
-			assert_eq!(staker_details.locked_balance, token(0));
-			assert_eq!(Tellor::get_total_stake_amount(), token(105));
+			assert_eq!(staker_details.staked_balance, trb(105));
+			assert_eq!(staker_details.locked_balance, trb(0));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(105));
 		})
 	});
 }
@@ -170,7 +170,7 @@ fn remove_value() {
 #[test]
 fn request_stake_withdraw() {
 	let reporter = 1;
-	let amount = token(1_000);
+	let amount = trb(1_000);
 	let address = Address::random();
 	let mut ext = new_test_ext();
 
@@ -184,7 +184,7 @@ fn request_stake_withdraw() {
 				Tellor::report_staking_withdraw_request(
 					RuntimeOrigin::signed(reporter),
 					reporter,
-					token(10).into(),
+					trb(10),
 					address
 				),
 				BadOrigin
@@ -193,7 +193,7 @@ fn request_stake_withdraw() {
 				Tellor::report_staking_withdraw_request(
 					Origin::Staking.into(),
 					reporter,
-					token(5).into(),
+					trb(5),
 					address
 				),
 				Error::InsufficientStake
@@ -201,14 +201,14 @@ fn request_stake_withdraw() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				amount.into(),
+				amount,
 				address
 			));
 
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.staked_balance, amount);
-			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(staker_details.locked_balance, trb(0));
 			assert_eq!(staker_details.staked, true);
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
 			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
@@ -225,16 +225,16 @@ fn request_stake_withdraw() {
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(10).into(),
+				trb(10),
 				address
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.reward_debt, 0);
-			assert_eq!(staker_details.staked_balance, token(990));
-			assert_eq!(staker_details.locked_balance, token(10));
+			assert_eq!(staker_details.staked_balance, trb(990));
+			assert_eq!(staker_details.locked_balance, trb(10));
 			assert_eq!(staker_details.staked, true);
-			assert_eq!(Tellor::get_total_stake_amount(), token(990));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(990));
 			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
 
 			// Test max/min for amount arg
@@ -256,17 +256,17 @@ fn request_stake_withdraw() {
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.start_date, now());
 			assert_eq!(staker_details.reward_debt, 0);
-			assert_eq!(staker_details.staked_balance, token(990));
-			assert_eq!(staker_details.locked_balance, token(10));
+			assert_eq!(staker_details.staked_balance, trb(990));
+			assert_eq!(staker_details.locked_balance, trb(10));
 			assert_eq!(staker_details.staked, true);
-			assert_eq!(Tellor::get_total_stake_amount(), token(990));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(990));
 			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
 
 			assert_eq!(Tellor::get_total_stakers(), 1);
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(990).into(),
+				trb(990),
 				address
 			));
 			assert_eq!(Tellor::get_total_stakers(), 0);
@@ -280,7 +280,7 @@ fn slash_reporter() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let recipient = 2;
-	let amount = token(1_000);
+	let amount = trb(1_000);
 	let address = Address::random();
 	let mut ext = new_test_ext();
 
@@ -299,7 +299,7 @@ fn slash_reporter() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				amount.into(),
+				amount,
 				address
 			));
 
@@ -316,7 +316,7 @@ fn slash_reporter() {
 			// Slash when locked balance = 0
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, amount);
-			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(staker_details.locked_balance, trb(0));
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
 			assert_noop!(
 				Tellor::report_slash(Origin::Governance.into(), 0, 0, (STAKE_AMOUNT + 1).into()),
@@ -334,11 +334,11 @@ fn slash_reporter() {
 			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky0.timestamp)
 			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(900));
-			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(staker_details.staked_balance, trb(900));
+			assert_eq!(staker_details.locked_balance, trb(0));
 			assert!(staker_details.staked);
 			assert_eq!(Tellor::get_total_stakers(), 1); // Still one staker as reporter has 900 staked & stake amount is 100
-			assert_eq!(Tellor::get_total_stake_amount(), token(900));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(900));
 
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
@@ -354,12 +354,12 @@ fn slash_reporter() {
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(100).into(),
+				trb(100),
 				address
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(800));
-			assert_eq!(staker_details.locked_balance, token(100));
+			assert_eq!(staker_details.staked_balance, trb(800));
+			assert_eq!(staker_details.locked_balance, trb(100));
 			assert!(staker_details.staked);
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
@@ -371,10 +371,10 @@ fn slash_reporter() {
 			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky1.timestamp)
 			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(800));
-			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(staker_details.staked_balance, trb(800));
+			assert_eq!(staker_details.locked_balance, trb(0));
 			assert!(staker_details.staked);
-			assert_eq!(Tellor::get_total_stake_amount(), token(800));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(800));
 
 			submit_value_and_begin_dispute(reporter, query_id, query_data.clone()) // start dispute, required for slashing
 		});
@@ -390,13 +390,13 @@ fn slash_reporter() {
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(5).into(),
+				trb(5),
 				address
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(795));
-			assert_eq!(staker_details.locked_balance, token(5));
-			assert_eq!(Tellor::get_total_stake_amount(), token(795));
+			assert_eq!(staker_details.staked_balance, trb(795));
+			assert_eq!(staker_details.locked_balance, trb(5));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(795));
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				reporter,
@@ -407,36 +407,36 @@ fn slash_reporter() {
 			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky2.timestamp)
 			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(700));
-			assert_eq!(staker_details.locked_balance, 0);
-			assert_eq!(Tellor::get_total_stake_amount(), token(700));
+			assert_eq!(staker_details.staked_balance, trb(700));
+			assert_eq!(staker_details.locked_balance, trb(0));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(700));
 
 			// Slash when locked balance + staked balance < stake amount
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(625).into(),
+				trb(625),
 				address
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(75));
-			assert_eq!(staker_details.locked_balance, token(625));
-			assert_eq!(Tellor::get_total_stake_amount(), token(75));
+			assert_eq!(staker_details.staked_balance, trb(75));
+			assert_eq!(staker_details.locked_balance, trb(625));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(75));
 		});
 
 		let dispute_id = with_block_after(604_800, || {
 			assert_ok!(Tellor::report_stake_withdrawn(
 				Origin::Staking.into(),
 				reporter,
-				token(625).into(),
+				trb(625),
 				address
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(75));
-			assert_eq!(staker_details.locked_balance, token(0));
+			assert_eq!(staker_details.staked_balance, trb(75));
+			assert_eq!(staker_details.locked_balance, trb(0));
 
 			// reporter now has insufficient stake for another submission, so top up stake before final dispute/slash
-			super::deposit_stake(reporter, STAKE_AMOUNT - token(75), address);
+			super::deposit_stake(reporter, Amount::from(STAKE_AMOUNT) - trb(75), address);
 			submit_value_and_begin_dispute(reporter, query_id, query_data) // start dispute, required for slashing
 		});
 
@@ -457,10 +457,10 @@ fn slash_reporter() {
 			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky.timestamp)
 			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, 0);
-			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(staker_details.staked_balance, trb(0));
+			assert_eq!(staker_details.locked_balance, trb(0));
 			assert_eq!(Tellor::get_total_stakers(), 0);
-			assert_eq!(Tellor::get_total_stake_amount(), 0);
+			assert_eq!(Tellor::get_total_stake_amount(), trb(0));
 		})
 	});
 }
@@ -483,7 +483,7 @@ fn submit_value() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				token(1_200).into(),
+				trb(1_200),
 				address
 			));
 			assert_noop!(
@@ -578,7 +578,7 @@ fn submit_value() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				another_reporter,
-				token(120).into(),
+				trb(120),
 				address
 			));
 			assert_ok!(Tellor::submit_value(
@@ -663,7 +663,7 @@ fn withdraw_stake() {
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(10).into(),
+				trb(10),
 				address
 			));
 			assert_noop!(
@@ -676,27 +676,22 @@ fn withdraw_stake() {
 				Error::WithdrawalPeriodPending
 			);
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(90));
-			assert_eq!(staker_details.locked_balance, token(10));
+			assert_eq!(staker_details.staked_balance, trb(90));
+			assert_eq!(staker_details.locked_balance, trb(10));
 		});
 
 		with_block_after(60 * 60 * 24 * 7, || {
 			assert_ok!(Tellor::report_stake_withdrawn(
 				Origin::Staking.into(),
 				reporter,
-				token(10).into(),
+				trb(10),
 				address
 			));
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
-			assert_eq!(staker_details.staked_balance, token(90));
-			assert_eq!(staker_details.locked_balance, 0);
+			assert_eq!(staker_details.staked_balance, trb(90));
+			assert_eq!(staker_details.locked_balance, trb(0));
 			assert_noop!(
-				Tellor::report_stake_withdrawn(
-					Origin::Staking.into(),
-					reporter,
-					token(10).into(),
-					address
-				),
+				Tellor::report_stake_withdrawn(Origin::Staking.into(), reporter, trb(10), address),
 				Error::NoWithdrawalRequested
 			);
 		});
@@ -1025,9 +1020,9 @@ fn get_stake_amount() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L439
 	new_test_ext().execute_with(|| {
 		with_block(|| {
-			assert_eq!(Tellor::get_stake_amount(), 0);
+			assert_eq!(Tellor::get_stake_amount(), trb(0));
 			register_parachain(STAKE_AMOUNT);
-			assert_eq!(Tellor::get_stake_amount(), STAKE_AMOUNT);
+			assert_eq!(Tellor::get_stake_amount(), STAKE_AMOUNT.into());
 		})
 	});
 }
@@ -1049,13 +1044,13 @@ fn get_staker_info() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				token(1_000).into(),
+				trb(1_000),
 				address
 			));
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(100).into(),
+				trb(100),
 				address
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1068,8 +1063,8 @@ fn get_staker_info() {
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.address, address);
 			assert_eq!(staker_details.start_date, now());
-			assert_eq!(staker_details.staked_balance, token(900));
-			assert_eq!(staker_details.locked_balance, token(100));
+			assert_eq!(staker_details.staked_balance, trb(900));
+			assert_eq!(staker_details.locked_balance, trb(100));
 			assert_eq!(staker_details.reward_debt, 0);
 			assert_eq!(staker_details.reporter_last_timestamp, now());
 			assert_eq!(staker_details.reports_submitted, 1);
@@ -1217,10 +1212,10 @@ fn get_total_stake_amount() {
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(10).into(),
+				trb(10),
 				address
 			));
-			assert_eq!(Tellor::get_total_stake_amount(), token(90))
+			assert_eq!(Tellor::get_total_stake_amount(), trb(90))
 		});
 	});
 }
@@ -1258,7 +1253,7 @@ fn get_total_stakers() {
 			assert_ok!(Tellor::report_staking_withdraw_request(
 				Origin::Staking.into(),
 				reporter,
-				token(200).into(),
+				trb(200),
 				address
 			));
 			assert_eq!(Tellor::get_total_stakers(), 0);
@@ -1388,7 +1383,7 @@ fn get_index_for_data_before() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				token(1_000).into(),
+				trb(1_000),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1535,7 +1530,7 @@ fn get_data_before() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				token(1_000).into(),
+				trb(1_000),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(

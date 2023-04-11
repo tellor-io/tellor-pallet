@@ -37,7 +37,7 @@ pub use types::{
 	autopay::{FeedDetails, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
-	Address, DisputeId, FeedId, QueryId, Timestamp,
+	Address, Amount, DisputeId, FeedId, QueryId, Timestamp,
 };
 
 #[cfg(test)]
@@ -225,7 +225,7 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type RewardRate<T> = StorageValue<_, BalanceOf<T>>;
 	#[pallet::storage]
-	pub(super) type StakeAmount<T> = StorageValue<_, BalanceOf<T>>;
+	pub(super) type StakeAmount<T> = StorageValue<_, Amount>;
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
@@ -235,7 +235,7 @@ pub mod pallet {
 	#[pallet::getter(fn time_of_last_new_value)]
 	pub(super) type TimeOfLastNewValue<T> = StorageValue<_, Timestamp>;
 	#[pallet::storage]
-	pub(super) type TotalStakeAmount<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+	pub(super) type TotalStakeAmount<T> = StorageValue<_, Amount, ValueQuery>;
 	#[pallet::storage]
 	pub(super) type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
 	// Governance
@@ -310,17 +310,13 @@ pub mod pallet {
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when a new staker is reported.
-		NewStakerReported { staker: AccountIdOf<T>, amount: BalanceOf<T>, address: Address },
+		NewStakerReported { staker: AccountIdOf<T>, amount: Amount, address: Address },
 		/// Emitted when a stake slash is reported.
-		SlashReported { reporter: AccountIdOf<T>, recipient: AccountIdOf<T>, amount: BalanceOf<T> },
+		SlashReported { reporter: AccountIdOf<T>, recipient: AccountIdOf<T>, amount: Amount },
 		/// Emitted when a stake withdrawal is reported.
 		StakeWithdrawnReported { staker: AccountIdOf<T> },
 		/// Emitted when a stake withdrawal request is reported.
-		StakeWithdrawRequestReported {
-			reporter: AccountIdOf<T>,
-			amount: BalanceOf<T>,
-			address: Address,
-		},
+		StakeWithdrawRequestReported { reporter: AccountIdOf<T>, amount: Amount, address: Address },
 		/// Emitted when a value is removed (via governance).
 		ValueRemoved { query_id: QueryId, timestamp: Timestamp },
 
@@ -345,7 +341,7 @@ pub mod pallet {
 
 		// Registration
 		/// Emitted when the pallet is (re-)configured.
-		Configured { stake_amount: BalanceOf<T> },
+		Configured { stake_amount: Amount },
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
 		/// Emitted when deregistration from the controller contracts is attempted.
@@ -498,7 +494,7 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		pub fn register(
 			origin: OriginFor<T>,
-			stake_amount: BalanceOf<T>,
+			stake_amount: Amount,
 			fees: Box<MultiAsset>,
 			weight_limit: WeightLimit,
 			require_weight_at_most: u64,
@@ -940,7 +936,7 @@ pub mod pallet {
 							staker
 								.staked_balance
 								.checked_div(
-									&<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?
+									<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?
 								)
 								.ok_or(Error::<T>::ReportingLockCalculationError)?
 								.saturated_into::<u128>()
@@ -1125,7 +1121,8 @@ pub mod pallet {
 				dispute.value =
 					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
 			}
-			let stake_amount = <StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+			let stake_amount =
+				Self::convert(<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?);
 			if vote.fee > stake_amount {
 				vote.fee = stake_amount;
 			}
@@ -1250,24 +1247,23 @@ pub mod pallet {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
 
-			let amount = U256ToBalance::<T>::convert(amount);
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				let mut staker = maybe.take().unwrap_or_else(|| <StakeInfoOf<T>>::new(address));
 				ensure!(address == staker.address, Error::<T>::InvalidAddress);
 				let staked_balance = staker.staked_balance;
 				let locked_balance = staker.locked_balance;
-				if locked_balance > Zero::zero() {
+				if locked_balance > Amount::zero() {
 					if locked_balance >= amount {
 						// if staker's locked balance covers full amount, use that
-						staker.locked_balance.saturating_reduce(amount);
+						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
 					// 		toWithdraw -= _amount; // <- todo: check whether this is required
 					} else {
 						// otherwise, stake the whole locked balance
 						// 		toWithdraw -= _staker.lockedBalance; <- todo: check whether this is required
-						staker.locked_balance = Zero::zero();
+						staker.locked_balance = Amount::zero();
 					}
 				} else {
-					if staked_balance == Zero::zero() {
+					if staked_balance == Amount::zero() {
 						// todo:
 						// 		// if staked balance and locked balance equal 0, save current vote tally.
 						// 		// voting participation used for calculating rewards
@@ -1309,7 +1305,6 @@ pub mod pallet {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
 
-			let amount = U256ToBalance::<T>::convert(amount);
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
 					None => Err(Error::<T>::InsufficientStake.into()),
@@ -1320,7 +1315,7 @@ pub mod pallet {
 						let stake_amount = staker.staked_balance - amount;
 						Self::update_stake_and_pay_rewards(staker, stake_amount)?;
 						staker.start_date = Self::now();
-						staker.locked_balance.saturating_accrue(amount);
+						staker.locked_balance = staker.locked_balance.saturating_add(amount);
 						// toWithdraw += _amount; // <- todo: check whether this is required here
 						Ok(())
 					},
@@ -1363,14 +1358,13 @@ pub mod pallet {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
 
-			let amount = U256ToBalance::<T>::convert(amount);
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
 					None => Err(Error::<T>::InsufficientStake.into()),
 					Some(staker) => {
 						// Ensure reporter is locked and that enough time has passed
 						ensure!(
-							staker.locked_balance > Zero::zero(),
+							staker.locked_balance > Amount::zero(),
 							Error::<T>::NoWithdrawalRequested
 						);
 						ensure!(
@@ -1378,7 +1372,7 @@ pub mod pallet {
 							Error::<T>::WithdrawalPeriodPending
 						);
 						// toWithdraw -= _staker.lockedBalance; // todo: required?
-						staker.locked_balance.saturating_reduce(amount);
+						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
 						Ok(())
 					},
 				}
@@ -1402,8 +1396,6 @@ pub mod pallet {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 
-			let amount = U256ToBalance::<T>::convert(amount);
-
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
 					None => Err(Error::<T>::InsufficientStake.into()),
@@ -1411,12 +1403,12 @@ pub mod pallet {
 						let staked_balance = staker.staked_balance;
 						let locked_balance = staker.locked_balance;
 						ensure!(
-							staked_balance.saturating_add(locked_balance) > Zero::zero(),
+							staked_balance.saturating_add(locked_balance) > Amount::zero(),
 							Error::<T>::InsufficientStake
 						);
 						if locked_balance >= amount {
 							// if locked balance is at least stakeAmount, slash from locked balance
-							staker.locked_balance.saturating_reduce(amount);
+							staker.locked_balance = staker.locked_balance.saturating_sub(amount);
 						// 	toWithdraw -= stakeAmount;  // todo: required?
 						} else if locked_balance.saturating_add(staked_balance) >= amount {
 							// if locked balance + staked balance is at least stake amount,
@@ -1427,12 +1419,12 @@ pub mod pallet {
 									.saturating_sub(amount.saturating_sub(locked_balance)),
 							)?;
 							// 	toWithdraw -= _lockedBalance; // todo: required?
-							staker.locked_balance = Zero::zero();
+							staker.locked_balance = Amount::zero();
 						} else {
 							// if sum(locked balance + staked balance) is less than stakeAmount, slash sum
 							// 	toWithdraw -= _lockedBalance; // todo: required?
-							Self::update_stake_and_pay_rewards(staker, Zero::zero())?;
-							staker.locked_balance = Zero::zero();
+							Self::update_stake_and_pay_rewards(staker, Amount::zero())?;
+							staker.locked_balance = Amount::zero();
 						}
 						Ok(())
 					},
@@ -1462,11 +1454,11 @@ pub mod pallet {
 		#[pallet::call_index(14)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
-			ensure!(Self::get_total_stake_amount() == Zero::zero(), Error::<T>::ActiveStake);
+			ensure!(Self::get_total_stake_amount() == Amount::zero(), Error::<T>::ActiveStake);
 
 			// Update local configuration
 			<StakeAmount<T>>::set(None);
-			Self::deposit_event(Event::Configured { stake_amount: Zero::zero() });
+			Self::deposit_event(Event::Configured { stake_amount: Amount::zero() });
 
 			// Register relevant supplied config with parachain registry contract
 			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotRegistered)?;

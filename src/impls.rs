@@ -34,6 +34,11 @@ impl<T: Config> Pallet<T> {
 		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
 	}
 
+	pub(super) fn convert(amount: Amount) -> BalanceOf<T> {
+		// todo: use rate from oracle
+		<U256ToBalance<T>>::convert(amount / Amount::from(10).pow(Amount::from(6)))
+	}
+
 	/// Determines if an account voted for a specific dispute round.
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.
@@ -266,7 +271,7 @@ impl<T: Config> Pallet<T> {
 	/// The latest dispute fee.
 	pub fn get_dispute_fee() -> BalanceOf<T> {
 		// todo: make configurable and use safe math
-		<StakeAmount<T>>::get().unwrap_or_default() / 10u8.into()
+		Self::convert(<StakeAmount<T>>::get().unwrap_or_default() / Amount::from(10))
 	}
 
 	/// Returns information on a dispute for a given identifier.
@@ -776,7 +781,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the amount required to report oracle values.
 	/// # Returns
 	/// The stake amount.
-	pub fn get_stake_amount() -> BalanceOf<T> {
+	pub fn get_stake_amount() -> Amount {
 		<StakeAmount<T>>::get().unwrap_or_default()
 	}
 
@@ -835,7 +840,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the total amount staked for reporting.
 	/// # Returns
 	/// The total amount of token staked.
-	pub fn get_total_stake_amount() -> BalanceOf<T> {
+	pub fn get_total_stake_amount() -> Amount {
 		<TotalStakeAmount<T>>::get()
 	}
 
@@ -998,11 +1003,11 @@ impl<T: Config> Pallet<T> {
 
 	pub(super) fn update_stake_and_pay_rewards(
 		staker: &mut StakeInfoOf<T>,
-		new_staked_balance: BalanceOf<T>,
+		new_staked_balance: Amount,
 	) -> Result<(), Error<T>> {
 		// todo: complete implementation
 		// _updateRewards();
-		if staker.staked_balance > Zero::zero() {
+		if staker.staked_balance > Amount::zero() {
 			// todo
 			// if address already has a staked balance, calculate and transfer pending rewards
 			// 	uint256 _pendingReward = (_staker.stakedBalance *
@@ -1038,7 +1043,9 @@ impl<T: Config> Pallet<T> {
 			// 	stakingRewardsBalance -= _pendingReward;
 			// 	require(token.transfer(msg.sender, _pendingReward));
 			// 	totalRewardDebt -= _staker.rewardDebt;
-			<TotalStakeAmount<T>>::mutate(|total| total.saturating_reduce(staker.staked_balance));
+			<TotalStakeAmount<T>>::mutate(|total| {
+				*total = total.saturating_sub(staker.staked_balance)
+			});
 		}
 		staker.staked_balance = new_staked_balance;
 		// Update total stakers
@@ -1062,7 +1069,7 @@ impl<T: Config> Pallet<T> {
 		// 	(_staker.stakedBalance * accumulatedRewardPerShare) /
 		// 		1e18;
 		// totalRewardDebt += _staker.rewardDebt;
-		<TotalStakeAmount<T>>::mutate(|total| total.saturating_accrue(staker.staked_balance));
+		<TotalStakeAmount<T>>::mutate(|total| *total = total.saturating_add(staker.staked_balance));
 		// todo
 		// // update reward rate if staking rewards are available given staker's updated parameters
 		// if(rewardRate == 0) {
