@@ -712,7 +712,7 @@ fn vote() {
 			let vote_info = Tellor::get_vote_info(dispute_id, 1).unwrap();
 			assert_eq!(
 				vote_info.users,
-				Tally::<AmountOf<Test>>::default(),
+				Tally::<BalanceOf<Test>>::default(),
 				"users tally should be correct"
 			);
 			assert_eq!(
@@ -1136,7 +1136,7 @@ fn get_vote_info() {
 			assert_eq!(vote.tally_date, tallied, "vote tally date should be correct");
 			assert_eq!(
 				vote.users,
-				Tally::<AmountOf<Test>>::default(),
+				Tally::<BalanceOf<Test>>::default(),
 				"vote users should be correct"
 			);
 			assert_eq!(
@@ -1341,7 +1341,7 @@ fn get_tips_by_address() {
 			assert_ok!(Tellor::execute_vote(dispute_id, VoteResult::Passed));
 			assert_eq!(
 				Tellor::get_vote_info(dispute_id, 1).unwrap().users,
-				Tally::<AmountOf<Test>> { does_support: token(20), against: 0, invalid_query: 0 },
+				Tally::<BalanceOf<Test>> { does_support: token(20), against: 0, invalid_query: 0 },
 				"vote users does_support weight should be based on tip total"
 			)
 		});

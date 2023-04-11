@@ -43,10 +43,10 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 type AccountId = u64;
-type Amount = u64;
+type Balance = u64;
 type BlockNumber = u64;
 type MaxValueLength = ConstU32<4>;
-type StakeInfo = tellor::StakeInfo<Amount, <Test as tellor::Config>::MaxQueriesPerReporter>;
+type StakeInfo = tellor::StakeInfo<Balance, <Test as tellor::Config>::MaxQueriesPerReporter>;
 type Value = BoundedVec<u8, MaxValueLength>;
 
 // Configure a mock runtime to test implementation of the runtime-api
@@ -80,7 +80,7 @@ impl frame_system::Config for Test {
 	type DbWeight = ();
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = pallet_balances::AccountData<u64>;
+	type AccountData = pallet_balances::AccountData<Balance>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -89,7 +89,7 @@ impl frame_system::Config for Test {
 	type MaxConsumers = ConstU32<16>;
 }
 impl pallet_balances::Config for Test {
-	type Balance = u64;
+	type Balance = Balance;
 	type DustRemoval = ();
 	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ConstU64<1>;
@@ -111,7 +111,7 @@ parameter_types! {
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
-	type Amount = Amount;
+	type Balance = Balance;
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
@@ -153,20 +153,20 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 mock_impl_runtime_apis! {
-	impl crate::TellorAutoPay<Block, AccountId, Amount> for Test {
+	impl crate::TellorAutoPay<Block, AccountId, Balance> for Test {
 		fn get_current_feeds(query_id: QueryId) -> Vec<FeedId>{
 			tellor::Pallet::<Test>::get_current_feeds(query_id)
 		}
 
-		fn get_current_tip(query_id: QueryId) -> Amount {
+		fn get_current_tip(query_id: QueryId) -> Balance {
 			tellor::Pallet::<Test>::get_current_tip(query_id)
 		}
 
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount>> {
+		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Balance>> {
 			tellor::Pallet::<Test>::get_data_feed(feed_id)
 		}
 
-		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount>> {
+		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Balance>> {
 			tellor::Pallet::<Test>::get_funded_feed_details().into_iter()
 			.map(|(details, query_data)| FeedDetailsWithQueryData {
 				details: details,
@@ -182,7 +182,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_funded_query_ids()
 		}
 
-		fn get_funded_single_tips_info() -> Vec<SingleTipWithQueryData<Amount>> {
+		fn get_funded_single_tips_info() -> Vec<SingleTipWithQueryData<Balance>> {
 			tellor::Pallet::<Test>::get_funded_single_tips_info().into_iter()
 			.map(|( query_data, tip)| SingleTipWithQueryData {
 				query_data: query_data.to_vec(),
@@ -195,11 +195,11 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_past_tip_count(query_id)
 		}
 
-		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount>> {
+		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Balance>> {
 			tellor::Pallet::<Test>::get_past_tips(query_id)
 		}
 
-		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount>>{
+		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Balance>>{
 			tellor::Pallet::<Test>::get_past_tip_by_index(query_id, index)
 		}
 
@@ -207,7 +207,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_query_id_from_feed_id(feed_id)
 		}
 
-		fn get_reward_amount(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Timestamp>) -> Amount{
+		fn get_reward_amount(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Timestamp>) -> Balance{
 			tellor::Pallet::<Test>::get_reward_amount(feed_id, query_id, timestamps)
 		}
 
@@ -219,12 +219,12 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reward_claim_status_list(feed_id, query_id, timestamps)
 		}
 
-		fn get_tips_by_address(user: AccountId) -> Amount {
+		fn get_tips_by_address(user: AccountId) -> Balance {
 			tellor::Pallet::<Test>::get_tips_by_address(&user)
 		}
 	}
 
-	impl crate::TellorOracle<Block, AccountId, Amount, BlockNumber, StakeInfo, Value> for Test {
+	impl crate::TellorOracle<Block, AccountId, Balance, BlockNumber, StakeInfo, Value> for Test {
 		fn get_block_number_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<BlockNumber> {
 			tellor::Pallet::<Test>::get_block_number_by_timestamp(query_id, timestamp)
 		}
@@ -265,7 +265,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reports_submitted_by_address_and_query_id(reporter, query_id)
 		}
 
-		fn get_stake_amount() -> Amount {
+		fn get_stake_amount() -> Balance {
 			tellor::Pallet::<Test>::get_stake_amount()
 		}
 
@@ -289,7 +289,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_timestamp_index_by_timestamp(query_id, timestamp)
 		}
 
-		fn get_total_stake_amount() -> Amount {
+		fn get_total_stake_amount() -> Balance {
 			tellor::Pallet::<Test>::get_total_stake_amount()
 		}
 
@@ -306,12 +306,12 @@ mock_impl_runtime_apis! {
 		}
 	}
 
-	impl crate::TellorGovernance<Block, AccountId, Amount, BlockNumber, Value> for Test {
+	impl crate::TellorGovernance<Block, AccountId, Balance, BlockNumber, Value> for Test {
 		fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountId) -> bool {
 			tellor::Pallet::<Test>::did_vote(dispute_id, vote_round, voter)
 		}
 
-		fn get_dispute_fee() -> Amount {
+		fn get_dispute_fee() -> Balance {
 			tellor::Pallet::<Test>::get_dispute_fee()
 		}
 
@@ -331,7 +331,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_vote_count()
 		}
 
-		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)> {
+		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Balance,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)> {
 			tellor::Pallet::<Test>::get_vote_info(dispute_id, vote_round).map(|v| (
 			VoteInfo{
 					vote_round: v.vote_round,
@@ -494,10 +494,7 @@ mod autopay {
 	#[test]
 	fn get_tips_by_address() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.get_tips_by_address(&BLOCKID, AccountId::default()).unwrap(),
-				Amount::default()
-			);
+			assert_eq!(Test.get_tips_by_address(&BLOCKID, AccountId::default()).unwrap(), 0);
 		});
 	}
 }

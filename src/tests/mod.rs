@@ -19,7 +19,8 @@ use crate::{
 	mock,
 	mock::*,
 	types::{
-		AccountIdOf, Address, Amount, AmountOf, DisputeId, QueryDataOf, QueryId, Timestamp, ValueOf,
+		AccountIdOf, Address, Amount, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp,
+		ValueOf,
 	},
 	xcm::{ethereum_xcm, XcmConfig},
 	Event, Origin, StakeAmount,
@@ -84,8 +85,8 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address
 	));
 }
 
-const STAKE_AMOUNT: AmountOf<Test> = 100 * UNIT;
-fn register_parachain(stake_amount: AmountOf<Test>) {
+const STAKE_AMOUNT: BalanceOf<Test> = 100 * UNIT;
+fn register_parachain(stake_amount: BalanceOf<Test>) {
 	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 	assert_ok!(Tellor::register(
 		RuntimeOrigin::root(),
@@ -107,7 +108,7 @@ fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 	])
 }
 
-fn token(amount: impl Into<f64>) -> AmountOf<Test> {
+fn token(amount: impl Into<f64>) -> BalanceOf<Test> {
 	(amount.into() * UNIT as f64) as u64
 }
 

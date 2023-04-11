@@ -19,17 +19,21 @@ use frame_support::pallet_prelude::*;
 pub(crate) use governance::Tally;
 use sp_core::{bounded::BoundedBTreeMap, H160, H256, U256};
 pub(crate) use sp_runtime::traits::Keccak256;
+use sp_runtime::{
+	traits::{Convert, Zero},
+	SaturatedConversion,
+};
 
 pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 pub type Address = H160;
 pub(crate) type Amount = U256;
-pub(crate) type AmountOf<T> = <T as Config>::Amount;
+pub(crate) type BalanceOf<T> = <T as Config>::Balance;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
 pub type DisputeId = H256;
 pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, AmountOf<T>, ValueOf<T>>;
 pub type FeedId = H256;
-pub(crate) type FeedOf<T> = autopay::Feed<AmountOf<T>, <T as Config>::MaxRewardClaims>;
-pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>>;
+pub(crate) type FeedOf<T> = autopay::Feed<BalanceOf<T>, <T as Config>::MaxRewardClaims>;
+pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<BalanceOf<T>>;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
 pub(crate) type PriceOf<T> = <T as Config>::Price;
@@ -38,30 +42,30 @@ pub type QueryId = H256;
 pub(crate) type ReportOf<T> =
 	oracle::Report<AccountIdOf<T>, BlockNumberOf<T>, ValueOf<T>, <T as Config>::MaxTimestamps>;
 pub(crate) type StakeInfoOf<T> =
-	oracle::StakeInfo<AmountOf<T>, <T as Config>::MaxQueriesPerReporter>;
+	oracle::StakeInfo<BalanceOf<T>, <T as Config>::MaxQueriesPerReporter>;
 pub type Timestamp = u64;
-pub(crate) type TipOf<T> = autopay::Tip<AmountOf<T>>;
+pub(crate) type TipOf<T> = autopay::Tip<BalanceOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
 pub(crate) type VoteOf<T> =
-	governance::Vote<AccountIdOf<T>, AmountOf<T>, BlockNumberOf<T>, <T as Config>::MaxVotes>;
+	governance::Vote<AccountIdOf<T>, BalanceOf<T>, BlockNumberOf<T>, <T as Config>::MaxVotes>;
 
 pub(crate) mod autopay {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxRewardClaims))]
-	pub struct Feed<Amount, MaxRewardClaims: Get<u32>> {
-		pub(crate) details: FeedDetails<Amount>,
+	pub struct Feed<Balance, MaxRewardClaims: Get<u32>> {
+		pub(crate) details: FeedDetails<Balance>,
 		/// Tracks which tips were already paid out.
 		pub(crate) reward_claimed: BoundedBTreeMap<Timestamp, bool, MaxRewardClaims>,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct FeedDetails<Amount> {
+	pub struct FeedDetails<Balance> {
 		/// Amount paid for each eligible data submission.
-		pub(crate) reward: Amount,
+		pub(crate) reward: Balance,
 		/// Account remaining balance.
-		pub(crate) balance: Amount,
+		pub(crate) balance: Balance,
 		/// Time of first payment window.
 		pub(crate) start_time: Timestamp,
 		/// Time between pay periods.
@@ -71,19 +75,19 @@ pub(crate) mod autopay {
 		/// Change in price necessitating an update 100 = 1%.
 		pub(crate) price_threshold: u16,
 		/// Amount reward increases per second within the window (0 for flat rewards).
-		pub(crate) reward_increase_per_second: Amount,
+		pub(crate) reward_increase_per_second: Balance,
 		/// Index plus one of data feed identifier in FeedsWithFunding storage (0 if not included).
 		pub(crate) feeds_with_funding_index: u32,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct Tip<Amount> {
+	pub struct Tip<Balance> {
 		/// Amount tipped.
-		pub(crate) amount: Amount,
+		pub(crate) amount: Balance,
 		/// Time tipped.
 		pub(crate) timestamp: Timestamp,
 		/// Cumulative tips for query identifier.
-		pub(crate) cumulative_tips: Amount,
+		pub(crate) cumulative_tips: Balance,
 	}
 }
 
@@ -125,17 +129,17 @@ pub(crate) mod oracle {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxQueries))]
-	pub struct StakeInfo<Amount, MaxQueries: Get<u32>> {
+	pub struct StakeInfo<Balance, MaxQueries: Get<u32>> {
 		/// The address on the staking chain.
 		pub(crate) address: Address,
 		/// Stake or withdrawal request start date.
 		pub(crate) start_date: Timestamp,
 		/// Staked token balance
-		pub(crate) staked_balance: Amount,
+		pub(crate) staked_balance: Balance,
 		/// Amount locked for withdrawal.
-		pub(crate) locked_balance: Amount,
+		pub(crate) locked_balance: Balance,
 		/// Used for staking reward calculation.
-		pub(crate) reward_debt: Amount,
+		pub(crate) reward_debt: Balance,
 		/// Timestamp of reporter's last reported value.
 		pub(crate) reporter_last_timestamp: Timestamp,
 		/// Total number of reports submitted by reporter.
@@ -150,15 +154,15 @@ pub(crate) mod oracle {
 		pub(crate) reports_submitted_by_query_id: BoundedBTreeMap<QueryId, u128, MaxQueries>,
 	}
 
-	impl<Amount: Default, MaxQueries: Get<u32>> StakeInfo<Amount, MaxQueries> {
+	impl<Balance: Default + Zero, MaxQueries: Get<u32>> StakeInfo<Balance, MaxQueries> {
 		pub(crate) fn new(address: Address) -> Self {
 			Self {
 				address,
-				start_date: Timestamp::default(),
-				staked_balance: Amount::default(),
-				locked_balance: Amount::default(),
-				reward_debt: Amount::default(),
-				reporter_last_timestamp: Timestamp::default(),
+				start_date: Zero::zero(),
+				staked_balance: Zero::zero(),
+				locked_balance: Zero::zero(),
+				reward_debt: Zero::zero(),
+				reporter_last_timestamp: Zero::zero(),
 				reports_submitted: 0,
 				start_vote_count: 0,
 				start_vote_tally: 0,
@@ -200,7 +204,7 @@ pub(crate) mod governance {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxVotes))]
-	pub struct Vote<AccountId, Amount, BlockNumber, MaxVotes: Get<u32>> {
+	pub struct Vote<AccountId, Balance, BlockNumber, MaxVotes: Get<u32>> {
 		/// Identifier of the dispute.
 		pub identifier: DisputeId,
 		/// The round of voting on a given dispute or proposal.
@@ -210,11 +214,11 @@ pub(crate) mod governance {
 		/// Block number of when vote was initiated.
 		pub block_number: BlockNumber,
 		/// Fee paid to initiate the vote round.
-		pub fee: Amount,
+		pub fee: Balance,
 		/// Timestamp of when the votes were tallied.
 		pub tally_date: Timestamp,
 		/// Vote tally of users.
-		pub users: Tally<Amount>,
+		pub users: Tally<Balance>,
 		/// Vote tally of reporters.
 		pub reporters: Tally<u128>,
 		/// Whether the vote was executed.
@@ -240,4 +244,11 @@ pub(crate) mod governance {
 pub struct Configuration {
 	pub(crate) xcm_config: crate::xcm::XcmConfig,
 	pub(crate) gas_limit: u128,
+}
+
+pub(super) struct U256ToBalance<T>(PhantomData<T>);
+impl<T: Config> Convert<Amount, BalanceOf<T>> for U256ToBalance<T> {
+	fn convert(a: Amount) -> BalanceOf<T> {
+		a.saturated_into::<u128>().saturated_into()
+	}
 }
