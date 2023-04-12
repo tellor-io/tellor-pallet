@@ -736,12 +736,12 @@ fn vote() {
 			assert!(!Tellor::did_vote(dispute_id, 1, 3), "voter's voted status should be correct");
 
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter_2),
+				Tellor::get_vote_tally_by_address(&reporter_2),
 				1,
 				"vote tally by address should be correct"
 			);
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter_1),
+				Tellor::get_vote_tally_by_address(&reporter_1),
 				1,
 				"vote tally by address should be correct"
 			);
@@ -1264,19 +1264,19 @@ fn get_vote_tally_by_address() {
 			let dispute_id_2 = super::dispute_id(PARA_ID, query_id, now());
 
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter),
+				Tellor::get_vote_tally_by_address(&reporter),
 				0,
 				"vote tally should be correct"
 			);
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), dispute_id, Some(false)));
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter),
+				Tellor::get_vote_tally_by_address(&reporter),
 				1,
 				"vote tally should be correct"
 			);
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), dispute_id_2, Some(false)));
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter),
+				Tellor::get_vote_tally_by_address(&reporter),
 				2,
 				"vote tally should be correct"
 			);

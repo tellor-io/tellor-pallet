@@ -18,11 +18,11 @@ use super::*;
 
 pub(crate) fn begin_parachain_dispute(
 	query_id: &[u8],
-	timestamp: impl Into<U256>,
+	timestamp: impl Into<Amount>,
 	value: &[u8],
 	disputed_reporter: Address,
 	dispute_initiator: Address,
-	slash_amount: impl Into<U256>,
+	slash_amount: impl Into<Amount>,
 ) -> Vec<u8> {
 	const FUNCTION: [u8; 4] = [29, 93, 54, 159];
 
@@ -38,12 +38,12 @@ pub(crate) fn begin_parachain_dispute(
 
 pub(crate) fn vote(
 	dispute_id: &[u8],
-	total_tips_for: impl Into<U256>,
-	total_tips_against: impl Into<U256>,
-	total_tips_invalid: impl Into<U256>,
-	total_reports_for: impl Into<U256>,
-	total_reports_against: impl Into<U256>,
-	total_reports_invalid: impl Into<U256>,
+	total_tips_for: impl Into<Amount>,
+	total_tips_against: impl Into<Amount>,
+	total_tips_invalid: impl Into<Amount>,
+	total_reports_for: impl Into<Amount>,
+	total_reports_against: impl Into<Amount>,
+	total_reports_invalid: impl Into<Amount>,
 ) -> Vec<u8> {
 	const FUNCTION: [u8; 4] = [61, 181, 167, 166];
 

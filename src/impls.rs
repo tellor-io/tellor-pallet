@@ -15,11 +15,34 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
+use crate::constants::UNIT;
 use sp_runtime::traits::Hash;
 
 impl<T: Config> Pallet<T> {
+	/// Funds the staking account with staking rewards (paid by autopay and minting)
+	/// # Arguments
+	/// * `amount` - The amount of tokens to fund the staking account with.
 	pub(super) fn add_staking_rewards(amount: BalanceOf<T>) -> DispatchResult {
 		T::Token::transfer(&Self::tips(), &Self::staking_rewards(), amount, false)?;
+		Self::update_rewards()?;
+		let staking_rewards_balance = <StakingRewardsBalance<T>>::mutate(|balance| {
+			balance.saturating_accrue(amount);
+			*balance
+		})
+		.into();
+		// update reward rate = real staking rewards balance / 30 days
+		<RewardRate<T>>::set(
+			staking_rewards_balance
+				.saturating_sub(
+					<AccumulatedRewardPerShare<T>>::get()
+						.saturating_mul(<TotalStakeAmount<T>>::get())
+						.checked_div(UNIT.into())
+						.ok_or(Error::<T>::RewardCalculationError)?
+						.saturating_sub(<TotalRewardDebt<T>>::get()),
+				)
+				.checked_div((30 * DAYS).into())
+				.ok_or(Error::<T>::RewardCalculationError)?,
+		);
 		Ok(())
 	}
 
@@ -887,7 +910,7 @@ impl<T: Config> Pallet<T> {
 	/// * `voter` - The account of the voter to check for.
 	/// # Returns
 	/// The total number of votes cast by the voter.
-	pub fn get_vote_tally_by_address(voter: AccountIdOf<T>) -> u128 {
+	pub fn get_vote_tally_by_address(voter: &AccountIdOf<T>) -> u128 {
 		<VoteTallyByAddress<T>>::get(voter)
 	}
 
@@ -1012,85 +1035,146 @@ impl<T: Config> Pallet<T> {
 		T::PalletId::get().into_sub_account_truncating(b"tips")
 	}
 
+	/// Updates accumulated staking rewards per staked token.
+	pub(crate) fn update_rewards() -> DispatchResult {
+		let timestamp = Self::now();
+		if <TimeOfLastAllocation<T>>::get() == timestamp {
+			return Ok(())
+		}
+		if <TotalStakeAmount<T>>::get() == Amount::zero() ||
+			<RewardRate<T>>::get() == Amount::zero()
+		{
+			<TimeOfLastAllocation<T>>::set(timestamp);
+			return Ok(())
+		}
+
+		// todo: safe math
+		// calculate accumulated reward per token staked
+		let new_accumulated_reward_per_share: Amount = <AccumulatedRewardPerShare<T>>::get() +
+			(Amount::from(timestamp - <TimeOfLastAllocation<T>>::get()) *
+				<RewardRate<T>>::get() *
+				Amount::from(UNIT)) /
+				<TotalStakeAmount<T>>::get();
+		// calculate accumulated reward with new_accumulated_reward_per_share
+		let accumulated_reward: Amount = ((new_accumulated_reward_per_share *
+			<TotalStakeAmount<T>>::get()) /
+			UNIT - <TotalRewardDebt<T>>::get());
+		if accumulated_reward >= <StakingRewardsBalance<T>>::get().into() {
+			// if staking rewards run out, calculate remaining reward per staked token and set
+			// RewardRate to 0
+			let new_pending_rewards: Amount = <StakingRewardsBalance<T>>::get().into() -
+				((<AccumulatedRewardPerShare<T>>::get() * <TotalStakeAmount<T>>::get()) / UNIT -
+					<TotalRewardDebt<T>>::get());
+			<AccumulatedRewardPerShare<T>>::try_mutate(|value| -> DispatchResult {
+				*value = value.saturating_add(
+					((new_pending_rewards * Amount::from(UNIT)) / <TotalStakeAmount<T>>::get()),
+				);
+				Ok(())
+			})?;
+			<RewardRate<T>>::set(Amount::zero());
+		} else {
+			<AccumulatedRewardPerShare<T>>::set(
+				new_accumulated_reward_per_share.try_into().unwrap(),
+			);
+		}
+		<TimeOfLastAllocation<T>>::set(timestamp);
+		Ok(())
+	}
+
+	/// Called whenever a user's stake amount changes. First updates staking rewards, transfers
+	/// pending rewards to user's address, and finally updates user's stake amount and other relevant
+	/// variables.
+	/// # Arguments
+	/// * `staker` - Staker whose stake is being updated.
+	/// * `new_staked_balance` - The new staked balance of the staker.
 	pub(super) fn update_stake_and_pay_rewards(
-		staker: &mut StakeInfoOf<T>,
+		staker: (&AccountIdOf<T>, &mut StakeInfoOf<T>),
 		new_staked_balance: Amount,
-	) -> Result<(), Error<T>> {
-		// todo: complete implementation
-		// _updateRewards();
-		if staker.staked_balance > Amount::zero() {
-			// todo
+	) -> DispatchResult {
+		Self::update_rewards()?;
+		let (staker, stake_info) = staker;
+		if stake_info.staked_balance > Amount::zero() {
 			// if address already has a staked balance, calculate and transfer pending rewards
-			// 	uint256 _pendingReward = (_staker.stakedBalance *
-			// 		accumulatedRewardPerShare) /
-			// 		1e18 -
-			// 		_staker.rewardDebt;
-			// 	// get staker voting participation rate
-			// 	uint256 _numberOfVotes;
-			// 	(bool _success, bytes memory _returnData) = governance.call(
-			// 		abi.encodeWithSignature("getVoteCount()")
-			// 	);
-			// 	if (_success) {
-			// 		_numberOfVotes =
-			// 			uint256(abi.decode(_returnData, (uint256))) -
-			// 				_staker.startVoteCount;
-			// 	}
-			// 	if (_numberOfVotes > 0) {
-			// 		// staking reward = pending reward * voting participation rate
-			// 		(_success, _returnData) = governance.call(
-			// 			abi.encodeWithSignature("getVoteTallyByAddress(address)",_stakerAddress)
-			// 		);
-			// 		if(_success){
-			// 			uint256 _voteTally = abi.decode(_returnData,(uint256));
-			// 			uint256 _tempPendingReward =
-			// 				(_pendingReward *
-			// 					(_voteTally - _staker.startVoteTally)) /
-			// 					_numberOfVotes;
-			// 			if (_tempPendingReward < _pendingReward) {
-			// 				_pendingReward = _tempPendingReward;
-			// 			}
-			// 		}
-			// 	}
-			// 	stakingRewardsBalance -= _pendingReward;
-			// 	require(token.transfer(msg.sender, _pendingReward));
-			// 	totalRewardDebt -= _staker.rewardDebt;
+			let mut pending_reward = <U256ToBalance<T>>::convert(
+				stake_info
+					.staked_balance
+					.saturating_mul(<AccumulatedRewardPerShare<T>>::get())
+					.checked_div(UNIT.into())
+					.ok_or(Error::<T>::RewardCalculationError)?
+					.saturating_sub(stake_info.reward_debt),
+			);
+			// get staker voting participation rate
+			let number_of_votes =
+				Self::get_vote_count().saturating_sub(stake_info.start_vote_count);
+			if number_of_votes > 0 {
+				// staking reward = pending reward * voting participation rate
+				let vote_tally = Self::get_vote_tally_by_address(staker);
+				let temp_pending_reward = (pending_reward *
+					(vote_tally - stake_info.start_vote_tally).saturated_into()) /
+					number_of_votes.saturated_into();
+				if temp_pending_reward < pending_reward {
+					pending_reward = temp_pending_reward;
+				}
+			}
+			<StakingRewardsBalance<T>>::mutate(|balance| {
+				*balance = balance.saturating_sub(pending_reward)
+			});
+			T::Token::transfer(&Self::staking_rewards(), staker, pending_reward, true)?;
+			<TotalRewardDebt<T>>::mutate(|debt| {
+				*debt = debt.saturating_sub(stake_info.reward_debt)
+			});
 			<TotalStakeAmount<T>>::mutate(|total| {
-				*total = total.saturating_sub(staker.staked_balance)
+				*total = total.saturating_sub(stake_info.staked_balance)
 			});
 		}
-		staker.staked_balance = new_staked_balance;
+		stake_info.staked_balance = new_staked_balance;
 		// Update total stakers
 		<TotalStakers<T>>::try_mutate(|total| -> Result<(), Error<T>> {
-			if staker.staked_balance >= <StakeAmount<T>>::get().ok_or(Error::NotRegistered)? {
-				if !staker.staked {
+			if stake_info.staked_balance >= <StakeAmount<T>>::get().ok_or(Error::NotRegistered)? {
+				if !stake_info.staked {
 					total.saturating_inc();
 				}
-				staker.staked = true;
+				stake_info.staked = true;
 			} else {
-				if staker.staked && *total > 0 {
+				if stake_info.staked && *total > 0 {
 					total.saturating_dec();
 				}
-				staker.staked = false;
+				stake_info.staked = false;
 			}
 			Ok(())
 		})?;
-		// todo
-		// // tracks rewards accumulated before stake amount updated
-		// _staker.rewardDebt =
-		// 	(_staker.stakedBalance * accumulatedRewardPerShare) /
-		// 		1e18;
-		// totalRewardDebt += _staker.rewardDebt;
-		<TotalStakeAmount<T>>::mutate(|total| *total = total.saturating_add(staker.staked_balance));
-		// todo
-		// // update reward rate if staking rewards are available given staker's updated parameters
-		// if(rewardRate == 0) {
-		// 	rewardRate =
-		// 		(stakingRewardsBalance -
-		// 			((accumulatedRewardPerShare * totalStakeAmount) /
-		// 				1e18 -
-		// 				totalRewardDebt)) /
-		// 			30 days;
-		// }
+		// tracks rewards accumulated before stake amount updated
+		let accumulated_reward_per_share = <AccumulatedRewardPerShare<T>>::get();
+		stake_info.reward_debt = stake_info
+			.staked_balance
+			.saturating_mul(accumulated_reward_per_share)
+			.checked_div(UNIT.into())
+			.ok_or(Error::<T>::RewardCalculationError)?;
+		let total_reward_debt = <TotalRewardDebt<T>>::mutate(|debt| {
+			*debt = debt.saturating_add(stake_info.reward_debt);
+			*debt
+		});
+		let total_stake_amount = <TotalStakeAmount<T>>::mutate(|total| {
+			*total = total.saturating_add(stake_info.staked_balance);
+			*total
+		});
+		// update reward rate if staking rewards are available given staker's updated parameters
+		<RewardRate<T>>::try_mutate(|reward_rate| -> DispatchResult {
+			if *reward_rate == Amount::zero() {
+				*reward_rate = <StakingRewardsBalance<T>>::get()
+					.into()
+					.saturating_sub(
+						accumulated_reward_per_share
+							.saturating_mul(total_stake_amount)
+							.checked_div(UNIT.into())
+							.ok_or(Error::<T>::RewardCalculationError)?
+							.saturating_sub(total_reward_debt),
+					)
+					.checked_div((30 * DAYS).into())
+					.ok_or(Error::<T>::RewardCalculationError)?;
+			}
+			Ok(())
+		})?;
 		Ok(())
 	}
 }

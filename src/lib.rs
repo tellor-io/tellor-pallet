@@ -216,24 +216,51 @@ pub mod pallet {
 	pub(super) type UserTipsTotal<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, BalanceOf<T>, ValueQuery>;
 	// Oracle
+	/// Accumulated staking reward per staked token
+	#[pallet::storage]
+	#[pallet::getter(fn accumulated_reward_per_share)]
+	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, Amount, ValueQuery>;
+	/// Mapping of query identifiers to a report.
 	#[pallet::storage]
 	pub(super) type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
+	/// Total staking rewards released per second.
 	#[pallet::storage]
-	pub(super) type RewardRate<T> = StorageValue<_, BalanceOf<T>>;
+	#[pallet::getter(fn reward_rate)]
+	pub(super) type RewardRate<T> = StorageValue<_, Amount, ValueQuery>;
+	/// Minimum amount required to be a staker.
 	#[pallet::storage]
 	pub(super) type StakeAmount<T> = StorageValue<_, Amount>;
+	/// Mapping from a staker's account identifier to their staking info.
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
 	#[pallet::storage]
 	pub(super) type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
+	/// Total amount of staking rewards.
+	#[pallet::storage]
+	#[pallet::getter(fn staking_rewards_balance)]
+	pub(super) type StakingRewardsBalance<T> = StorageValue<_, BalanceOf<T>, ValueQuery>; // todo: replace with T::Token::balance(staking_account)
+	/// The time of last update to AccumulatedRewardPerShare.
+	#[pallet::storage]
+	#[pallet::getter(fn time_of_last_allocation)]
+	pub(super) type TimeOfLastAllocation<T> = StorageValue<_, Timestamp, ValueQuery>;
+	/// The time of the last new submitted value.
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_new_value)]
 	pub(super) type TimeOfLastNewValue<T> = StorageValue<_, Timestamp>;
+	/// Staking reward debt, used to calculate real staking rewards balance.
+	#[pallet::storage]
+	#[pallet::getter(fn total_reward_debt)]
+	pub(super) type TotalRewardDebt<T> = StorageValue<_, Amount, ValueQuery>;
+	/// Total amount of tokens locked in the staking controller contract.
 	#[pallet::storage]
 	pub(super) type TotalStakeAmount<T> = StorageValue<_, Amount, ValueQuery>;
+	/// Total number of stakers with at least StakeAmount staked, not exact.
 	#[pallet::storage]
 	pub(super) type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
+	/// Amount locked for withdrawal.
+	#[pallet::storage]
+	pub(super) type ToWithdraw<T> = StorageValue<_, Amount, ValueQuery>;
 	// Governance
 	#[pallet::storage]
 	pub(super) type DisputeIdsByReporter<T> =
@@ -414,6 +441,7 @@ pub mod pallet {
 		/// Still in reporter time lock, please wait!
 		ReporterTimeLocked,
 		ReportingLockCalculationError,
+		RewardCalculationError,
 		/// Timestamp already reported.
 		TimestampAlreadyReported,
 		/// Withdrawal period didn't pass.
@@ -570,8 +598,7 @@ pub mod pallet {
 			if Self::get_current_tip(query_id) == Zero::zero() {
 				let index = <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default();
 				if index != 0 {
-					// todo: safe math
-					let idx: usize = index as usize - 1;
+					let idx = (index as usize).checked_sub(1).ok_or(Error::<T>::InvalidIndex)?;
 					// Replace unfunded feed in array with last element
 					<QueryIdsWithFunding<T>>::try_mutate(
 						|query_ids_with_funding| -> DispatchResult {
@@ -1241,32 +1268,26 @@ pub mod pallet {
 					if locked_balance >= amount {
 						// if staker's locked balance covers full amount, use that
 						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
-					// 		toWithdraw -= _amount; // <- todo: check whether this is required
+						<ToWithdraw<T>>::mutate(|locked| *locked = locked.saturating_sub(amount));
 					} else {
 						// otherwise, stake the whole locked balance
-						// 		toWithdraw -= _staker.lockedBalance; <- todo: check whether this is required
+						<ToWithdraw<T>>::mutate(|locked| {
+							*locked = locked.saturating_sub(staker.locked_balance)
+						});
 						staker.locked_balance = Amount::zero();
 					}
 				} else {
 					if staked_balance == Amount::zero() {
-						// todo:
-						// 		// if staked balance and locked balance equal 0, save current vote tally.
-						// 		// voting participation used for calculating rewards
-						// 		(bool _success, bytes memory _returnData) = governance.call(
-						// 			abi.encodeWithSignature("getVoteCount()")
-						// 		);
-						// 		if (_success) {
-						// 			_staker.startVoteCount = uint256(abi.decode(_returnData, (uint256)));
-						// 		}
-						// 		(_success,_returnData) = governance.call(
-						// 			abi.encodeWithSignature("getVoteTallyByAddress(address)",msg.sender)
-						// 		);
-						// 		if(_success){
-						// 			_staker.startVoteTally =  abi.decode(_returnData,(uint256));
-						// 		}
+						// if staked balance and locked balance equal 0, save current vote tally.
+						// voting participation used for calculating rewards
+						staker.start_vote_count = Self::get_vote_count();
+						staker.start_vote_tally = Self::get_vote_tally_by_address(&reporter);
 					}
 				}
-				Self::update_stake_and_pay_rewards(&mut staker, staked_balance + amount)?;
+				Self::update_stake_and_pay_rewards(
+					(&reporter, &mut staker),
+					staked_balance + amount,
+				)?;
 				staker.start_date = Self::now(); // This resets the staker start date to now
 				*maybe = Some(staker);
 				Ok(())
@@ -1298,10 +1319,10 @@ pub mod pallet {
 						ensure!(staker.staked_balance >= amount, Error::<T>::InsufficientStake);
 						// todo: safe math
 						let stake_amount = staker.staked_balance - amount;
-						Self::update_stake_and_pay_rewards(staker, stake_amount)?;
+						Self::update_stake_and_pay_rewards((&reporter, staker), stake_amount)?;
 						staker.start_date = Self::now();
 						staker.locked_balance = staker.locked_balance.saturating_add(amount);
-						// toWithdraw += _amount; // <- todo: check whether this is required here
+						<ToWithdraw<T>>::mutate(|locked| *locked = locked.saturating_add(amount));
 						Ok(())
 					},
 				}
@@ -1356,7 +1377,9 @@ pub mod pallet {
 							Self::now().saturating_sub(staker.start_date) >= 7 * DAYS,
 							Error::<T>::WithdrawalPeriodPending
 						);
-						// toWithdraw -= _staker.lockedBalance; // todo: required?
+						<ToWithdraw<T>>::mutate(|locked| {
+							*locked = locked.saturating_sub(staker.locked_balance)
+						});
 						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
 						Ok(())
 					},
@@ -1394,21 +1417,30 @@ pub mod pallet {
 						if locked_balance >= amount {
 							// if locked balance is at least stakeAmount, slash from locked balance
 							staker.locked_balance = staker.locked_balance.saturating_sub(amount);
-						// 	toWithdraw -= stakeAmount;  // todo: required?
+							<ToWithdraw<T>>::mutate(|locked| {
+								*locked = locked.saturating_sub(amount)
+							});
 						} else if locked_balance.saturating_add(staked_balance) >= amount {
 							// if locked balance + staked balance is at least stake amount,
 							// slash from locked balance and slash remainder from staked balance
 							Self::update_stake_and_pay_rewards(
-								staker,
+								(&reporter, staker),
 								staked_balance
 									.saturating_sub(amount.saturating_sub(locked_balance)),
 							)?;
-							// 	toWithdraw -= _lockedBalance; // todo: required?
+							<ToWithdraw<T>>::mutate(|locked| {
+								*locked = locked.saturating_sub(locked_balance)
+							});
 							staker.locked_balance = Amount::zero();
 						} else {
 							// if sum(locked balance + staked balance) is less than stakeAmount, slash sum
-							// 	toWithdraw -= _lockedBalance; // todo: required?
-							Self::update_stake_and_pay_rewards(staker, Amount::zero())?;
+							<ToWithdraw<T>>::mutate(|locked| {
+								*locked = locked.saturating_sub(locked_balance)
+							});
+							Self::update_stake_and_pay_rewards(
+								(&reporter, staker),
+								Amount::zero(),
+							)?;
 							staker.locked_balance = Amount::zero();
 						}
 						Ok(())

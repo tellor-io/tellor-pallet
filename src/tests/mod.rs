@@ -43,12 +43,12 @@ type Config = crate::types::Configuration;
 type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
 
-const STAKE_AMOUNT: u128 = 100_000_000_000_000_000_000;
+const STAKE_AMOUNT: u128 = 100_000_000_000_000_000_000; // 100 TRB
 
 fn trb(amount: impl Into<f64>) -> Amount {
 	// TRB amount has 18 decimals
-	const UNIT: u128 = 1_000_000_000_000_000_000;
-	Amount::from((amount.into() * UNIT as f64) as u128)
+	const UNIT: f64 = 1_000_000_000_000_000_000.0;
+	Amount::from((amount.into() * UNIT) as u128)
 }
 
 fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeId {

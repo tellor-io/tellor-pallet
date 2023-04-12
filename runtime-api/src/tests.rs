@@ -46,7 +46,7 @@ type AccountId = u64;
 type Balance = u64;
 type BlockNumber = u64;
 type MaxValueLength = ConstU32<4>;
-type StakeInfo = tellor::StakeInfo<Balance, <Test as tellor::Config>::MaxQueriesPerReporter>;
+type StakeInfo = tellor::StakeInfo<<Test as tellor::Config>::MaxQueriesPerReporter>;
 type Value = BoundedVec<u8, MaxValueLength>;
 
 // Configure a mock runtime to test implementation of the runtime-api
@@ -356,7 +356,7 @@ mock_impl_runtime_apis! {
 		}
 
 		fn get_vote_tally_by_address(voter: AccountId) -> u128 {
-			tellor::Pallet::<Test>::get_vote_tally_by_address(voter)
+			tellor::Pallet::<Test>::get_vote_tally_by_address(&voter)
 		}
 	}
 }

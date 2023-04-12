@@ -15,7 +15,6 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::types::{Address, Amount, ParaId};
-use sp_core::U256;
 use sp_std::{vec, vec::Vec};
 
 pub(crate) mod governance;
@@ -57,7 +56,7 @@ impl<'a> Call<'a> {
 		self
 	}
 
-	pub(crate) fn uint(mut self, value: impl Into<U256>) -> Self {
+	pub(crate) fn uint(mut self, value: impl Into<Amount>) -> Self {
 		let mut encoded = [0u8; 32];
 		value.into().to_big_endian(&mut encoded);
 		self.parameters.push(Parameter::Static(encoded));
@@ -75,7 +74,7 @@ impl<'a> Call<'a> {
 					// https://docs.soliditylang.org/en/latest/abi-spec.html#use-of-dynamic-types
 					DynamicParameter::Bytes(_) => {
 						// offset in bytes to start of data area
-						U256::from(self.parameters.len() * 32).to_big_endian(&mut buffer);
+						Amount::from(self.parameters.len() * 32).to_big_endian(&mut buffer);
 						self.function.extend(buffer);
 					},
 				},
@@ -88,7 +87,7 @@ impl<'a> Call<'a> {
 				match parameter {
 					DynamicParameter::Bytes(parameter) => {
 						// Define length
-						U256::from(parameter.len()).to_big_endian(&mut buffer);
+						Amount::from(parameter.len()).to_big_endian(&mut buffer);
 						self.function.extend(buffer);
 
 						// Add data, padding to 32 bytes

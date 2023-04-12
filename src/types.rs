@@ -44,8 +44,7 @@ pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLengt
 pub type QueryId = H256;
 pub(crate) type ReportOf<T> =
 	oracle::Report<AccountIdOf<T>, BlockNumberOf<T>, ValueOf<T>, <T as Config>::MaxTimestamps>;
-pub(crate) type StakeInfoOf<T> =
-	oracle::StakeInfo<BalanceOf<T>, <T as Config>::MaxQueriesPerReporter>;
+pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<<T as Config>::MaxQueriesPerReporter>;
 pub type Timestamp = u64;
 pub(crate) type TipOf<T> = autopay::Tip<BalanceOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
@@ -132,7 +131,7 @@ pub(crate) mod oracle {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxQueries))]
-	pub struct StakeInfo<Balance, MaxQueries: Get<u32>> {
+	pub struct StakeInfo<MaxQueries: Get<u32>> {
 		/// The address on the staking chain.
 		pub(crate) address: Address,
 		/// Stake or withdrawal request start date.
@@ -142,7 +141,7 @@ pub(crate) mod oracle {
 		/// Amount locked for withdrawal.
 		pub(crate) locked_balance: Amount,
 		/// Used for staking reward calculation.
-		pub(crate) reward_debt: Balance,
+		pub(crate) reward_debt: Amount,
 		/// Timestamp of reporter's last reported value.
 		pub(crate) reporter_last_timestamp: Timestamp,
 		/// Total number of reports submitted by reporter.
@@ -157,14 +156,14 @@ pub(crate) mod oracle {
 		pub(crate) reports_submitted_by_query_id: BoundedBTreeMap<QueryId, u128, MaxQueries>,
 	}
 
-	impl<Balance: Default + Zero, MaxQueries: Get<u32>> StakeInfo<Balance, MaxQueries> {
+	impl<MaxQueries: Get<u32>> StakeInfo<MaxQueries> {
 		pub(crate) fn new(address: Address) -> Self {
 			Self {
 				address,
 				start_date: Zero::zero(),
 				staked_balance: Amount::zero(),
 				locked_balance: Amount::zero(),
-				reward_debt: Zero::zero(),
+				reward_debt: Amount::zero(),
 				reporter_last_timestamp: Zero::zero(),
 				reports_submitted: 0,
 				start_vote_count: 0,
