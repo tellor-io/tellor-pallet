@@ -196,79 +196,80 @@ pub mod pallet {
 
 	// AutoPay
 	#[pallet::storage]
-	pub type CurrentFeeds<T> = StorageMap<
+	pub(super) type CurrentFeeds<T> = StorageMap<
 		_,
 		Blake2_128Concat,
 		QueryId,
 		BoundedVec<FeedId, <T as Config>::MaxFeedsPerQuery>,
 	>;
 	#[pallet::storage]
-	pub type DataFeeds<T> =
+	pub(super) type DataFeeds<T> =
 		StorageDoubleMap<_, Blake2_128Concat, QueryId, Blake2_128Concat, FeedId, FeedOf<T>>;
 	#[pallet::storage]
-	pub type FeedsWithFunding<T> =
+	pub(super) type FeedsWithFunding<T> =
 		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
-	pub type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedId, QueryId>;
+	pub(super) type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedId, QueryId>;
 	#[pallet::storage]
-	pub type QueryIdsWithFunding<T> =
+	pub(super) type QueryIdsWithFunding<T> =
 		StorageValue<_, BoundedVec<QueryId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
 	#[pallet::getter(fn query_ids_with_funding_index)]
-	pub type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryId, u32>;
+	pub(super) type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryId, u32>;
 	#[pallet::storage]
 	#[pallet::getter(fn tips)]
-	pub type Tips<T> = StorageMap<
+	pub(super) type Tips<T> = StorageMap<
 		_,
 		Blake2_128Concat,
 		QueryId,
 		BoundedVec<TipOf<T>, <T as Config>::MaxTipsPerQuery>,
 	>;
 	#[pallet::storage]
-	pub type UserTipsTotal<T> =
+	pub(super) type UserTipsTotal<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, AmountOf<T>, ValueQuery>;
 	// Oracle
 	#[pallet::storage]
-	pub type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
+	pub(super) type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
 	#[pallet::storage]
-	pub type RewardRate<T> = StorageValue<_, AmountOf<T>>;
+	pub(super) type RewardRate<T> = StorageValue<_, AmountOf<T>>;
 	#[pallet::storage]
-	pub type StakeAmount<T> = StorageValue<_, AmountOf<T>>;
+	pub(super) type StakeAmount<T> = StorageValue<_, AmountOf<T>>;
 	#[pallet::storage]
-	pub type StakerDetails<T> = StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
+	pub(super) type StakerDetails<T> =
+		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
 	#[pallet::storage]
-	pub type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
+	pub(super) type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_new_value)]
-	pub type TimeOfLastNewValue<T> = StorageValue<_, Timestamp>;
+	pub(super) type TimeOfLastNewValue<T> = StorageValue<_, Timestamp>;
 	#[pallet::storage]
-	pub type TotalStakeAmount<T> = StorageValue<_, AmountOf<T>, ValueQuery>;
+	pub(super) type TotalStakeAmount<T> = StorageValue<_, AmountOf<T>, ValueQuery>;
 	#[pallet::storage]
-	pub type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
+	pub(super) type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
 	// Governance
 	#[pallet::storage]
-	pub type DisputeIdsByReporter<T> =
+	pub(super) type DisputeIdsByReporter<T> =
 		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Blake2_128Concat, DisputeId, ()>;
 	#[pallet::storage]
-	pub type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeId, DisputeOf<T>>;
+	pub(super) type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeId, DisputeOf<T>>;
 	#[pallet::storage]
-	pub type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryId, u128>;
+	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryId, u128>;
 	#[pallet::storage]
-	pub type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
+	pub(super) type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
 	#[pallet::storage]
-	pub type VoteInfo<T> =
+	pub(super) type VoteInfo<T> =
 		StorageDoubleMap<_, Blake2_128Concat, DisputeId, Blake2_128Concat, u8, VoteOf<T>>;
 	#[pallet::storage]
-	pub type VoteRounds<T> = StorageMap<_, Blake2_128Concat, DisputeId, u8, ValueQuery>;
+	pub(super) type VoteRounds<T> = StorageMap<_, Blake2_128Concat, DisputeId, u8, ValueQuery>;
 	#[pallet::storage]
-	pub type VoteTallyByAddress<T> =
+	pub(super) type VoteTallyByAddress<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
 	// Query Data
 	#[pallet::storage]
-	pub type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryId, QueryDataOf<T>>;
+	pub(super) type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryId, QueryDataOf<T>>;
 	// Configuration
 	#[pallet::storage]
-	pub type Configuration<T> = StorageValue<_, types::Configuration>;
+	pub(super) type Configuration<T> = StorageValue<_, types::Configuration>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
