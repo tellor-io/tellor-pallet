@@ -46,7 +46,7 @@ type AccountId = u64;
 type Balance = u64;
 type BlockNumber = u64;
 type MaxValueLength = ConstU32<4>;
-type StakeInfo = tellor::StakeInfo<<Test as tellor::Config>::MaxQueriesPerReporter>;
+type StakeInfo = tellor::StakeInfo<Balance, <Test as tellor::Config>::MaxQueriesPerReporter>;
 type Value = BoundedVec<u8, MaxValueLength>;
 
 // Configure a mock runtime to test implementation of the runtime-api
@@ -112,6 +112,7 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Balance = Balance;
+	type Decimals = ();
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
@@ -311,7 +312,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::did_vote(dispute_id, vote_round, voter)
 		}
 
-		fn get_dispute_fee() -> Balance {
+		fn get_dispute_fee() -> Option<Balance> {
 			tellor::Pallet::<Test>::get_dispute_fee()
 		}
 
@@ -691,7 +692,7 @@ mod governance {
 	#[test]
 	fn get_dispute_fee() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), 0);
+			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), None);
 		});
 	}
 

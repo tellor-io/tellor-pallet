@@ -15,6 +15,7 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::{
+	constants::DECIMALS,
 	contracts::registry,
 	mock,
 	mock::*,
@@ -28,7 +29,7 @@ use crate::{
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{
 	assert_noop, assert_ok,
-	traits::{PalletInfoAccess, UnixTime},
+	traits::{Get, PalletInfoAccess, UnixTime},
 };
 use sp_core::{bytes::to_hex, keccak_256, H256};
 use sp_runtime::traits::{AccountIdConversion, BadOrigin};
@@ -39,16 +40,19 @@ mod autopay;
 mod governance;
 mod oracle;
 
+type Balance = <Test as crate::Config>::Balance;
 type Config = crate::types::Configuration;
 type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
+type U256ToBalance = crate::types::U256ToBalance<Test>;
 
-const STAKE_AMOUNT: u128 = 100_000_000_000_000_000_000; // 100 TRB
+const PRICE: Balance = 5; // 1 TRB = 5 UNIT (uses static price for now)
+const STAKE_AMOUNT: u128 = 100 * TRB;
+const TRB: u128 = 10u128.pow(DECIMALS);
 
 fn trb(amount: impl Into<f64>) -> Amount {
 	// TRB amount has 18 decimals
-	const UNIT: f64 = 1_000_000_000_000_000_000.0;
-	Amount::from((amount.into() * UNIT) as u128)
+	Amount::from((amount.into() * TRB as f64) as u128)
 }
 
 fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeId {
@@ -116,14 +120,19 @@ fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 	])
 }
 
-fn token(amount: impl Into<f64>) -> BalanceOf<Test> {
-	// test parachain token has 12 decimals
-	pub(crate) const UNIT: u64 = 1_000_000_000_000;
-	(amount.into() * UNIT as f64) as u64
+fn token(amount: impl Into<f64>) -> Balance {
+	// test parachain token
+	(amount.into() * unit() as f64) as u64
 }
 
 fn uint_value(value: impl Into<Uint>) -> ValueOf<Test> {
 	ethabi::encode(&[Token::Uint(value.into())]).try_into().unwrap()
+}
+
+// A unit of the token configured on the pallet, with corresponding decimal places.
+fn unit() -> u128 {
+	let decimals: u8 = <Test as crate::Config>::Decimals::get();
+	10u128.pow(decimals.into())
 }
 
 fn xcm_transact(
@@ -153,6 +162,11 @@ fn converts_token() {
 }
 
 #[test]
+fn converts() {
+	assert_eq!(Tellor::convert(trb(100)).unwrap(), (token(100) * PRICE).into())
+}
+
+#[test]
 fn dispute_fees() {
 	assert_eq!(
 		Tellor::dispute_fees(),
@@ -166,6 +180,24 @@ fn encodes_spot_price() {
 		"0xa6f013ee236804827b77696d350e9f0ac3e879328f2a3021d473a0b778ad78ac",
 		to_hex(&keccak_256(&spot_price("btc", "usd")), false)
 	)
+}
+
+#[test]
+fn redenominates() {
+	assert_eq!(
+		Tellor::redenominate((100 * 10u128.pow(18)).into(), 12),
+		Some((100 * 10u64.pow(12)).into())
+	);
+	assert_eq!(
+		Tellor::redenominate((100 * 10u128.pow(18)).into(), 20),
+		Some((100 * 10u128.pow(20)).into())
+	);
+	assert_eq!(
+		Tellor::redenominate((100 * 10u128.pow(18)).into(), 18),
+		Some((100 * 10u128.pow(18)).into())
+	);
+	assert_eq!(Tellor::redenominate((100 * 10u128.pow(18)).into(), 0), Some(100.into()));
+	assert_eq!(Tellor::redenominate((100 * 10u128.pow(18)).into(), u8::MAX.into()), None);
 }
 
 #[test]

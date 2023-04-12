@@ -15,7 +15,7 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
-use crate::constants::UNIT;
+use crate::constants::DECIMALS;
 use sp_runtime::traits::Hash;
 
 impl<T: Config> Pallet<T> {
@@ -31,18 +31,16 @@ impl<T: Config> Pallet<T> {
 		})
 		.into();
 		// update reward rate = real staking rewards balance / 30 days
-		<RewardRate<T>>::set(
-			staking_rewards_balance
-				.saturating_sub(
-					<AccumulatedRewardPerShare<T>>::get()
-						.saturating_mul(<TotalStakeAmount<T>>::get())
-						.checked_div(UNIT.into())
-						.ok_or(Error::<T>::RewardCalculationError)?
-						.saturating_sub(<TotalRewardDebt<T>>::get()),
-				)
-				.checked_div((30 * DAYS).into())
-				.ok_or(Error::<T>::RewardCalculationError)?,
-		);
+		let total_stake_amount =
+			Self::convert(<TotalStakeAmount<T>>::get()).ok_or(Error::<T>::StakeConversionError)?;
+		// todo: safe math
+		<RewardRate<T>>::set(U256ToBalance::<T>::convert(
+			(staking_rewards_balance -
+				((<AccumulatedRewardPerShare<T>>::get().into() * total_stake_amount) /
+					Amount::from(Self::unit()) -
+					<TotalRewardDebt<T>>::get())) /
+				Amount::from(30 * DAYS),
+		));
 		Ok(())
 	}
 
@@ -50,9 +48,22 @@ impl<T: Config> Pallet<T> {
 		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
 	}
 
-	pub(super) fn convert(amount: Amount) -> BalanceOf<T> {
+	/// Converts a stake amount to a local token amount.
+	/// # Arguments
+	/// * `stake_amount` - The amount staked.
+	/// # Returns
+	/// A stake amount as a local token amount..
+	pub(super) fn convert(stake_amount: Amount) -> Option<Amount> {
 		// todo: use rate from oracle
-		<U256ToBalance<T>>::convert(amount / Amount::from(10).pow(Amount::from(6)))
+		const UNIT: u128 = 10u128.pow(DECIMALS);
+		const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
+
+		PRICE
+			// Convert supplied amount into local balance amount based on price
+			// todo: safe math
+			.map(|price| stake_amount * Amount::from(price) / Amount::from(UNIT))
+			// Redenominate to local balance number of decimals
+			.and_then(|amount| Self::redenominate(amount, T::Decimals::get() as u32))
 	}
 
 	/// Determines if an account voted for a specific dispute round.
@@ -287,9 +298,11 @@ impl<T: Config> Pallet<T> {
 	/// Get the latest dispute fee.
 	/// # Returns
 	/// The latest dispute fee.
-	pub fn get_dispute_fee() -> BalanceOf<T> {
+	pub fn get_dispute_fee() -> Option<BalanceOf<T>> {
 		// todo: make configurable and use safe math
-		Self::convert(<StakeAmount<T>>::get().unwrap_or_default() / Amount::from(10))
+		<StakeAmount<T>>::get()
+			.and_then(|amount| Self::convert(amount / Amount::from(10)))
+			.map(|amount| U256ToBalance::<T>::convert(amount))
 	}
 
 	/// Returns information on a dispute for a given identifier.
@@ -933,6 +946,20 @@ impl<T: Config> Pallet<T> {
 		T::Time::now().as_secs()
 	}
 
+	pub(super) fn redenominate(amount: Amount, decimals: u32) -> Option<Amount> {
+		if DECIMALS > decimals {
+			Amount::from(10)
+				.checked_pow(Amount::from(DECIMALS - decimals))
+				.map(|r| amount / r)
+		} else if decimals > DECIMALS {
+			Amount::from(10)
+				.checked_pow(Amount::from(decimals - DECIMALS))
+				.map(|r| amount * r)
+		} else {
+			Some(amount)
+		}
+	}
+
 	/// Removes a value from the oracle.
 	/// # Arguments
 	/// * `query_id` - Identifier of the specific data feed.
@@ -1035,47 +1062,55 @@ impl<T: Config> Pallet<T> {
 		T::PalletId::get().into_sub_account_truncating(b"tips")
 	}
 
+	/// A unit in which balances are recorded.
+	fn unit() -> u128 {
+		10u128.pow(T::Decimals::get().into())
+	}
+
 	/// Updates accumulated staking rewards per staked token.
 	pub(crate) fn update_rewards() -> DispatchResult {
 		let timestamp = Self::now();
-		if <TimeOfLastAllocation<T>>::get() == timestamp {
+		let time_of_last_allocation = <TimeOfLastAllocation<T>>::get();
+		if time_of_last_allocation == timestamp {
 			return Ok(())
 		}
-		if <TotalStakeAmount<T>>::get() == Amount::zero() ||
-			<RewardRate<T>>::get() == Amount::zero()
-		{
+		let total_stake_amount =
+			Self::convert(<TotalStakeAmount<T>>::get()).ok_or(Error::<T>::StakeConversionError)?;
+		let reward_rate = <RewardRate<T>>::get();
+		if total_stake_amount == Amount::zero() || reward_rate == Zero::zero() {
 			<TimeOfLastAllocation<T>>::set(timestamp);
 			return Ok(())
 		}
 
 		// todo: safe math
 		// calculate accumulated reward per token staked
-		let new_accumulated_reward_per_share: Amount = <AccumulatedRewardPerShare<T>>::get() +
-			(Amount::from(timestamp - <TimeOfLastAllocation<T>>::get()) *
-				<RewardRate<T>>::get() *
-				Amount::from(UNIT)) /
-				<TotalStakeAmount<T>>::get();
+		let unit: Amount = Self::unit().into();
+		let accumulated_reward_per_share = <AccumulatedRewardPerShare<T>>::get().into();
+		let new_accumulated_reward_per_share: Amount = accumulated_reward_per_share +
+			(Amount::from(timestamp - time_of_last_allocation) * reward_rate.into() * unit) /
+				total_stake_amount;
 		// calculate accumulated reward with new_accumulated_reward_per_share
-		let accumulated_reward: Amount = ((new_accumulated_reward_per_share *
-			<TotalStakeAmount<T>>::get()) /
-			UNIT - <TotalRewardDebt<T>>::get());
-		if accumulated_reward >= <StakingRewardsBalance<T>>::get().into() {
+		let total_reward_debt = <TotalRewardDebt<T>>::get().into();
+		let accumulated_reward =
+			(new_accumulated_reward_per_share * total_stake_amount) / unit - total_reward_debt;
+		let staking_rewards_balance = <StakingRewardsBalance<T>>::get().into();
+		if accumulated_reward >= staking_rewards_balance {
 			// if staking rewards run out, calculate remaining reward per staked token and set
 			// RewardRate to 0
-			let new_pending_rewards: Amount = <StakingRewardsBalance<T>>::get().into() -
-				((<AccumulatedRewardPerShare<T>>::get() * <TotalStakeAmount<T>>::get()) / UNIT -
-					<TotalRewardDebt<T>>::get());
+			// todo: safe math
+			let new_pending_rewards = staking_rewards_balance -
+				((accumulated_reward_per_share * total_stake_amount) / unit - total_reward_debt);
 			<AccumulatedRewardPerShare<T>>::try_mutate(|value| -> DispatchResult {
-				*value = value.saturating_add(
-					((new_pending_rewards * Amount::from(UNIT)) / <TotalStakeAmount<T>>::get()),
-				);
+				// todo: safe math
+				*value +=
+					U256ToBalance::<T>::convert((new_pending_rewards * unit) / total_stake_amount);
 				Ok(())
 			})?;
-			<RewardRate<T>>::set(Amount::zero());
+			<RewardRate<T>>::set(Zero::zero());
 		} else {
-			<AccumulatedRewardPerShare<T>>::set(
-				new_accumulated_reward_per_share.try_into().unwrap(),
-			);
+			<AccumulatedRewardPerShare<T>>::set(U256ToBalance::<T>::convert(
+				new_accumulated_reward_per_share,
+			));
 		}
 		<TimeOfLastAllocation<T>>::set(timestamp);
 		Ok(())
@@ -1096,12 +1131,12 @@ impl<T: Config> Pallet<T> {
 		if stake_info.staked_balance > Amount::zero() {
 			// if address already has a staked balance, calculate and transfer pending rewards
 			let mut pending_reward = <U256ToBalance<T>>::convert(
-				stake_info
-					.staked_balance
-					.saturating_mul(<AccumulatedRewardPerShare<T>>::get())
-					.checked_div(UNIT.into())
+				Self::convert(stake_info.staked_balance)
+					.ok_or(Error::<T>::StakeConversionError)?
+					.saturating_mul(<AccumulatedRewardPerShare<T>>::get().into())
+					.checked_div(Self::unit().into())
 					.ok_or(Error::<T>::RewardCalculationError)?
-					.saturating_sub(stake_info.reward_debt),
+					.saturating_sub(stake_info.reward_debt.into()),
 			);
 			// get staker voting participation rate
 			let number_of_votes =
@@ -1144,34 +1179,39 @@ impl<T: Config> Pallet<T> {
 			Ok(())
 		})?;
 		// tracks rewards accumulated before stake amount updated
-		let accumulated_reward_per_share = <AccumulatedRewardPerShare<T>>::get();
-		stake_info.reward_debt = stake_info
-			.staked_balance
-			.saturating_mul(accumulated_reward_per_share)
-			.checked_div(UNIT.into())
-			.ok_or(Error::<T>::RewardCalculationError)?;
+		let accumulated_reward_per_share = <AccumulatedRewardPerShare<T>>::get().into();
+		stake_info.reward_debt = U256ToBalance::<T>::convert(
+			Self::convert(stake_info.staked_balance)
+				.ok_or(Error::<T>::StakeConversionError)?
+				.saturating_mul(accumulated_reward_per_share)
+				.checked_div(Self::unit().into())
+				.ok_or(Error::<T>::RewardCalculationError)?,
+		);
 		let total_reward_debt = <TotalRewardDebt<T>>::mutate(|debt| {
 			*debt = debt.saturating_add(stake_info.reward_debt);
 			*debt
 		});
-		let total_stake_amount = <TotalStakeAmount<T>>::mutate(|total| {
+		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::mutate(|total| {
 			*total = total.saturating_add(stake_info.staked_balance);
 			*total
-		});
+		}))
+		.ok_or(Error::<T>::StakeConversionError)?;
 		// update reward rate if staking rewards are available given staker's updated parameters
 		<RewardRate<T>>::try_mutate(|reward_rate| -> DispatchResult {
-			if *reward_rate == Amount::zero() {
-				*reward_rate = <StakingRewardsBalance<T>>::get()
-					.into()
-					.saturating_sub(
-						accumulated_reward_per_share
-							.saturating_mul(total_stake_amount)
-							.checked_div(UNIT.into())
-							.ok_or(Error::<T>::RewardCalculationError)?
-							.saturating_sub(total_reward_debt),
-					)
-					.checked_div((30 * DAYS).into())
-					.ok_or(Error::<T>::RewardCalculationError)?;
+			if *reward_rate == Zero::zero() {
+				*reward_rate = U256ToBalance::<T>::convert(
+					<StakingRewardsBalance<T>>::get()
+						.into()
+						.saturating_sub(
+							accumulated_reward_per_share
+								.saturating_mul(total_stake_amount)
+								.checked_div(Self::unit().into())
+								.ok_or(Error::<T>::RewardCalculationError)?
+								.saturating_sub(total_reward_debt.into()),
+						)
+						.checked_div((30 * DAYS).into())
+						.ok_or(Error::<T>::RewardCalculationError)?,
+				);
 			}
 			Ok(())
 		})?;

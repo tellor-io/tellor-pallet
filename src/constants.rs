@@ -24,4 +24,5 @@ pub(crate) const WEEKS: Timestamp = 7 * DAYS;
 /// Base amount of time before a reporter is able to submit a value again.
 pub(crate) const REPORTING_LOCK: Timestamp = 12 * HOURS;
 
-pub(crate) const UNIT: u128 = 1_000_000_000_000_000_000;
+/// The number of decimals of the TRB token.
+pub(crate) const DECIMALS: u32 = 18;

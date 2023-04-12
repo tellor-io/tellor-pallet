@@ -97,6 +97,10 @@ pub mod pallet {
 		/// The units in which we record balances.
 		type Balance: Balance + From<u64> + Into<U256>;
 
+		/// The number of decimals used by the balance unit.
+		#[pallet::constant]
+		type Decimals: Get<u8>;
+
 		/// Percentage, 1000 is 100%, 50 is 5%, etc
 		#[pallet::constant]
 		type Fee: Get<u16>;
@@ -219,14 +223,14 @@ pub mod pallet {
 	/// Accumulated staking reward per staked token
 	#[pallet::storage]
 	#[pallet::getter(fn accumulated_reward_per_share)]
-	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, Amount, ValueQuery>;
+	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Mapping of query identifiers to a report.
 	#[pallet::storage]
 	pub(super) type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
 	/// Total staking rewards released per second.
 	#[pallet::storage]
 	#[pallet::getter(fn reward_rate)]
-	pub(super) type RewardRate<T> = StorageValue<_, Amount, ValueQuery>;
+	pub(super) type RewardRate<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Minimum amount required to be a staker.
 	#[pallet::storage]
 	pub(super) type StakeAmount<T> = StorageValue<_, Amount>;
@@ -251,7 +255,7 @@ pub mod pallet {
 	/// Staking reward debt, used to calculate real staking rewards balance.
 	#[pallet::storage]
 	#[pallet::getter(fn total_reward_debt)]
-	pub(super) type TotalRewardDebt<T> = StorageValue<_, Amount, ValueQuery>;
+	pub(super) type TotalRewardDebt<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Total amount of tokens locked in the staking controller contract.
 	#[pallet::storage]
 	pub(super) type TotalStakeAmount<T> = StorageValue<_, Amount, ValueQuery>;
@@ -442,6 +446,7 @@ pub mod pallet {
 		ReporterTimeLocked,
 		ReportingLockCalculationError,
 		RewardCalculationError,
+		StakeConversionError,
 		/// Timestamp already reported.
 		TimestampAlreadyReported,
 		/// Withdrawal period didn't pass.
@@ -450,6 +455,7 @@ pub mod pallet {
 		// Governance
 		/// Voter has already voted.
 		AlreadyVoted,
+		DisputeFeeCalculationError,
 		/// Dispute must be started within reporting lock time.
 		DisputeReportingPeriodExpired,
 		/// New dispute round must be started within a day.
@@ -1083,7 +1089,7 @@ pub mod pallet {
 				vote_round,
 				start_date: Self::now(),
 				block_number: frame_system::Pallet::<T>::block_number(),
-				fee: Self::get_dispute_fee(),
+				fee: Self::get_dispute_fee().ok_or(Error::<T>::DisputeFeeCalculationError)?,
 				tally_date: 0,
 				users: Tally::default(),
 				reporters: Tally::default(),
@@ -1139,8 +1145,10 @@ pub mod pallet {
 				dispute.value =
 					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
 			}
-			let stake_amount =
-				Self::convert(<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?);
+			let stake_amount = U256ToBalance::<T>::convert(
+				Self::convert(<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?)
+					.ok_or(Error::<T>::DisputeFeeCalculationError)?,
+			);
 			if vote.fee > stake_amount {
 				vote.fee = stake_amount;
 			}
