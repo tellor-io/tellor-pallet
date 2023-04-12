@@ -2403,14 +2403,14 @@ fn get_current_feeds() {
 fn create_feed(
 	feed_creator: AccountIdOf<Test>,
 	query_id: QueryId,
-	reward: AmountOf<Test>,
+	reward: BalanceOf<Test>,
 	start_time: Timestamp,
 	interval: Timestamp,
 	window: Timestamp,
 	price_threshold: u16,
-	reward_increase_per_second: AmountOf<Test>,
+	reward_increase_per_second: BalanceOf<Test>,
 	query_data: QueryDataOf<Test>,
-	amount: AmountOf<Test>,
+	amount: BalanceOf<Test>,
 ) -> FeedId {
 	assert_ok!(Tellor::setup_data_feed(
 		RuntimeOrigin::signed(feed_creator),

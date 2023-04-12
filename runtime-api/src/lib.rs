@@ -22,7 +22,7 @@ pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
 pub use governance::VoteInfo;
 use sp_std::vec::Vec;
-use tellor::{DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, VoteResult};
+use tellor::{Amount, DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, VoteResult};
 
 mod autopay;
 mod governance;
@@ -137,7 +137,7 @@ sp_api::decl_runtime_apis! {
 		fn get_tips_by_address(user: AccountId) -> Amount;
 	}
 
-	pub trait TellorOracle<AccountId: Codec, Amount: Codec, BlockNumber: Codec, StakeInfo: Codec, Value: Codec> where
+	pub trait TellorOracle<AccountId: Codec, BlockNumber: Codec, StakeInfo: Codec, Value: Codec> where
 	{
 		/// Returns the block number at a given timestamp.
 		/// # Arguments

@@ -19,7 +19,7 @@ use crate::constants::DISPUTE_SUB_ACCOUNT_ID;
 use sp_runtime::traits::Hash;
 
 impl<T: Config> Pallet<T> {
-	pub(super) fn add_staking_rewards(amount: AmountOf<T>) -> DispatchResult {
+	pub(super) fn add_staking_rewards(amount: BalanceOf<T>) -> DispatchResult {
 		let pallet_id = T::PalletId::get();
 		T::Token::transfer(
 			&pallet_id.into_account_truncating(),
@@ -32,6 +32,11 @@ impl<T: Config> Pallet<T> {
 
 	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, Error<T>> {
 		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
+	}
+
+	pub(super) fn convert(amount: Amount) -> BalanceOf<T> {
+		// todo: use rate from oracle
+		<U256ToBalance<T>>::convert(amount / Amount::from(10).pow(Amount::from(6)))
 	}
 
 	/// Determines if an account voted for a specific dispute round.
@@ -116,13 +121,13 @@ impl<T: Config> Pallet<T> {
 		feed_funder: AccountIdOf<T>,
 		feed_id: FeedId,
 		query_id: QueryId,
-		amount: AmountOf<T>,
+		amount: BalanceOf<T>,
 	) -> DispatchResult {
 		let Some(mut feed) = <DataFeeds<T>>::get(query_id, feed_id) else {
 			return Err(Error::<T>::InvalidFeed.into());
 		};
 
-		ensure!(amount > <AmountOf<T>>::default(), Error::<T>::InvalidAmount);
+		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 		feed.details.balance.saturating_accrue(amount);
 		T::Token::transfer(
 			&feed_funder,
@@ -131,9 +136,7 @@ impl<T: Config> Pallet<T> {
 			true,
 		)?;
 		// Add to array of feeds with funding
-		if feed.details.feeds_with_funding_index == 0 &&
-			feed.details.balance > <AmountOf<T>>::default()
-		{
+		if feed.details.feeds_with_funding_index == 0 && feed.details.balance > Zero::zero() {
 			let index = <FeedsWithFunding<T>>::try_mutate(
 				|feeds_with_funding| -> Result<usize, DispatchError> {
 					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
@@ -183,19 +186,19 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
 	/// Amount of tip.
-	pub fn get_current_tip(query_id: QueryId) -> AmountOf<T> {
+	pub fn get_current_tip(query_id: QueryId) -> BalanceOf<T> {
 		// todo: optimise
 		// if no tips, return 0
 		if <Tips<T>>::get(query_id).map_or(0, |t| t.len()) == 0 {
-			return AmountOf::<T>::default()
+			return Zero::zero()
 		}
 		let timestamp_retrieved = Self::_get_current_value(query_id).map_or(0, |v| v.1);
 		match <Tips<T>>::get(query_id) {
 			Some(tips) => match tips.last() {
 				Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
-				_ => AmountOf::<T>::default(),
+				_ => Zero::zero(),
 			},
-			_ => AmountOf::<T>::default(),
+			_ => Zero::zero(),
 		}
 	}
 
@@ -266,9 +269,9 @@ impl<T: Config> Pallet<T> {
 	/// Get the latest dispute fee.
 	/// # Returns
 	/// The latest dispute fee.
-	pub fn get_dispute_fee() -> AmountOf<T> {
+	pub fn get_dispute_fee() -> BalanceOf<T> {
 		// todo: make configurable and use safe math
-		<StakeAmount<T>>::get().unwrap_or_default() / 10u8.into()
+		Self::convert(<StakeAmount<T>>::get().unwrap_or_default() / Amount::from(10))
 	}
 
 	/// Returns information on a dispute for a given identifier.
@@ -327,7 +330,7 @@ impl<T: Config> Pallet<T> {
 	/// Read currently funded single tips with query data.
 	/// # Returns
 	/// The current single tips.
-	pub fn get_funded_single_tips_info() -> Vec<(QueryDataOf<T>, AmountOf<T>)> {
+	pub fn get_funded_single_tips_info() -> Vec<(QueryDataOf<T>, BalanceOf<T>)> {
 		Self::get_funded_query_ids()
 			.into_iter()
 			.filter_map(|query_id| {
@@ -438,7 +441,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 		claimer: &AccountIdOf<T>,
-	) -> Result<AmountOf<T>, Error<T>> {
+	) -> Result<BalanceOf<T>, Error<T>> {
 		ensure!(
 			Self::now().saturating_sub(timestamp) > 12 * HOURS,
 			Error::<T>::ClaimBufferNotPassed
@@ -470,14 +473,11 @@ impl<T: Config> Pallet<T> {
 					let min_tip = &mut tips.get_mut(min).ok_or(Error::<T>::InvalidIndex)?;
 					ensure!(timestamp_before < min_tip.timestamp, Error::<T>::TipAlreadyEarned);
 					ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
-					ensure!(
-						min_tip.amount > <AmountOf<T>>::default(),
-						Error::<T>::TipAlreadyClaimed
-					);
+					ensure!(min_tip.amount > Zero::zero(), Error::<T>::TipAlreadyClaimed);
 
 					// todo: add test to ensure storage updated accordingly
 					let mut tip_amount = min_tip.amount;
-					min_tip.amount = <AmountOf<T>>::default();
+					min_tip.amount = Zero::zero();
 					let min_backup = min;
 
 					// check whether eligible for previous tips in array due to disputes
@@ -556,7 +556,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
 	/// All past tips.
-	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip<AmountOf<T>>> {
+	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip<BalanceOf<T>>> {
 		<Tips<T>>::get(query_id).map_or_else(Vec::default, |t| t.to_vec())
 	}
 
@@ -566,7 +566,7 @@ impl<T: Config> Pallet<T> {
 	/// * `index` - The index of the tip.
 	/// # Returns
 	/// The past tip, if found.
-	pub fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<AmountOf<T>>> {
+	pub fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<BalanceOf<T>>> {
 		<Tips<T>>::get(query_id).and_then(|t| t.get(index as usize).cloned())
 	}
 
@@ -660,7 +660,7 @@ impl<T: Config> Pallet<T> {
 		feed_id: FeedId,
 		query_id: QueryId,
 		timestamp: Timestamp,
-	) -> Result<AmountOf<T>, Error<T>> {
+	) -> Result<BalanceOf<T>, Error<T>> {
 		ensure!(Self::now().saturating_sub(timestamp) < 4 * WEEKS, Error::<T>::ClaimPeriodExpired);
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
@@ -678,7 +678,7 @@ impl<T: Config> Pallet<T> {
 			let v1 =
 				Self::bytes_to_price(value_retrieved.expect("value retrieved checked above; qed"))?;
 			let v2 = Self::bytes_to_price(value_retrieved_before)?;
-			if v2 == T::Price::default() {
+			if v2 == Zero::zero() {
 				price_change = 10_000;
 			} else if v1 >= v2 {
 				price_change = (T::Price::from(10_000u16).saturating_mul(v1.saturating_sub(v2)))
@@ -722,11 +722,11 @@ impl<T: Config> Pallet<T> {
 		feed_id: FeedId,
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
-	) -> AmountOf<T> {
+	) -> BalanceOf<T> {
 		// todo: use boundedvec for timestamps
 
-		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return <AmountOf<T>>::default()};
-		let mut cumulative_reward = <AmountOf<T>>::default();
+		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return Zero::zero()};
+		let mut cumulative_reward = <BalanceOf<T>>::zero();
 		for timestamp in timestamps {
 			cumulative_reward.saturating_accrue(
 				Self::_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
@@ -781,7 +781,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the amount required to report oracle values.
 	/// # Returns
 	/// The stake amount.
-	pub fn get_stake_amount() -> AmountOf<T> {
+	pub fn get_stake_amount() -> Amount {
 		<StakeAmount<T>>::get().unwrap_or_default()
 	}
 
@@ -833,14 +833,14 @@ impl<T: Config> Pallet<T> {
 	/// * `user` - Address of user to query.
 	/// # Returns
 	/// Total amount of tips paid by a user.
-	pub fn get_tips_by_address(user: &AccountIdOf<T>) -> AmountOf<T> {
+	pub fn get_tips_by_address(user: &AccountIdOf<T>) -> BalanceOf<T> {
 		<UserTipsTotal<T>>::get(user)
 	}
 
 	/// Returns the total amount staked for reporting.
 	/// # Returns
 	/// The total amount of token staked.
-	pub fn get_total_stake_amount() -> AmountOf<T> {
+	pub fn get_total_stake_amount() -> Amount {
 		<TotalStakeAmount<T>>::get()
 	}
 
@@ -857,7 +857,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Count of the number of values received for the query identifier.
 	pub fn get_new_value_count_by_query_id(query_id: QueryId) -> usize {
-		<Reports<T>>::get(query_id).map_or(usize::default(), |r| r.timestamps.len())
+		<Reports<T>>::get(query_id).map_or(usize::zero(), |r| r.timestamps.len())
 	}
 
 	/// Returns the total number of votes
@@ -1003,11 +1003,11 @@ impl<T: Config> Pallet<T> {
 
 	pub(super) fn update_stake_and_pay_rewards(
 		staker: &mut StakeInfoOf<T>,
-		new_staked_balance: AmountOf<T>,
+		new_staked_balance: Amount,
 	) -> Result<(), Error<T>> {
 		// todo: complete implementation
 		// _updateRewards();
-		if staker.staked_balance > <AmountOf<T>>::default() {
+		if staker.staked_balance > Amount::zero() {
 			// todo
 			// if address already has a staked balance, calculate and transfer pending rewards
 			// 	uint256 _pendingReward = (_staker.stakedBalance *
@@ -1043,7 +1043,9 @@ impl<T: Config> Pallet<T> {
 			// 	stakingRewardsBalance -= _pendingReward;
 			// 	require(token.transfer(msg.sender, _pendingReward));
 			// 	totalRewardDebt -= _staker.rewardDebt;
-			<TotalStakeAmount<T>>::mutate(|total| total.saturating_reduce(staker.staked_balance));
+			<TotalStakeAmount<T>>::mutate(|total| {
+				*total = total.saturating_sub(staker.staked_balance)
+			});
 		}
 		staker.staked_balance = new_staked_balance;
 		// Update total stakers
@@ -1067,7 +1069,7 @@ impl<T: Config> Pallet<T> {
 		// 	(_staker.stakedBalance * accumulatedRewardPerShare) /
 		// 		1e18;
 		// totalRewardDebt += _staker.rewardDebt;
-		<TotalStakeAmount<T>>::mutate(|total| total.saturating_accrue(staker.staked_balance));
+		<TotalStakeAmount<T>>::mutate(|total| *total = total.saturating_add(staker.staked_balance));
 		// todo
 		// // update reward rate if staking rewards are available given staker's updated parameters
 		// if(rewardRate == 0) {

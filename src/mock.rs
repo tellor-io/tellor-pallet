@@ -43,7 +43,6 @@ type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) const EVM_PARA_ID: u32 = 2000;
 pub(crate) const PALLET_INDEX: u8 = 3;
 pub(crate) const PARA_ID: u32 = 3000;
-pub(crate) const UNIT: u64 = 1_000_000_000_000;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -121,7 +120,7 @@ parameter_types! {
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
-	type Amount = u64;
+	type Balance = Balance;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;

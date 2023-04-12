@@ -19,7 +19,8 @@ use crate::{
 	mock,
 	mock::*,
 	types::{
-		AccountIdOf, Address, Amount, AmountOf, DisputeId, QueryDataOf, QueryId, Timestamp, ValueOf,
+		AccountIdOf, Address, Amount, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp,
+		ValueOf,
 	},
 	xcm::{ethereum_xcm, XcmConfig},
 	Event, Origin, StakeAmount,
@@ -31,6 +32,7 @@ use frame_support::{
 };
 use sp_core::{bytes::to_hex, keccak_256, H256};
 use sp_runtime::traits::BadOrigin;
+use std::convert::Into;
 use xcm::{latest::prelude::*, DoubleEncoded};
 
 mod autopay;
@@ -40,6 +42,14 @@ mod oracle;
 type Config = crate::types::Configuration;
 type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
+
+const STAKE_AMOUNT: u128 = 100_000_000_000_000_000_000;
+
+fn trb(amount: impl Into<f64>) -> Amount {
+	// TRB amount has 18 decimals
+	const UNIT: u128 = 1_000_000_000_000_000_000;
+	Amount::from((amount.into() * UNIT as f64) as u128)
+}
 
 fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeId {
 	keccak_256(&ethabi::encode(&[
@@ -84,12 +94,11 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address
 	));
 }
 
-const STAKE_AMOUNT: AmountOf<Test> = 100 * UNIT;
-fn register_parachain(stake_amount: AmountOf<Test>) {
+fn register_parachain(stake_amount: impl Into<Amount>) {
 	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 	assert_ok!(Tellor::register(
 		RuntimeOrigin::root(),
-		stake_amount,
+		stake_amount.into(),
 		Box::new(MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000u128) }),
 		WeightLimit::Unlimited,
 		1000,
@@ -107,7 +116,9 @@ fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 	])
 }
 
-fn token(amount: impl Into<f64>) -> AmountOf<Test> {
+fn token(amount: impl Into<f64>) -> BalanceOf<Test> {
+	// test parachain token has 12 decimals
+	pub(crate) const UNIT: u64 = 1_000_000_000_000;
 	(amount.into() * UNIT as f64) as u64
 }
 
@@ -165,18 +176,21 @@ fn register() {
 			for origin in
 				vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
 			{
-				assert_noop!(Tellor::register(origin, 0, fees.clone(), Unlimited, 0, 0), BadOrigin);
+				assert_noop!(
+					Tellor::register(origin, trb(0), fees.clone(), Unlimited, 0, 0),
+					BadOrigin
+				);
 			}
 
 			assert_ok!(Tellor::register(
 				RuntimeOrigin::root(),
-				STAKE_AMOUNT,
+				STAKE_AMOUNT.into(),
 				fees.clone(),
 				weight_limit.clone(),
 				require_weight_at_most,
 				gas_limit
 			));
-			assert_eq!(StakeAmount::<Test>::get().unwrap(), STAKE_AMOUNT);
+			assert_eq!(StakeAmount::<Test>::get().unwrap(), STAKE_AMOUNT.into());
 			assert_eq!(
 				Configuration::get().unwrap(),
 				Config {
@@ -188,7 +202,9 @@ fn register() {
 					gas_limit
 				}
 			);
-			System::assert_has_event(Event::Configured { stake_amount: STAKE_AMOUNT }.into());
+			System::assert_has_event(
+				Event::Configured { stake_amount: STAKE_AMOUNT.into() }.into(),
+			);
 
 			assert_eq!(
 				sent_xcm(),
