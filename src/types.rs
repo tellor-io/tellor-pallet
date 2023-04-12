@@ -25,8 +25,11 @@ use sp_runtime::{
 };
 
 pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
+/// Address of a reporter on controller chain.
 pub type Address = H160;
+/// TRB stake amount as reported from controller chain.
 pub type Amount = U256;
+/// Local currency used for onetime tips, funding feeds, accumulated rewards and dispute fees.
 pub(crate) type BalanceOf<T> = <T as Config>::Balance;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
 pub type DisputeId = H256;
