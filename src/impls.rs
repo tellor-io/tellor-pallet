@@ -47,67 +47,67 @@ impl<T: Config> Pallet<T> {
 			.unwrap_or_default()
 	}
 
-	/// Executes the vote.
+	/// Executes the vote and transfers corresponding dispute fees to initiator/reporter.
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.
-	/// * `vote_round` - The vote round.
 	/// * `result` - The result of the dispute, as determined by governance.
-	pub(super) fn execute_vote(
-		dispute_id: DisputeId,
-		vote_round: u8,
-		result: VoteResult,
-	) -> DispatchResult {
-		// Ensure validity of id
+	pub(super) fn execute_vote(dispute_id: DisputeId, result: VoteResult) -> DispatchResult {
+		// Ensure validity of dispute id, vote has been executed, and vote must be tallied
 		ensure!(
 			dispute_id != <DisputeId>::default() &&
 				dispute_id != Keccak256::hash(&[]) &&
 				<DisputeInfo<T>>::contains_key(dispute_id),
 			Error::<T>::InvalidDispute
 		);
-
-		for round in (1..=vote_round).rev() {
-			<VoteInfo<T>>::try_mutate(dispute_id, round, |maybe| -> DispatchResult {
-				match maybe {
-					None => Err(Error::<T>::InvalidVote.into()),
-					Some(vote) => {
-						// Ensure vote has not already been executed, and vote must be tallied
-						ensure!(!vote.executed, Error::<T>::VoteAlreadyExecuted);
-						ensure!(vote.tally_date > 0, Error::<T>::VoteNotTallied);
-						// Ensure vote must be final vote and that time has to be pass after the vote is tallied
-						if round == vote_round {
-							ensure!(
-								<VoteRounds<T>>::get(vote.identifier) == vote.vote_round,
-								Error::<T>::VoteNotFinal
-							);
+		let final_vote_round = <VoteRounds<T>>::get(dispute_id);
+		ensure!(final_vote_round > 0, Error::<T>::InvalidVote);
+		<VoteInfo<T>>::try_mutate(dispute_id, final_vote_round, |maybe| -> DispatchResult {
+			match maybe {
+				None => Err(Error::<T>::InvalidVote.into()),
+				Some(vote) => {
+					// Ensure vote has not already been executed, and vote must be tallied
+					ensure!(!vote.executed, Error::<T>::VoteAlreadyExecuted);
+					ensure!(vote.tally_date > 0, Error::<T>::VoteNotTallied);
+					// Ensure that time has to be passed after the vote is tallied (86,400 = 24 * 60 * 60 for seconds in a day)
+					ensure!(
+						Self::now().saturating_sub(vote.tally_date) >= 1 * DAYS,
+						Error::<T>::TallyDisputePeriodActive
+					);
+					vote.executed = true;
+					vote.result = Some(result);
+					let dispute =
+						<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?;
+					<OpenDisputesOnId<T>>::mutate(dispute.query_id, |maybe| {
+						if let Some(disputes) = maybe {
+							disputes.saturating_dec();
 						}
-						ensure!(
-							Self::now().saturating_sub(vote.tally_date) >= 1 * DAYS,
-							Error::<T>::TallyDisputePeriodActive
-						);
-						vote.executed = true;
-						let dispute =
-							<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?;
-						<OpenDisputesOnId<T>>::mutate(dispute.query_id, |maybe| {
-							if let Some(disputes) = maybe {
-								disputes.saturating_dec();
-							}
-						});
-						vote.result = Some(result);
+					});
+					// iterate through each vote round and process the dispute fee based on result
+					let dispute_account =
+						&T::PalletId::get().into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID);
+					for vote_round in (1..=final_vote_round).rev() {
+						// Get dispute initiator and fee for vote round
+						let (dispute_initiator, dispute_fee) = if vote_round == final_vote_round {
+							(vote.initiator.clone(), vote.fee) // use info from final vote round already read above
+						} else {
+							<VoteInfo<T>>::get(dispute_id, vote_round)
+								.map(|v| (v.initiator, v.fee))
+								.ok_or(Error::<T>::InvalidVote)?
+						};
 
 						// handling transfer of dispute fee
-						let dispute_account =
-							&T::PalletId::get().into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID);
 						let dest = match result {
-							VoteResult::Passed | VoteResult::Invalid => &vote.initiator,
+							// If vote passed or invalid, transfer the dispute to initiator
+							VoteResult::Passed | VoteResult::Invalid => &dispute_initiator,
+							// If vote failed, transfer the dispute fee to disputed reporter
 							VoteResult::Failed => &dispute.disputed_reporter,
 						};
-						T::Token::transfer(dispute_account, dest, vote.fee, false)?;
-
-						Ok(())
-					},
-				}
-			})?;
-		}
+						T::Token::transfer(dispute_account, dest, dispute_fee, false)?;
+					}
+					Ok(())
+				},
+			}
+		})?;
 		Self::deposit_event(Event::VoteExecuted { dispute_id, result });
 		Ok(())
 	}

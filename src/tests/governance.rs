@@ -16,12 +16,13 @@
 
 use super::*;
 use crate::{constants::REPORTING_LOCK, mock::AccountId, types::Tally, Config, VoteResult};
-use frame_support::{assert_err, assert_noop, assert_ok, traits::Currency};
+use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map};
 use sp_runtime::traits::BadOrigin;
 
 type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
 type ParachainId = <Test as Config>::ParachainId;
+type VoteRounds = crate::pallet::VoteRounds<Test>;
 
 #[test]
 fn begin_dispute() {
@@ -136,7 +137,6 @@ fn begin_dispute() {
 		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
-				dispute_id,
 				reporter,
 				another_reporter,
 				STAKE_AMOUNT.into()
@@ -294,7 +294,6 @@ fn begin_dispute_by_non_reporter() {
 		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
-				dispute_id,
 				reporter,
 				another_reporter,
 				STAKE_AMOUNT.into()
@@ -391,6 +390,44 @@ fn begins_dispute_xcm() {
 }
 
 #[test]
+fn begin_dispute_checks_max_vote_rounds() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+		})
+	});
+
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+
+			let timestamp = now();
+			let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+			VoteRounds::set(dispute_id, u8::MAX);
+
+			Balances::make_free_balance_be(&reporter, token(10));
+			assert_noop!(
+				Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp, None),
+				Error::MaxVoteRoundsReached
+			);
+		});
+	});
+}
+
+#[test]
 fn execute_vote() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
@@ -417,8 +454,7 @@ fn execute_vote() {
 				STAKE_AMOUNT.into(),
 				Address::random()
 			));
-			//let balance_1 = Balances::balance(&dispute_reporter);
-			assert_noop!(Tellor::execute_vote(H256::random(), 1, result), Error::InvalidDispute);
+			assert_noop!(Tellor::execute_vote(H256::random(), result), Error::InvalidDispute);
 			// dispute id must be valid
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter_1),
@@ -438,16 +474,17 @@ fn execute_vote() {
 				pallet_balances::Error::<Test>::InsufficientBalance
 			); // must have tokens to pay for dispute
 			Balances::make_free_balance_be(&dispute_reporter, token(1_000));
+			let balance_1 = Balances::free_balance(&dispute_reporter);
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_reporter),
 				query_id,
 				timestamp_1,
 				None
 			));
-			//let balance_2 = Balances::balance(&dispute_reporter);
-			let dispute_1 = dispute_id(PARA_ID, query_id, timestamp_1);
+			let balance_2 = Balances::free_balance(&dispute_reporter);
+			let dispute_id = dispute_id(PARA_ID, query_id, timestamp_1);
 			assert_eq!(
-				Tellor::get_dispute_info(dispute_1).unwrap(),
+				Tellor::get_dispute_info(dispute_id).unwrap(),
 				(query_id, timestamp_1, uint_value(100), reporter_1)
 			);
 			assert_eq!(
@@ -456,37 +493,33 @@ fn execute_vote() {
 				"open disputes on id should be correct"
 			);
 			assert_eq!(
-				Tellor::get_vote_rounds(dispute_1),
+				Tellor::get_vote_rounds(dispute_id),
 				1,
 				"number of vote rounds should be correct"
 			);
-			// todo: assert_eq!(balance_1 - balance_2, token(10), "dispute fee paid should be correct");
+			assert_eq!(balance_1 - balance_2, token(10), "dispute fee paid should be correct");
 
-			assert_noop!(Tellor::execute_vote(H256::random(), 1, result), Error::InvalidDispute);
-			// dispute id must exist
-			assert_noop!(Tellor::execute_vote(dispute_1, 10, result), Error::InvalidVote); // vote round must exist
-			assert_noop!(Tellor::execute_vote(dispute_1, 1, result), Error::VoteNotTallied); // vote must be tallied
-			(timestamp_1, dispute_1)
+			assert_noop!(Tellor::execute_vote(H256::random(), result), Error::InvalidDispute); // dispute id must exist
+			assert_noop!(Tellor::execute_vote(dispute_id, result), Error::VoteNotTallied); // vote must be tallied
+			(timestamp_1, dispute_id)
 		});
 
 		// Tally votes after vote duration
 		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(dispute_1, 1));
-			assert_noop!(
-				Tellor::execute_vote(dispute_1, 1, result),
-				Error::TallyDisputePeriodActive
-			); // a day must pass before execution
+			assert_noop!(Tellor::execute_vote(dispute_1, result), Error::TallyDisputePeriodActive);
+			// a day must pass before execution
 		});
 
 		// Execute after tally dispute period
 		let (timestamp_2, dispute_2) = with_block_after(86_400 * 2, || {
 			let previous_balance = Balances::free_balance(&dispute_reporter);
-			assert_ok!(Tellor::execute_vote(dispute_1, 1, result));
+			assert_ok!(Tellor::execute_vote(dispute_1, result));
 			let dispute_fee = Tellor::get_vote_info(dispute_1, 1).unwrap().fee;
 
 			assert_eq!(previous_balance + dispute_fee, Balances::free_balance(&dispute_reporter));
 
-			assert_noop!(Tellor::execute_vote(dispute_1, 1, result), Error::VoteAlreadyExecuted);
+			assert_noop!(Tellor::execute_vote(dispute_1, result), Error::VoteAlreadyExecuted);
 			// vote already executed
 			assert_noop!(
 				Tellor::begin_dispute(
@@ -527,35 +560,34 @@ fn execute_vote() {
 			(timestamp_2, dispute_id(PARA_ID, query_id, timestamp_2))
 		});
 
-		let dispute_3 = with_block_after(86_400 * 2, || {
+		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::tally_votes(dispute_2, 1));
+			// Start another round
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_reporter),
 				query_id,
 				timestamp_2,
 				None
 			));
-			dispute_id(PARA_ID, query_id, timestamp_2)
 		});
 
 		with_block_after(86_400 * 2, || {
-			assert_noop!(Tellor::execute_vote(dispute_2, 1, result), Error::VoteNotFinal);
-			// vote must be the final vote
+			assert_eq!(Tellor::get_vote_rounds(dispute_2), 2);
+			assert_noop!(Tellor::execute_vote(dispute_2, result), Error::VoteNotTallied);
+			// vote round must be tallied
 		});
 
 		with_block_after(86_400 * 2, || {
-			assert_ok!(Tellor::tally_votes(dispute_3, 2));
-			assert_noop!(
-				Tellor::execute_vote(dispute_3, 2, result),
-				Error::TallyDisputePeriodActive
-			); // must wait longer
+			assert_ok!(Tellor::tally_votes(dispute_2, 2));
+			assert_noop!(Tellor::execute_vote(dispute_2, result), Error::TallyDisputePeriodActive);
+			// must wait longer
 		});
 
 		with_block_after(86_400, || {
 			let previous_balance = Balances::free_balance(&dispute_reporter);
-			assert_ok!(Tellor::execute_vote(dispute_3, 2, result));
-			let first_round_fee = Tellor::get_vote_info(dispute_3, 1).unwrap().fee;
-			let second_round_fee = Tellor::get_vote_info(dispute_3, 2).unwrap().fee;
+			assert_ok!(Tellor::execute_vote(dispute_2, result));
+			let first_round_fee = Tellor::get_vote_info(dispute_2, 1).unwrap().fee;
+			let second_round_fee = Tellor::get_vote_info(dispute_2, 2).unwrap().fee;
 			assert_eq!(
 				previous_balance + first_round_fee + second_round_fee,
 				Balances::free_balance(&dispute_reporter)
@@ -885,7 +917,7 @@ fn get_disputes_by_reporter() {
 		});
 		// Execute vote after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::execute_vote(dispute_id, 1, VoteResult::Passed));
+			assert_ok!(Tellor::execute_vote(dispute_id, VoteResult::Passed));
 		});
 
 		assert_eq!(
@@ -964,7 +996,7 @@ fn get_open_disputes_on_id() {
 		});
 		// Execute vote after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::execute_vote(dispute_id, 1, VoteResult::Passed));
+			assert_ok!(Tellor::execute_vote(dispute_id, VoteResult::Passed));
 		});
 
 		assert_eq!(Tellor::get_open_disputes_on_id(query_id), 1);
@@ -1015,7 +1047,7 @@ fn get_vote_count() {
 		});
 		// Execute vote after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::execute_vote(dispute_id, 1, VoteResult::Passed));
+			assert_ok!(Tellor::execute_vote(dispute_id, VoteResult::Passed));
 			assert_eq!(
 				Tellor::get_vote_count(),
 				1,
@@ -1084,7 +1116,7 @@ fn get_vote_info() {
 		});
 		// Execute vote after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::execute_vote(dispute_id, 1, VoteResult::Passed));
+			assert_ok!(Tellor::execute_vote(dispute_id, VoteResult::Passed));
 			let vote = Tellor::get_vote_info(dispute_id, 1).unwrap();
 			let parachain_id: u32 = ParachainId::get();
 			assert_eq!(
@@ -1306,7 +1338,7 @@ fn get_tips_by_address() {
 
 		// Execute vote after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::execute_vote(dispute_id, 1, VoteResult::Passed));
+			assert_ok!(Tellor::execute_vote(dispute_id, VoteResult::Passed));
 			assert_eq!(
 				Tellor::get_vote_info(dispute_id, 1).unwrap().users,
 				Tally::<AmountOf<Test>> { does_support: token(20), against: 0, invalid_query: 0 },
@@ -1342,7 +1374,11 @@ fn invalid_dispute() {
 		let dispute_id = with_block(|| {
 			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_noop!(
-				Tellor::report_invalid_dispute(RuntimeOrigin::signed(reporter), dispute_id),
+				Tellor::report_vote_executed(
+					RuntimeOrigin::signed(reporter),
+					dispute_id,
+					VoteResult::Invalid
+				),
 				BadOrigin
 			);
 
@@ -1356,7 +1392,11 @@ fn invalid_dispute() {
 
 		// Report invalid dispute after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::report_invalid_dispute(Origin::Governance.into(), dispute_id));
+			assert_ok!(Tellor::report_vote_executed(
+				Origin::Governance.into(),
+				dispute_id,
+				VoteResult::Invalid
+			));
 
 			// validate updated balance of dispute initiator
 			assert_eq!(Balances::free_balance(reporter), balance_before_begin_dispute);
@@ -1381,7 +1421,11 @@ fn slash_dispute_initiator() {
 		let dispute_id = with_block(|| {
 			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_noop!(
-				Tellor::report_invalid_dispute(RuntimeOrigin::signed(reporter), dispute_id),
+				Tellor::report_vote_executed(
+					RuntimeOrigin::signed(reporter),
+					dispute_id,
+					VoteResult::Failed
+				),
 				BadOrigin
 			);
 
@@ -1427,7 +1471,11 @@ fn slash_dispute_initiator() {
 
 		// Report invalid dispute after tally dispute period
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::slash_dispute_initiator(Origin::Governance.into(), dispute_id));
+			assert_ok!(Tellor::report_vote_executed(
+				Origin::Governance.into(),
+				dispute_id,
+				VoteResult::Failed
+			));
 
 			// validate slashed balance of dispute initiator
 			let vote_info = Tellor::get_vote_info(dispute_id, 1).unwrap();

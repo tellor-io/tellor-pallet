@@ -461,8 +461,6 @@ pub mod pallet {
 		VoteAlreadyExecuted,
 		/// Vote has already been tallied.
 		VoteAlreadyTallied,
-		/// Must be the final vote.
-		VoteNotFinal,
 		/// Vote must be tallied.
 		VoteNotTallied,
 		/// Time for voting has not elapsed.
@@ -1065,10 +1063,14 @@ pub mod pallet {
 					.encode(),
 			);
 			// Push new vote round
-			let vote_round = <VoteRounds<T>>::mutate(dispute_id, |vote_rounds| {
-				vote_rounds.saturating_inc();
-				*vote_rounds
-			});
+			let vote_round = <VoteRounds<T>>::try_mutate(
+				dispute_id,
+				|vote_rounds| -> Result<u8, DispatchError> {
+					*vote_rounds =
+						vote_rounds.checked_add(1).ok_or(Error::<T>::MaxVoteRoundsReached)?;
+					Ok(*vote_rounds)
+				},
+			)?;
 
 			// Create new vote and dispute
 			let mut vote = VoteOf::<T> {
@@ -1092,6 +1094,7 @@ pub mod pallet {
 				value: <ValueOf<T>>::default(),
 				disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp)
 					.ok_or(Error::<T>::NoValueExists)?,
+				slashed_amount: <StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
 			};
 			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 			if vote_round == 1 {
@@ -1153,11 +1156,14 @@ pub mod pallet {
 				reporter: dispute_initiator,
 			});
 
+			// Lookup corresponding address on controller chain
 			let disputed_reporter = <StakerDetails<T>>::get(&dispute.disputed_reporter)
 				.ok_or(Error::<T>::NotReporter)?
 				.address;
 
 			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+
+			// todo: charge dispute initiator corresponding xcm fees
 
 			let governance_contract = T::Governance::get();
 			let message = xcm::transact_with_config(
@@ -1169,7 +1175,7 @@ pub mod pallet {
 						&dispute.value,
 						disputed_reporter,
 						beneficiary,
-						<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+						dispute.slashed_amount,
 					)
 					.try_into()
 					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
@@ -1399,14 +1405,12 @@ pub mod pallet {
 
 		/// Reports a slashing of a reporter, due to a passing vote.
 		///
-		/// - `dispute_id`: The dispute identifier which resulted in the slashing.
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
 		#[pallet::call_index(12)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
-			dispute_id: DisputeId,
 			reporter: AccountIdOf<T>,
 			recipient: AccountIdOf<T>,
 			amount: Amount,
@@ -1417,10 +1421,6 @@ pub mod pallet {
 			let amount = amount
 				.saturated_into::<u128>() // todo: handle in single call skipping u128
 				.saturated_into::<AmountOf<T>>();
-
-			// execute vote, inferring result based on function called
-			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
-			Self::execute_vote(dispute_id, vote_round, VoteResult::Passed)?;
 
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {
@@ -1461,40 +1461,24 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Reports the result of a dispute as invalid.
+		/// Reports the result of a dispute.
 		///
 		/// - `dispute_id`: The identifier of the dispute.
+		/// - `result`: The result of the dispute.
 		#[pallet::call_index(13)]
-		pub fn report_invalid_dispute(
+		pub fn report_vote_executed(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
+			result: VoteResult,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
-			// execute vote, inferring result based on function called
-			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
-			Self::execute_vote(dispute_id, vote_round, VoteResult::Invalid)?;
-			Ok(())
-		}
-
-		/// Slashes a dispute initiator, due to a failed vote.
-		///
-		/// - `dispute_id`: The identifier of the dispute.
-		#[pallet::call_index(14)]
-		pub fn slash_dispute_initiator(
-			origin: OriginFor<T>,
-			dispute_id: DisputeId,
-		) -> DispatchResult {
-			// ensure origin is governance controller contract
-			T::GovernanceOrigin::ensure_origin(origin)?;
-			// execute vote, inferring result based on function called
-			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
-			Self::execute_vote(dispute_id, vote_round, VoteResult::Failed)?;
-			Ok(())
+			// execute vote
+			Self::execute_vote(dispute_id, result)
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(15)]
+		#[pallet::call_index(14)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 			ensure!(

@@ -26,7 +26,7 @@ pub(crate) type Amount = U256;
 pub(crate) type AmountOf<T> = <T as Config>::Amount;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
 pub type DisputeId = H256;
-pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, ValueOf<T>>;
+pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, AmountOf<T>, ValueOf<T>>;
 pub type FeedId = H256;
 pub(crate) type FeedOf<T> = autopay::Feed<AmountOf<T>, <T as Config>::MaxRewardClaims>;
 pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<AmountOf<T>>;
@@ -173,7 +173,7 @@ pub(crate) mod governance {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct Dispute<AccountId, Value> {
+	pub struct Dispute<AccountId, Amount, Value> {
 		/// Query identifier of disputed value
 		pub(crate) query_id: QueryId,
 		/// Timestamp of disputed value.
@@ -182,6 +182,8 @@ pub(crate) mod governance {
 		pub(crate) value: Value,
 		/// Reporter who submitted the disputed value.
 		pub(crate) disputed_reporter: AccountId,
+		/// Amount slashed from reporter.
+		pub(crate) slashed_amount: Amount,
 	}
 
 	#[derive(

@@ -292,13 +292,7 @@ fn slash_reporter() {
 		let dispute_id = with_block(|| {
 			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_noop!(
-				Tellor::report_slash(
-					RuntimeOrigin::signed(reporter),
-					H256::zero(),
-					0,
-					0,
-					STAKE_AMOUNT.into()
-				),
+				Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, STAKE_AMOUNT.into()),
 				BadOrigin
 			);
 
@@ -325,18 +319,11 @@ fn slash_reporter() {
 			assert_eq!(staker_details.locked_balance, 0);
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
 			assert_noop!(
-				Tellor::report_slash(
-					Origin::Governance.into(),
-					dispute_id,
-					0,
-					0,
-					(STAKE_AMOUNT + 1).into()
-				),
+				Tellor::report_slash(Origin::Governance.into(), 0, 0, (STAKE_AMOUNT + 1).into()),
 				Error::InsufficientStake
 			);
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
-				dispute_id,
 				reporter,
 				recipient,
 				STAKE_AMOUNT.into()
@@ -376,7 +363,6 @@ fn slash_reporter() {
 			assert!(staker_details.staked);
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
-				dispute_id,
 				reporter,
 				recipient,
 				STAKE_AMOUNT.into()
@@ -413,7 +399,6 @@ fn slash_reporter() {
 			assert_eq!(Tellor::get_total_stake_amount(), token(795));
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
-				dispute_id,
 				reporter,
 				recipient,
 				STAKE_AMOUNT.into()
@@ -464,7 +449,6 @@ fn slash_reporter() {
 		with_block_after(86_400, || {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
-				dispute_id,
 				reporter,
 				recipient,
 				STAKE_AMOUNT.into()
