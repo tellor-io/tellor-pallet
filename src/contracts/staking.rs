@@ -17,8 +17,8 @@
 use super::*;
 
 pub(crate) fn confirm_parachain_stake_withdraw_request(
-	address: impl Into<Address>,
-	amount: impl Into<Amount>,
+	address: impl Into<H160>,
+	amount: impl Into<U256>,
 ) -> Vec<u8> {
 	const FUNCTION: [u8; 4] = [116, 48, 87, 226];
 	Call::new(&FUNCTION).address(address.into()).uint(amount.into()).encode()
@@ -26,7 +26,7 @@ pub(crate) fn confirm_parachain_stake_withdraw_request(
 
 #[cfg(test)]
 mod tests {
-	use super::{super::tests::*, Address};
+	use super::{super::tests::*, H160};
 	use ethabi::{Function, ParamType, Token};
 
 	#[allow(deprecated)]
@@ -54,7 +54,7 @@ mod tests {
 
 	#[test]
 	fn encodes_confirm_parachain_stake_withdraw_request_call() {
-		let staker = Address::random();
+		let staker = H160::random();
 		let amount = 1675711956967u128;
 
 		assert_eq!(
