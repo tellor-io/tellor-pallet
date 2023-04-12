@@ -1063,10 +1063,14 @@ pub mod pallet {
 					.encode(),
 			);
 			// Push new vote round
-			let vote_round = <VoteRounds<T>>::mutate(dispute_id, |vote_rounds| {
-				vote_rounds.saturating_inc();
-				*vote_rounds
-			});
+			let vote_round = <VoteRounds<T>>::try_mutate(
+				dispute_id,
+				|vote_rounds| -> Result<u8, DispatchError> {
+					*vote_rounds =
+						vote_rounds.checked_add(1).ok_or(Error::<T>::MaxVoteRoundsReached)?;
+					Ok(*vote_rounds)
+				},
+			)?;
 
 			// Create new vote and dispute
 			let mut vote = VoteOf::<T> {

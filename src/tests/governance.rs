@@ -22,6 +22,7 @@ use sp_runtime::traits::BadOrigin;
 
 type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
 type ParachainId = <Test as Config>::ParachainId;
+type VoteRounds = crate::pallet::VoteRounds<Test>;
 
 #[test]
 fn begin_dispute() {
@@ -383,6 +384,44 @@ fn begins_dispute_xcm() {
 					reporter,
 				}
 				.into(),
+			);
+		});
+	});
+}
+
+#[test]
+fn begin_dispute_checks_max_vote_rounds() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			register_parachain(STAKE_AMOUNT);
+			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+		})
+	});
+
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+
+			let timestamp = now();
+			let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+			VoteRounds::set(dispute_id, u8::MAX);
+
+			Balances::make_free_balance_be(&reporter, token(10));
+			assert_noop!(
+				Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp, None),
+				Error::MaxVoteRoundsReached
 			);
 		});
 	});
