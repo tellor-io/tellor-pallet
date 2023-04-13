@@ -240,10 +240,6 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
 	#[pallet::storage]
 	pub(super) type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
-	/// Total amount of staking rewards.
-	#[pallet::storage]
-	#[pallet::getter(fn staking_rewards_balance)]
-	pub(super) type StakingRewardsBalance<T> = StorageValue<_, BalanceOf<T>, ValueQuery>; // todo: replace with T::Token::balance(staking_account)
 	/// The time of last update to AccumulatedRewardPerShare.
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_allocation)]

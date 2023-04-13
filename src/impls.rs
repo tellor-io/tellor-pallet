@@ -16,6 +16,7 @@
 
 use super::*;
 use crate::constants::DECIMALS;
+use frame_support::traits::fungible::Inspect;
 use sp_runtime::traits::Hash;
 
 impl<T: Config> Pallet<T> {
@@ -23,13 +24,10 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `amount` - The amount of tokens to fund the staking account with.
 	pub(super) fn add_staking_rewards(amount: BalanceOf<T>) -> DispatchResult {
-		T::Token::transfer(&Self::tips(), &Self::staking_rewards(), amount, false)?;
+		let staking_rewards = Self::staking_rewards();
+		T::Token::transfer(&Self::tips(), &staking_rewards, amount, false)?;
 		Self::update_rewards()?;
-		let staking_rewards_balance = <StakingRewardsBalance<T>>::mutate(|balance| {
-			balance.saturating_accrue(amount);
-			*balance
-		})
-		.into();
+		let staking_rewards_balance = T::Token::balance(&staking_rewards).into();
 		// update reward rate = real staking rewards balance / 30 days
 		let total_stake_amount =
 			Self::convert(<TotalStakeAmount<T>>::get()).ok_or(Error::<T>::StakeConversionError)?;
@@ -1093,7 +1091,7 @@ impl<T: Config> Pallet<T> {
 		let total_reward_debt = <TotalRewardDebt<T>>::get().into();
 		let accumulated_reward =
 			(new_accumulated_reward_per_share * total_stake_amount) / unit - total_reward_debt;
-		let staking_rewards_balance = <StakingRewardsBalance<T>>::get().into();
+		let staking_rewards_balance = T::Token::balance(&Self::staking_rewards()).into();
 		if accumulated_reward >= staking_rewards_balance {
 			// if staking rewards run out, calculate remaining reward per staked token and set
 			// RewardRate to 0
@@ -1128,6 +1126,7 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResult {
 		Self::update_rewards()?;
 		let (staker, stake_info) = staker;
+		let staking_rewards = Self::staking_rewards();
 		if stake_info.staked_balance > Amount::zero() {
 			// if address already has a staked balance, calculate and transfer pending rewards
 			let mut pending_reward = <U256ToBalance<T>>::convert(
@@ -1151,10 +1150,7 @@ impl<T: Config> Pallet<T> {
 					pending_reward = temp_pending_reward;
 				}
 			}
-			<StakingRewardsBalance<T>>::mutate(|balance| {
-				*balance = balance.saturating_sub(pending_reward)
-			});
-			T::Token::transfer(&Self::staking_rewards(), staker, pending_reward, true)?;
+			T::Token::transfer(&staking_rewards, staker, pending_reward, true)?;
 			<TotalRewardDebt<T>>::mutate(|debt| {
 				*debt = debt.saturating_sub(stake_info.reward_debt)
 			});
@@ -1200,7 +1196,7 @@ impl<T: Config> Pallet<T> {
 		<RewardRate<T>>::try_mutate(|reward_rate| -> DispatchResult {
 			if *reward_rate == Zero::zero() {
 				*reward_rate = U256ToBalance::<T>::convert(
-					<StakingRewardsBalance<T>>::get()
+					T::Token::balance(&staking_rewards)
 						.into()
 						.saturating_sub(
 							accumulated_reward_per_share
