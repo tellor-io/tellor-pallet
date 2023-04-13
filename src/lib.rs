@@ -77,7 +77,7 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
-	use sp_runtime::traits::SaturatedConversion;
+	use sp_runtime::{traits::SaturatedConversion, ArithmeticError};
 	use sp_std::{prelude::*, result};
 
 	#[pallet::pallet]
@@ -182,7 +182,7 @@ pub mod pallet {
 		type Token: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
 
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
-		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
+		type ValueConverter: Convert<Vec<u8>, Result<Self::Price, DispatchError>>;
 
 		type Xcm: traits::SendXcm;
 	}
@@ -383,7 +383,6 @@ pub mod pallet {
 		FeedAlreadyExists,
 		/// No funds available for this feed or insufficient balance for all submitted timestamps.
 		InsufficientFeedBalance,
-		IntervalCalculationError,
 		/// Amount must be greater than zero.
 		InvalidAmount,
 		/// Claimer must be the reporter.
@@ -409,7 +408,6 @@ pub mod pallet {
 		MaxTipsReached,
 		/// No tips submitted for this query identifier.
 		NoTipsSubmitted,
-		PriceChangeCalculationError,
 		/// Price threshold not met.
 		PriceThresholdNotMet,
 		/// Timestamp not eligible for tip.
@@ -430,6 +428,7 @@ pub mod pallet {
 		InsufficientStake,
 		/// Nonce must match the timestamp index.
 		InvalidNonce,
+		InvalidPrice,
 		/// Value must be submitted.
 		InvalidValue,
 		/// The maximum number of queries has been reached.
@@ -440,9 +439,6 @@ pub mod pallet {
 		NoWithdrawalRequested,
 		/// Still in reporter time lock, please wait!
 		ReporterTimeLocked,
-		ReportingLockCalculationError,
-		RewardCalculationError,
-		StakeConversionError,
 		/// Timestamp already reported.
 		TimestampAlreadyReported,
 		/// Withdrawal period didn't pass.
@@ -958,10 +954,10 @@ pub mod pallet {
 								.checked_div(
 									<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?
 								)
-								.ok_or(Error::<T>::ReportingLockCalculationError)?
+								.ok_or(ArithmeticError::DivisionByZero)?
 								.saturated_into::<u128>()
 						)
-						.ok_or(Error::<T>::ReportingLockCalculationError)?,
+						.ok_or(ArithmeticError::DivisionByZero)?,
 				Error::<T>::ReporterTimeLocked
 			);
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
@@ -1141,10 +1137,9 @@ pub mod pallet {
 				dispute.value =
 					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
 			}
-			let stake_amount = U256ToBalance::<T>::convert(
-				Self::convert(<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?)
-					.ok_or(Error::<T>::DisputeFeeCalculationError)?,
-			);
+			let stake_amount = U256ToBalance::<T>::convert(Self::convert(
+				<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+			)?);
 			if vote.fee > stake_amount {
 				vote.fee = stake_amount;
 			}

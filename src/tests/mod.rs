@@ -32,7 +32,10 @@ use frame_support::{
 	traits::{Get, PalletInfoAccess, UnixTime},
 };
 use sp_core::{bytes::to_hex, keccak_256, H256};
-use sp_runtime::traits::{AccountIdConversion, BadOrigin};
+use sp_runtime::{
+	traits::{AccountIdConversion, BadOrigin},
+	ArithmeticError,
+};
 use std::convert::Into;
 use xcm::{latest::prelude::*, DoubleEncoded};
 
@@ -186,18 +189,21 @@ fn encodes_spot_price() {
 fn redenominates() {
 	assert_eq!(
 		Tellor::redenominate((100 * 10u128.pow(18)).into(), 12),
-		Some((100 * 10u64.pow(12)).into())
+		Ok((100 * 10u64.pow(12)).into())
 	);
 	assert_eq!(
 		Tellor::redenominate((100 * 10u128.pow(18)).into(), 20),
-		Some((100 * 10u128.pow(20)).into())
+		Ok((100 * 10u128.pow(20)).into())
 	);
 	assert_eq!(
 		Tellor::redenominate((100 * 10u128.pow(18)).into(), 18),
-		Some((100 * 10u128.pow(18)).into())
+		Ok((100 * 10u128.pow(18)).into())
 	);
-	assert_eq!(Tellor::redenominate((100 * 10u128.pow(18)).into(), 0), Some(100.into()));
-	assert_eq!(Tellor::redenominate((100 * 10u128.pow(18)).into(), u8::MAX.into()), None);
+	assert_eq!(Tellor::redenominate((100 * 10u128.pow(18)).into(), 0), Ok(100.into()));
+	assert_eq!(
+		Tellor::redenominate((100 * 10u128.pow(18)).into(), u8::MAX.into()),
+		Err(ArithmeticError::Overflow.into())
+	);
 }
 
 #[test]

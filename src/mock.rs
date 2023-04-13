@@ -15,7 +15,10 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate as tellor;
-use crate::{types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking};
+use crate::{
+	types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
+	Error::ValueConversionError,
+};
 use frame_support::{
 	assert_ok, log, parameter_types,
 	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},
@@ -27,6 +30,7 @@ use sp_core::{ConstU32, ConstU8, H256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, Convert, IdentityLookup},
+	DispatchError,
 };
 use sp_std::cell::RefCell;
 use std::{
@@ -149,12 +153,12 @@ impl tellor::Config for Test {
 }
 
 pub struct ValueConverter;
-impl Convert<Vec<u8>, Option<u128>> for ValueConverter {
-	fn convert(a: Vec<u8>) -> Option<u128> {
+impl Convert<Vec<u8>, Result<u128, DispatchError>> for ValueConverter {
+	fn convert(a: Vec<u8>) -> Result<u128, DispatchError> {
 		// Should be more advanced depending on chain config
 		match a[16..].try_into() {
-			Ok(v) => Some(u128::from_be_bytes(v)),
-			Err(_) => None,
+			Ok(v) => Ok(u128::from_be_bytes(v)),
+			Err(_) => Err(ValueConversionError::<Test>.into()),
 		}
 	}
 }

@@ -30,7 +30,7 @@ use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
-	traits::{BlakeTwo256, IdentityLookup},
+	traits::{BlakeTwo256, Convert, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
@@ -135,7 +135,7 @@ impl tellor::Config for Test {
 	type StakingOrigin = EnsureStaking;
 	type Time = Time;
 	type Token = Balances;
-	type ValueConverter = ();
+	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
 }
 pub struct TestSendXcm;
@@ -145,6 +145,13 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		_dest: impl Into<MultiLocation>,
 		_message: Xcm<()>,
 	) -> Result<(), SendError> {
+		todo!()
+	}
+}
+
+pub struct ValueConverter;
+impl Convert<Vec<u8>, Result<u32, sp_runtime::DispatchError>> for ValueConverter {
+	fn convert(a: Vec<u8>) -> Result<u32, sp_runtime::DispatchError> {
 		todo!()
 	}
 }
