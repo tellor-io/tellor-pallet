@@ -75,10 +75,12 @@ pub mod pallet {
 		},
 		PalletId,
 	};
+	use frame_support::dispatch::RawOrigin;
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
 	use sp_runtime::{traits::SaturatedConversion, ArithmeticError};
 	use sp_std::{prelude::*, result};
+	use crate::constants::UNIT;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -173,6 +175,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type Staking: Get<ContractLocation>;
 
+		/// The location of the staking controller contract.
+		#[pallet::constant]
+		type UpdateStakeInterval: Get<u8>;
+
 		/// Origin that handles staking.
 		type StakingOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
@@ -185,6 +191,11 @@ pub mod pallet {
 		type ValueConverter: Convert<Vec<u8>, Result<Self::Price, DispatchError>>;
 
 		type Xcm: traits::SendXcm;
+
+		type StakingTokenPriceQueryId: Get<H256>;
+
+		type StakeAmountCurrencyTarget: Get<u256>;
+
 	}
 
 	// AutoPay
@@ -285,6 +296,9 @@ pub mod pallet {
 	// Configuration
 	#[pallet::storage]
 	pub(super) type Configuration<T> = StorageValue<_, types::Configuration>;
+	// Last Updated Stake Block Number
+	#[pallet::storage]
+	pub(super) type StackAmountBlockNumber<T> = StorageValue<_, <T as frame_system::Config>::BlockNumber>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -504,8 +518,14 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(_n: T::BlockNumber) -> Weight {
 			// todo: check for any pending votes to be tallied and sent to governance controller contract
+			if <frame_system::Pallet<T>>::block_number() >=
+				<StackAmountBlockNumber<T>>::get().unwrap_or_default() + T::UpdateStakeInterval::get() {
+				Pallet::<T>::update_stake_amount(RawOrigin::Root, T::StakingTokenPriceQueryId::get())
+			}
+			// todo: calculate actual weight
 			Weight::zero()
 		}
+
 	}
 
 	#[pallet::call]
@@ -1507,6 +1527,18 @@ pub mod pallet {
 				para_id: registry_contract.para_id,
 				contract_address: registry_contract.address.into(),
 			});
+			Ok(())
+		}
+
+		/// Updates the stake amount after retrieving the latest token price from oracle.
+		///
+		/// - `query_id`: Token price query id.
+		#[pallet::call_index(15)]
+		pub fn update_stake_amount(origin: OriginFor<T>, query_id: QueryId) -> DispatchResult {
+			ensure_root(origin)?;
+
+			Self::_update_stake_amount(query_id)?;
+
 			Ok(())
 		}
 	}
