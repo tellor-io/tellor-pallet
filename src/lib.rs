@@ -63,10 +63,7 @@ pub mod pallet {
 		xcm::{self, ethereum_xcm},
 		*,
 	};
-	use crate::{
-		constants::DISPUTE_SUB_ACCOUNT_ID, contracts::staking, types::oracle::Report,
-		xcm::ContractLocation, Tip,
-	};
+	use crate::{contracts::staking, types::oracle::Report, xcm::ContractLocation, Tip};
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
@@ -80,7 +77,7 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
-	use sp_runtime::traits::{AccountIdConversion, SaturatedConversion};
+	use sp_runtime::traits::SaturatedConversion;
 	use sp_std::{prelude::*, result};
 
 	#[pallet::pallet]
@@ -209,7 +206,6 @@ pub mod pallet {
 	#[pallet::getter(fn query_ids_with_funding_index)]
 	pub(super) type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryId, u32>;
 	#[pallet::storage]
-	#[pallet::getter(fn tips)]
 	pub(super) type Tips<T> = StorageMap<
 		_,
 		Blake2_128Concat,
@@ -564,7 +560,7 @@ pub mod pallet {
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
 			T::Token::transfer(
-				&T::PalletId::get().into_account_truncating(),
+				&Self::tips(),
 				&reporter,
 				// todo: safe math
 				cumulative_reward - fee,
@@ -692,7 +688,7 @@ pub mod pallet {
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
 			T::Token::transfer(
-				&T::PalletId::get().into_account_truncating(),
+				&Self::tips(),
 				&reporter,
 				// todo: safe math
 				cumulative_reward - fee,
@@ -876,12 +872,7 @@ pub mod pallet {
 				)?;
 				<QueryIdsWithFundingIndex<T>>::set(query_id, Some(len));
 			}
-			T::Token::transfer(
-				&tipper,
-				&T::PalletId::get().into_account_truncating(),
-				amount,
-				true,
-			)?;
+			T::Token::transfer(&tipper, &Self::tips(), amount, true)?;
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
 			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
 			Ok(())
@@ -1128,13 +1119,7 @@ pub mod pallet {
 			}
 			<VoteCount<T>>::mutate(|count| count.saturating_inc());
 			let dispute_fee = vote.fee;
-			let pallet_id = T::PalletId::get();
-			T::Token::transfer(
-				&dispute_initiator,
-				&pallet_id.into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID),
-				dispute_fee,
-				false,
-			)?;
+			T::Token::transfer(&dispute_initiator, &Self::dispute_fees(), dispute_fee, false)?;
 			<VoteInfo<T>>::insert(dispute_id, vote_round, vote);
 			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {

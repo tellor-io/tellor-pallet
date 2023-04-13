@@ -25,7 +25,7 @@ use frame_support::{
 	traits::{fungible::Inspect, Currency, Get},
 };
 use sp_core::{bounded::BoundedVec, bounded_vec, keccak_256};
-use sp_runtime::traits::{AccountIdConversion, BadOrigin};
+use sp_runtime::traits::BadOrigin;
 
 type Fee = <Test as Config>::Fee;
 type Pallet = crate::Pallet<Test>;
@@ -422,12 +422,8 @@ fn claim_tip() {
 			// That's why tellor balance is .03 lower than originally expected.
 			assert_eq!(Balances::balance(&reporter), token(2.97));
 			// Checking if owner (Tellor) account was updated by fee amount (0.03)
-			let pallet_id = <Test as Config>::PalletId::get();
-			assert_eq!(
-				Balances::balance(&pallet_id.into_sub_account_truncating(b"staking")),
-				token(0.03)
-			);
-			assert_eq!(Balances::balance(&pallet_id.into_account_truncating()), token(997));
+			assert_eq!(Balances::balance(&Tellor::staking_rewards()), token(0.03));
+			assert_eq!(Balances::balance(&Tellor::tips()), token(997));
 		});
 	});
 }
@@ -552,8 +548,8 @@ fn fund_feed() {
 			assert_eq!(amount, feed.balance);
 
 			// Event details
-			let pallet_account = <Test as Config>::PalletId::get().into_account_truncating();
-			let initial_balance = Balances::balance(&pallet_account);
+			let tips = Tellor::tips();
+			let initial_balance = Balances::balance(&tips);
 			assert_ok!(Tellor::fund_feed(
 				RuntimeOrigin::signed(feed_funder),
 				feed_id,
@@ -565,11 +561,7 @@ fn fund_feed() {
 				Event::DataFeedFunded { query_id, feed_id, amount, feed_funder, feed_details }
 					.into(),
 			);
-			assert_eq!(
-				Balances::balance(&pallet_account) - initial_balance,
-				amount,
-				"balance should change"
-			);
+			assert_eq!(Balances::balance(&tips) - initial_balance, amount, "balance should change");
 		});
 	});
 }

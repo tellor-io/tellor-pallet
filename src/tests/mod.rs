@@ -31,7 +31,7 @@ use frame_support::{
 	traits::{PalletInfoAccess, UnixTime},
 };
 use sp_core::{bytes::to_hex, keccak_256, H256};
-use sp_runtime::traits::BadOrigin;
+use sp_runtime::traits::{AccountIdConversion, BadOrigin};
 use std::convert::Into;
 use xcm::{latest::prelude::*, DoubleEncoded};
 
@@ -153,6 +153,14 @@ fn converts_token() {
 }
 
 #[test]
+fn dispute_fees() {
+	assert_eq!(
+		Tellor::dispute_fees(),
+		<Test as crate::Config>::PalletId::get().into_sub_account_truncating(b"dispute")
+	)
+}
+
+#[test]
 fn encodes_spot_price() {
 	assert_eq!(
 		"0xa6f013ee236804827b77696d350e9f0ac3e879328f2a3021d473a0b778ad78ac",
@@ -230,4 +238,20 @@ fn register() {
 			)
 		});
 	});
+}
+
+#[test]
+fn staking_rewards() {
+	assert_eq!(
+		Tellor::staking_rewards(),
+		<Test as crate::Config>::PalletId::get().into_sub_account_truncating(b"staking")
+	)
+}
+
+#[test]
+fn tips() {
+	assert_eq!(
+		Tellor::tips(),
+		<Test as crate::Config>::PalletId::get().into_sub_account_truncating(b"tips")
+	)
 }

@@ -15,18 +15,11 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
-use crate::constants::DISPUTE_SUB_ACCOUNT_ID;
 use sp_runtime::traits::Hash;
 
 impl<T: Config> Pallet<T> {
 	pub(super) fn add_staking_rewards(amount: BalanceOf<T>) -> DispatchResult {
-		let pallet_id = T::PalletId::get();
-		T::Token::transfer(
-			&pallet_id.into_account_truncating(),
-			&pallet_id.into_sub_account_truncating(b"staking"),
-			amount,
-			false,
-		)?;
+		T::Token::transfer(&Self::tips(), &Self::staking_rewards(), amount, false)?;
 		Ok(())
 	}
 
@@ -50,6 +43,14 @@ impl<T: Config> Pallet<T> {
 		<VoteInfo<T>>::get(dispute_id, vote_round)
 			.and_then(|v| v.voted.get(&voter).copied())
 			.unwrap_or_default()
+	}
+
+	/// The account identifier of the sub-account used to hold dispute fees.
+	///
+	/// This actually does computation. If you need to keep using it, then make sure you cache the
+	/// value and only call this once.
+	pub(super) fn dispute_fees() -> T::AccountId {
+		T::PalletId::get().into_sub_account_truncating(b"dispute")
 	}
 
 	/// Executes the vote and transfers corresponding dispute fees to initiator/reporter.
@@ -88,8 +89,7 @@ impl<T: Config> Pallet<T> {
 						}
 					});
 					// iterate through each vote round and process the dispute fee based on result
-					let dispute_account =
-						&T::PalletId::get().into_sub_account_truncating(DISPUTE_SUB_ACCOUNT_ID);
+					let dispute_fees = &Self::dispute_fees();
 					for vote_round in (1..=final_vote_round).rev() {
 						// Get dispute initiator and fee for vote round
 						let (dispute_initiator, dispute_fee) = if vote_round == final_vote_round {
@@ -107,7 +107,7 @@ impl<T: Config> Pallet<T> {
 							// If vote failed, transfer the dispute fee to disputed reporter
 							VoteResult::Failed => &dispute.disputed_reporter,
 						};
-						T::Token::transfer(dispute_account, dest, dispute_fee, false)?;
+						T::Token::transfer(dispute_fees, dest, dispute_fee, false)?;
 					}
 					Ok(())
 				},
@@ -129,12 +129,7 @@ impl<T: Config> Pallet<T> {
 
 		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 		feed.details.balance.saturating_accrue(amount);
-		T::Token::transfer(
-			&feed_funder,
-			&T::PalletId::get().into_account_truncating(),
-			amount,
-			true,
-		)?;
+		T::Token::transfer(&feed_funder, &Self::tips(), amount, true)?;
 		// Add to array of feeds with funding
 		if feed.details.feeds_with_funding_index == 0 && feed.details.balance > Zero::zero() {
 			let index = <FeedsWithFunding<T>>::try_mutate(
@@ -957,6 +952,14 @@ impl<T: Config> Pallet<T> {
 			.and_then(|report| report.value_by_timestamp.get(&timestamp).cloned())
 	}
 
+	/// The account identifier of the sub-account used to hold staking rewards.
+	///
+	/// This actually does computation. If you need to keep using it, then make sure you cache the
+	/// value and only call this once.
+	pub(super) fn staking_rewards() -> T::AccountId {
+		T::PalletId::get().into_sub_account_truncating(b"staking")
+	}
+
 	pub(super) fn store_data(query_id: QueryId, query_data: &QueryDataOf<T>) {
 		QueryData::<T>::insert(query_id, query_data);
 		Self::deposit_event(Event::QueryDataStored { query_id });
@@ -999,6 +1002,14 @@ impl<T: Config> Pallet<T> {
 				.disputed_reporter,
 		});
 		Ok(())
+	}
+
+	/// The account identifier of the sub-account used to hold tips.
+	///
+	/// This actually does computation. If you need to keep using it, then make sure you cache the
+	/// value and only call this once.
+	pub(super) fn tips() -> T::AccountId {
+		T::PalletId::get().into_sub_account_truncating(b"tips")
 	}
 
 	pub(super) fn update_stake_and_pay_rewards(

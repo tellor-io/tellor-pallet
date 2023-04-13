@@ -30,7 +30,7 @@ use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
-	traits::{BlakeTwo256, IdentityLookup, Zero},
+	traits::{BlakeTwo256, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
