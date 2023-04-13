@@ -1082,6 +1082,32 @@ impl<T: Config> Pallet<T> {
 		// }
 		Ok(())
 	}
+
+	// Updates the stake amount after retrieving the latest token price from oracle.
+	pub(super) fn _update_stake_amount(query_id: QueryId) -> DispatchResult {
+		//todo
+		// get staking token price
+		// (bool _valFound, bytes memory _val, ) = getDataBefore(
+		// 	stakingTokenPriceQueryId,
+		// 	block.timestamp - 12 hours
+		// );
+		// if (_valFound) {
+		// 	uint256 _stakingTokenPrice = abi.decode(_val, (uint256));
+		// 	require(
+		// 		_stakingTokenPrice >= 0.01 ether && _stakingTokenPrice < 1000000 ether,
+		// 		"invalid staking token price"
+		// 	);
+		// 	uint256 _adjustedStakeAmount = (stakeAmountDollarTarget * 1e18) / _stakingTokenPrice;
+		// 	if(_adjustedStakeAmount < minimumStakeAmount) {
+		// 		stakeAmount = minimumStakeAmount;
+		// 	} else {
+		// 		stakeAmount = _adjustedStakeAmount;
+		// 	}
+		// 	emit NewStakeAmount(stakeAmount);
+		// }
+
+		Ok(())
+	}
 }
 
 impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>> for Pallet<T> {
