@@ -180,6 +180,10 @@ pub mod pallet {
 		/// Origin that handles staking.
 		type StakingOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
+		/// Staking token 'SpotPrice' query identifier, used for updating stake amount.
+		#[pallet::constant]
+		type StakingTokenPriceQueryId: Get<QueryId>;
+
 		/// The on-chain time provider.
 		type Time: UnixTime;
 
@@ -192,8 +196,6 @@ pub mod pallet {
 
 		#[pallet::constant]
 		type StakeAmountCurrencyTarget: Get<U256>;
-		#[pallet::constant]
-		type StakingTokenPriceQueryId: Get<QueryId>;
 		#[pallet::constant]
 		type UpdateStakeInterval: Get<Self::BlockNumber>;
 	}

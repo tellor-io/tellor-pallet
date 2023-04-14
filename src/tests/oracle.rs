@@ -30,6 +30,10 @@ use sp_runtime::{
 type BoundedReportsSubmittedByQueryId =
 	BoundedBTreeMap<QueryId, u128, <Test as Config>::MaxQueriesPerReporter>;
 
+const STAKE_AMOUNT_CURRENCY_TARGET: u128 = 500 * 10u128.pow(18);
+const PRICE_TRB: u128 = 500 * 10u128.pow(18);
+const REQUIRED_STAKE: u128 = STAKE_AMOUNT_CURRENCY_TARGET / PRICE_TRB;
+
 #[test]
 fn deposit_stake() {
 	let reporter = 1;
@@ -122,7 +126,7 @@ fn remove_value() {
 	ext.execute_with(|| {
 		with_block(|| {
 			configure_parachain();
-			super::deposit_stake(another_reporter, STAKE_AMOUNT, Address::random());
+			super::deposit_stake(another_reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 		})
 	});
 
@@ -134,7 +138,7 @@ fn remove_value() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				address
 			));
 			assert_ok!(Tellor::submit_value(
@@ -295,7 +299,12 @@ fn slash_reporter() {
 		let dispute_id = with_block(|| {
 			Balances::make_free_balance_be(&reporter, token(1_000));
 			assert_noop!(
-				Tellor::report_slash(RuntimeOrigin::signed(reporter), 0, 0, STAKE_AMOUNT.into()),
+				Tellor::report_slash(
+					RuntimeOrigin::signed(reporter),
+					0,
+					0,
+					MINIMUM_STAKE_AMOUNT.into()
+				),
 				BadOrigin
 			);
 
@@ -322,14 +331,19 @@ fn slash_reporter() {
 			assert_eq!(staker_details.locked_balance, trb(0));
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
 			assert_noop!(
-				Tellor::report_slash(Origin::Governance.into(), 0, 0, (STAKE_AMOUNT + 1).into()),
+				Tellor::report_slash(
+					Origin::Governance.into(),
+					0,
+					0,
+					(MINIMUM_STAKE_AMOUNT + 1).into()
+				),
 				Error::InsufficientStake
 			);
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				reporter,
 				recipient,
-				STAKE_AMOUNT.into()
+				MINIMUM_STAKE_AMOUNT.into()
 			));
 
 			assert_eq!(Tellor::time_of_last_allocation(), now());
@@ -366,7 +380,7 @@ fn slash_reporter() {
 				Origin::Governance.into(),
 				reporter,
 				recipient,
-				STAKE_AMOUNT.into()
+				MINIMUM_STAKE_AMOUNT.into()
 			));
 			assert_eq!(Tellor::time_of_last_allocation(), now());
 			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
@@ -401,7 +415,7 @@ fn slash_reporter() {
 				Origin::Governance.into(),
 				reporter,
 				recipient,
-				STAKE_AMOUNT.into()
+				MINIMUM_STAKE_AMOUNT.into()
 			));
 			assert_eq!(Tellor::time_of_last_allocation(), now());
 			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
@@ -435,7 +449,7 @@ fn slash_reporter() {
 			assert_eq!(staker_details.locked_balance, trb(0));
 
 			// reporter now has insufficient stake for another submission, so top up stake before final dispute/slash
-			super::deposit_stake(reporter, Tributes::from(STAKE_AMOUNT) - trb(75), address);
+			super::deposit_stake(reporter, Tributes::from(MINIMUM_STAKE_AMOUNT) - trb(75), address);
 			submit_value_and_begin_dispute(reporter, query_id, query_data) // start dispute, required for slashing
 		});
 
@@ -450,7 +464,7 @@ fn slash_reporter() {
 				Origin::Governance.into(),
 				reporter,
 				recipient,
-				STAKE_AMOUNT.into()
+				MINIMUM_STAKE_AMOUNT.into()
 			));
 			assert_eq!(Tellor::time_of_last_allocation(), now());
 			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
@@ -642,7 +656,7 @@ fn withdraw_stake() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				address
 			));
 			assert_eq!(Tellor::get_total_stakers(), 1);
@@ -650,7 +664,7 @@ fn withdraw_stake() {
 				Tellor::report_stake_withdrawn(
 					Origin::Staking.into(),
 					reporter,
-					STAKE_AMOUNT.into(),
+					MINIMUM_STAKE_AMOUNT.into(),
 					address
 				),
 				Error::NoWithdrawalRequested
@@ -665,7 +679,7 @@ fn withdraw_stake() {
 				Tellor::report_stake_withdrawn(
 					Origin::Staking.into(),
 					reporter,
-					STAKE_AMOUNT.into(),
+					MINIMUM_STAKE_AMOUNT.into(),
 					address
 				),
 				Error::WithdrawalPeriodPending
@@ -707,7 +721,7 @@ fn get_block_number_by_timestamp() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				address
 			));
 			assert_ok!(Tellor::submit_value(
@@ -738,7 +752,7 @@ fn get_current_value() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -766,7 +780,7 @@ fn get_new_value_count_by_query_id() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -804,7 +818,7 @@ fn get_report_details() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -867,7 +881,7 @@ fn get_reporter_by_timestamp() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -895,7 +909,7 @@ fn get_reporter_last_timestamp() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -923,7 +937,7 @@ fn get_reports_submitted_by_address() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -961,7 +975,7 @@ fn get_reports_submitted_by_address_and_query_id() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -990,7 +1004,7 @@ fn get_reports_submitted_by_address_and_query_id() {
 fn get_stake_amount() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L439
 	new_test_ext().execute_with(|| {
-		with_block(|| assert_eq!(Tellor::get_stake_amount(), STAKE_AMOUNT.into()))
+		with_block(|| assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into()))
 	});
 }
 
@@ -1058,7 +1072,7 @@ fn get_time_of_last_new_value() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1086,7 +1100,7 @@ fn get_timestamp_by_query_and_index() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1124,7 +1138,7 @@ fn get_timestamp_index_by_timestamp() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1164,7 +1178,7 @@ fn get_total_stake_amount() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				address
 			));
 			assert_ok!(Tellor::report_staking_withdraw_request(
@@ -1195,14 +1209,14 @@ fn get_total_stakers() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				address
 			));
 			assert_eq!(Tellor::get_total_stakers(), 1);
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				address
 			));
 			assert_eq!(Tellor::get_total_stakers(), 1);
@@ -1218,7 +1232,7 @@ fn get_total_stakers() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				address
 			));
 			assert_eq!(Tellor::get_total_stakers(), 1);
@@ -1241,7 +1255,7 @@ fn is_in_dispute() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1280,7 +1294,7 @@ fn retrieve_data() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1592,77 +1606,162 @@ fn get_data_before() {
 }
 
 #[test]
-#[ignore]
 fn update_stake_amount() {
+	let query_data: QueryDataOf<Test> = spot_price("trb", "gbp").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	println!("{:?}", query_id);
+	let reporter = 1;
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L762
 	ext.execute_with(|| {
-		// // Setup
-		// 	await token.mint(accounts[1].address, web3.utils.toWei("10000"));
-		// 	await token.connect(accounts[1]).approve(tellor.address, web3.utils.toWei("10000"))
-		// 	await tellor.connect(accounts[1]).depositStake(web3.utils.toWei("10000"))
-		//
-		// 	// Test no reported TRB price
-		// 	await tellor.updateStakeAmount()
-		// 	console.log("REQUIRED_STAKE: " + web3.utils.fromWei(REQUIRED_STAKE))
-		// 	expect(await tellor.stakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
-		//
-		// 	// Test updating when 12 hrs have NOT passed
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 2), 0, TRB_QUERY_DATA)
-		// 	await tellor.connect(accounts[1]).updateStakeAmount()
-		// 	expect(await tellor.getStakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
-		//
-		// 	// Test updating when 12 hrs have passed
-		// 	h.advanceTime(60 * 60 * 12)
-		// 	await tellor.connect(accounts[1]).updateStakeAmount()
-		// 	expect(await tellor.getStakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
-		//
-		// 	// Test updating when multiple prices have been reported
-		// 	h.advanceTime(60 * 60 * 1)
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 1.5), 0, TRB_QUERY_DATA)
-		// 	h.advanceTime(60 * 60 * 1)
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 2), 0, TRB_QUERY_DATA)
-		// 	h.advanceTime(60 * 60 * 1)
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 3), 0, TRB_QUERY_DATA)
-		// 	h.advanceTime(60 * 60 * 12)
-		// 	await tellor.connect(accounts[1]).updateStakeAmount()
-		// 	expect(await tellor.getStakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
-		//
-		// 	// Test bad TRB price encoding
-		// 	badPrice = abiCoder.encode(["string"], ["Where's the beef?"])
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, badPrice, 0, TRB_QUERY_DATA)
-		// 	await h.advanceTime(86400/2)
-		// 	await h.expectThrow(tellor.updateStakeAmount())
-		// 	expect(await tellor.stakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
-		//
-		// 	// Test reported TRB price outside limits - high
-		// 	highPrice = h.toWei("1000001")
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(highPrice), 0, TRB_QUERY_DATA)
-		// 	await h.advanceTime(86400/2)
-		// 	await h.expectThrow(tellor.updateStakeAmount())
-		// 	expect(await tellor.stakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
-		//
-		// 	// Test reported TRB price outside limits - low
-		// 	lowPrice = h.toWei("0.009")
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(lowPrice), 0, TRB_QUERY_DATA)
-		// 	await h.advanceTime(86400/2)
-		// 	await h.expectThrow(tellor.updateStakeAmount())
-		// 	expect(await tellor.stakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
-		//
-		// 	// Test updating when multiple prices have been reported
-		// 	h.advanceTime(60 * 60 * 1)
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 7), 0, TRB_QUERY_DATA)
-		// 	h.advanceTime(60 * 60 * 1)
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 8), 0, TRB_QUERY_DATA)
-		// 	h.advanceTime(60 * 60 * 1)
-		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 9), 0, TRB_QUERY_DATA)
-		// 	h.advanceTime(60 * 60 * 12)
-		// 	await tellor.connect(accounts[1]).updateStakeAmount()
-		// 	expect(await tellor.getStakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+		with_block(|| {
+			// Setup
+			// 	await token.mint(accounts[1].address, web3.utils.toWei("10000"));
+			// 	await token.connect(accounts[1]).approve(tellor.address, web3.utils.toWei("10000"))
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				trb(10_000),
+				Address::random()
+			));
+
+			// Test no reported TRB price
+			assert_ok!(Tellor::_update_stake_amount());
+			println!("REQUIRED_STAKE: {}", REQUIRED_STAKE);
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+
+			// Test updating when 12 hrs have NOT passed
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(PRICE_TRB * 2),
+				0,
+				query_data.clone()
+			));
+			assert_ok!(Tellor::_update_stake_amount());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
+
+		// Test updating when 12 hrs have passed
+		with_block_after(60 * 60 * 12, || {
+			assert_ok!(Tellor::_update_stake_amount());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
+
+		// Test updating when multiple prices have been reported
+		with_block_after(60 * 60 * 1, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value((PRICE_TRB as f64 * 1.5) as u64),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 1, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(PRICE_TRB * 2),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 1, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(PRICE_TRB * 3),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 12, || {
+			assert_ok!(Tellor::_update_stake_amount());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
+
+		// Test bad TRB price encoding
+		let bad_price = b"Where's the beef?";
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				bad_price.to_vec().try_into().unwrap(),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(86_400 / 2, || {
+			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
+
+		// Test reported TRB price outside limits - high
+		let high_price = trb(1_000_001);
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(high_price),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(86_400 / 2, || {
+			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
+
+		// Test reported TRB price outside limits - low
+		let low_price = trb(0.009);
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(low_price),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(86_400 / 2, || {
+			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
+
+		// Test updating when multiple prices have been reported
+		with_block_after(60 * 60 * 1, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(PRICE_TRB * 7),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 1, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(PRICE_TRB * 8),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 1, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(PRICE_TRB * 9),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 12, || {
+			assert_ok!(Tellor::_update_stake_amount());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
 	});
 }
 

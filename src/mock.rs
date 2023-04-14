@@ -120,6 +120,7 @@ parameter_types! {
 	pub TellorRegistry: ContractLocation = (EVM_PARA_ID, *REGISTRY).into();
 	pub TellorGovernance: ContractLocation = (EVM_PARA_ID, *GOVERNANCE).into();
 	pub TellorStaking: ContractLocation = (EVM_PARA_ID, *STAKING).into();
+	pub StakingTokenPriceQueryId: H256 = H256([211,194,112,119,36,198,191,243,89,99,24,187,3,60,229,109,166,126,119,8,208,251,201,107,66,216,126,12,172,199,241,136]);
 }
 
 impl tellor::Config for Test {
@@ -153,7 +154,7 @@ impl tellor::Config for Test {
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
 	type StakeAmountCurrencyTarget = ();
-	type StakingTokenPriceQueryId = ();
+	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
 	type UpdateStakeInterval = ();
 }
 

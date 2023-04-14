@@ -49,7 +49,7 @@ type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
 type U256ToBalance = crate::types::U256ToBalance<Test>;
 
-const STAKE_AMOUNT: u128 = 100 * TRB;
+const MINIMUM_STAKE_AMOUNT: u128 = 100 * TRB;
 const TRB: u128 = 10u128.pow(DECIMALS);
 
 fn trb(amount: impl Into<f64>) -> Tributes {
@@ -236,7 +236,7 @@ fn register() {
 				require_weight_at_most,
 				gas_limit
 			));
-			assert_eq!(StakeAmount::<Test>::get(), STAKE_AMOUNT.into());
+			assert_eq!(StakeAmount::<Test>::get(), MINIMUM_STAKE_AMOUNT.into());
 			assert_eq!(
 				Configuration::get().unwrap(),
 				Config {
