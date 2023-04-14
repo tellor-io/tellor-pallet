@@ -152,6 +152,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxVotes: Get<u32>;
 
+		/// The minimum amount of tokens required to stake.
+		#[pallet::constant]
+		type MinimumStakeAmount: Get<u128>;
+
 		/// The identifier of the pallet within the runtime.
 		#[pallet::constant]
 		type PalletId: Get<PalletId>;
@@ -186,8 +190,6 @@ pub mod pallet {
 
 		type Xcm: traits::SendXcm;
 
-		#[pallet::constant]
-		type MinimumStakeAmount: Get<Amount>;
 		#[pallet::constant]
 		type StakeAmountCurrencyTarget: Get<U256>;
 		#[pallet::constant]
@@ -242,7 +244,7 @@ pub mod pallet {
 	pub(super) type RewardRate<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Minimum amount required to be a staker.
 	#[pallet::storage]
-	pub(super) type StakeAmount<T> = StorageValue<_, Tributes>;
+	pub(super) type StakeAmount<T> = StorageValue<_, Tributes, ValueQuery, MinimumStakeAmount<T>>;
 	/// Mapping from a staker's account identifier to their staking info.
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
@@ -298,6 +300,11 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type StakeAmountBlockNumber<T> =
 		StorageValue<_, <T as frame_system::Config>::BlockNumber, ValueQuery>;
+
+	#[pallet::type_value]
+	pub fn MinimumStakeAmount<T: Config>() -> Amount {
+		T::MinimumStakeAmount::get().into()
+	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -383,7 +390,7 @@ pub mod pallet {
 
 		// Registration
 		/// Emitted when the pallet is (re-)configured.
-		Configured { stake_amount: Tributes },
+		Configured { },
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
 		/// Emitted when deregistration from the controller contracts is attempted.
@@ -448,6 +455,8 @@ pub mod pallet {
 		/// Nonce must match the timestamp index.
 		InvalidNonce,
 		InvalidPrice,
+		/// Invalid staking token price.
+		InvalidStakingTokenPrice,
 		/// Value must be submitted.
 		InvalidValue,
 		/// The maximum number of queries has been reached.
@@ -496,8 +505,8 @@ pub mod pallet {
 		/// Time for voting has not elapsed.
 		VotingPeriodActive,
 
-		// Registration
-		NotRegistered,
+		// Configuration
+		NotConfigured,
 
 		// XCM
 		MaxEthereumXcmInputSizeExceeded,
@@ -537,7 +546,6 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Registers the parachain with the Tellor controller contracts.
 		///
-		/// - `stake_amount`: The stake amount required to report oracle data to the parachain.
 		/// - `fees`: The asset(s) to pay for cross-chain message fees.
 		/// - `weight_limit`: The maximum amount of weight to purchase for remote execution of messages.
 		/// - `require_weight_at_most`: The maximum weight of any remote call.
@@ -545,7 +553,6 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		pub fn register(
 			origin: OriginFor<T>,
-			stake_amount: Tributes,
 			fees: Box<MultiAsset>,
 			weight_limit: WeightLimit,
 			require_weight_at_most: u64,
@@ -553,8 +560,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 
-			// Update local configuration
-			<StakeAmount<T>>::set(Some(stake_amount));
+			// Update configuration
 			let config = types::Configuration {
 				xcm_config: xcm::XcmConfig {
 					fees: *fees.clone(),
@@ -564,7 +570,7 @@ pub mod pallet {
 				gas_limit,
 			};
 			<Configuration<T>>::set(Some(config));
-			Self::deposit_event(Event::Configured { stake_amount });
+			Self::deposit_event(Event::Configured {});
 
 			// Register relevant supplied config with parachain registry contract
 			let registry_contract = T::Registry::get();
@@ -976,8 +982,7 @@ pub mod pallet {
 			let mut staker =
 				<StakerDetails<T>>::get(&reporter).ok_or(Error::<T>::InsufficientStake)?;
 			ensure!(
-				staker.staked_balance >=
-					<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+				staker.staked_balance >= <StakeAmount<T>>::get(),
 				Error::<T>::InsufficientStake
 			);
 			// Require reporter to abide by given reporting lock
@@ -991,9 +996,7 @@ pub mod pallet {
 						.checked_div(
 							staker
 								.staked_balance
-								.checked_div(
-									<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?
-								)
+								.checked_div(<StakeAmount<T>>::get())
 								.ok_or(ArithmeticError::DivisionByZero)?
 								.saturated_into::<u128>()
 						)
@@ -1137,7 +1140,7 @@ pub mod pallet {
 				value: <ValueOf<T>>::default(),
 				disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp)
 					.ok_or(Error::<T>::NoValueExists)?,
-				slashed_amount: <StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+				slashed_amount: <StakeAmount<T>>::get(),
 			};
 			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 			if vote_round == 1 {
@@ -1177,9 +1180,7 @@ pub mod pallet {
 				dispute.value =
 					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
 			}
-			let stake_amount = U256ToBalance::<T>::convert(Self::convert(
-				<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
-			)?);
+			let stake_amount = U256ToBalance::<T>::convert(Self::convert(<StakeAmount<T>>::get())?);
 			if vote.fee > stake_amount {
 				vote.fee = stake_amount;
 			}
@@ -1200,7 +1201,7 @@ pub mod pallet {
 				.ok_or(Error::<T>::NotReporter)?
 				.address;
 
-			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotConfigured)?;
 
 			// todo: charge dispute initiator corresponding xcm fees
 
@@ -1370,7 +1371,7 @@ pub mod pallet {
 
 			// Confirm staking withdraw request
 			let staking_contract = T::Staking::get();
-			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotConfigured)?;
 			let message = xcm::transact_with_config(
 				ethereum_xcm::transact(
 					staking_contract.address,
@@ -1509,11 +1510,7 @@ pub mod pallet {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);
 
-			// Update local configuration
-			<StakeAmount<T>>::set(None);
-			Self::deposit_event(Event::Configured { stake_amount: U256::zero() });
-
-			// Register relevant supplied config with parachain registry contract
+			// Deregister from parachain registry contract
 			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotRegistered)?;
 			let registry_contract = T::Registry::get();
 			let message = xcm::transact_with_config(

@@ -860,7 +860,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The stake amount.
 	pub fn get_stake_amount() -> Tributes {
-		<StakeAmount<T>>::get().unwrap_or_default()
+		<StakeAmount<T>>::get()
 	}
 
 	/// Returns all information about a staker.
@@ -1226,7 +1226,7 @@ impl<T: Config> Pallet<T> {
 		stake_info.staked_balance = new_staked_balance;
 		// Update total stakers
 		<TotalStakers<T>>::try_mutate(|total| -> Result<(), Error<T>> {
-			if stake_info.staked_balance >= <StakeAmount<T>>::get().ok_or(Error::NotRegistered)? {
+			if stake_info.staked_balance >= <StakeAmount<T>>::get() {
 				if !stake_info.staked {
 					total.saturating_inc();
 				}
@@ -1287,26 +1287,25 @@ impl<T: Config> Pallet<T> {
 			T::StakingTokenPriceQueryId::get(),
 			Self::now().saturating_sub(12 * HOURS),
 		) {
-			if let Some(price) = T::ValueConverter::convert(value.into_inner()) {
-				// todo:
-				// 	require(
-				// 		_stakingTokenPrice >= 0.01 ether && _stakingTokenPrice < 1000000 ether,
-				// 		"invalid staking token price"
-				// 	);
-
+			if let Some(staking_token_price) = T::ValueConverter::convert(value.into_inner()) {
+				ensure!(
+					staking_token_price >= 10u32.pow(16).into() &&
+						staking_token_price < 10u32.pow(24).into(),
+					Error::<T>::InvalidStakingTokenPrice
+				);
 				let adjusted_stake_amount = (T::StakeAmountCurrencyTarget::get()
 					.checked_mul(Amount::from(10u128.pow(18)))
 					.ok_or(ArithmeticError::Overflow)?)
-				.checked_div(price.into())
+				.checked_div(staking_token_price.into())
 				.expect("price range checked above; qed");
 
 				let amount = <StakeAmount<T>>::mutate(|amount| {
-					let minimum_stake_amount = T::MinimumStakeAmount::get();
+					let minimum_stake_amount = T::MinimumStakeAmount::get().into();
 					if adjusted_stake_amount < minimum_stake_amount {
-						*amount = Some(minimum_stake_amount);
+						*amount = minimum_stake_amount;
 						minimum_stake_amount
 					} else {
-						*amount = Some(adjusted_stake_amount);
+						*amount = adjusted_stake_amount;
 						adjusted_stake_amount
 					}
 				});

@@ -114,6 +114,7 @@ static GOVERNANCE: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 
 parameter_types! {
+	pub const MinimumStakeAmount: u128 = 100 * 10u128.pow(18);
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
 	pub const ParachainId: u32 = PARA_ID;
 	pub TellorRegistry: ContractLocation = (EVM_PARA_ID, *REGISTRY).into();
@@ -139,6 +140,7 @@ impl tellor::Config for Test {
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so ValueConverter needs to handle conversion to price for threshold checks
 	type MaxVotes = ConstU32<10>;
+	type MinimumStakeAmount = MinimumStakeAmount;
 	type PalletId = TellorPalletId;
 	type ParachainId = ParachainId;
 	type Price = u128;
@@ -150,7 +152,6 @@ impl tellor::Config for Test {
 	type Token = Balances;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
-	type MinimumStakeAmount = ();
 	type StakeAmountCurrencyTarget = ();
 	type StakingTokenPriceQueryId = ();
 	type UpdateStakeInterval = ();

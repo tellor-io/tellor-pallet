@@ -46,7 +46,7 @@ fn claim_tip_ensures() {
 	// Prerequisites
 	let claimed = ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
+			configure_parachain();
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 			deposit_stake(another_reporter, STAKE_AMOUNT, Address::random());
 
@@ -350,7 +350,6 @@ fn claim_tip() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 
 			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
@@ -439,7 +438,6 @@ fn _get_reward_amount() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 		});
 	});
@@ -792,7 +790,6 @@ fn get_reward_claimed_status() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 			timestamp = super::now();
 			Balances::make_free_balance_be(&feed_creator, token(3));
@@ -849,7 +846,6 @@ fn tip() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 			deposit_stake(another_reporter, STAKE_AMOUNT, Address::random());
 
@@ -979,7 +975,7 @@ fn claim_onetime_tip() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
+			configure_parachain();
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 			deposit_stake(another_reporter, STAKE_AMOUNT, Address::random());
 		});
@@ -1328,7 +1324,6 @@ fn get_past_tips() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 		});
 	});
@@ -1425,7 +1420,6 @@ fn get_past_tip_by_index() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 		});
 	});
@@ -1524,7 +1518,6 @@ fn get_past_tip_count() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 		});
 	});
@@ -1586,7 +1579,6 @@ fn get_funded_feeds() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 			Balances::make_free_balance_be(&feed_creator, token(3) + 1);
 			create_feed(
@@ -1735,7 +1727,6 @@ fn get_funded_query_ids() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
 			deposit_stake(another_reporter, STAKE_AMOUNT, Address::random());
 
@@ -2006,7 +1997,6 @@ fn get_reward_amount() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter_1, STAKE_AMOUNT, Address::random());
 			deposit_stake(reporter_2, STAKE_AMOUNT, Address::random());
 			deposit_stake(reporter_3, STAKE_AMOUNT, Address::random());
@@ -2244,7 +2234,6 @@ fn get_reward_claim_status_list() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
 			deposit_stake(reporter_1, STAKE_AMOUNT, Address::random());
 			deposit_stake(reporter_2, STAKE_AMOUNT, Address::random());
 			deposit_stake(reporter_3, STAKE_AMOUNT, Address::random());

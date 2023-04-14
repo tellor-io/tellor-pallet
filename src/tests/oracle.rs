@@ -39,7 +39,7 @@ fn deposit_stake() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L86
 	ext.execute_with(|| {
@@ -121,7 +121,7 @@ fn remove_value() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
+			configure_parachain();
 			super::deposit_stake(another_reporter, STAKE_AMOUNT, Address::random());
 		})
 	});
@@ -178,7 +178,7 @@ fn request_stake_withdraw() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L151
 	ext.execute_with(|| {
@@ -288,7 +288,7 @@ fn slash_reporter() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
 	ext.execute_with(|| {
@@ -472,9 +472,6 @@ fn submit_value() {
 	let address = Address::random();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L277
 	ext.execute_with(|| {
 		with_block(|| {
@@ -637,7 +634,7 @@ fn withdraw_stake() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L323
 	ext.execute_with(|| {
@@ -704,9 +701,6 @@ fn get_block_number_by_timestamp() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L345
 	ext.execute_with(|| {
 		with_block(|| {
@@ -738,9 +732,6 @@ fn get_current_value() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L352
 	ext.execute_with(|| {
 		with_block(|| {
@@ -768,9 +759,6 @@ fn get_new_value_count_by_query_id() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L363
 	ext.execute_with(|| {
@@ -809,9 +797,6 @@ fn get_report_details() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L372
 	ext.execute_with(|| {
@@ -876,9 +861,6 @@ fn get_reporter_by_timestamp() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L402
 	ext.execute_with(|| {
 		with_block(|| {
@@ -907,9 +889,6 @@ fn get_reporter_last_timestamp() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L409
 	ext.execute_with(|| {
 		with_block(|| {
@@ -937,9 +916,6 @@ fn get_reports_submitted_by_address() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L419
 	ext.execute_with(|| {
@@ -979,9 +955,6 @@ fn get_reports_submitted_by_address_and_query_id() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L429
 	ext.execute_with(|| {
 		with_block(|| {
@@ -1017,11 +990,7 @@ fn get_reports_submitted_by_address_and_query_id() {
 fn get_stake_amount() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L439
 	new_test_ext().execute_with(|| {
-		with_block(|| {
-			assert_eq!(Tellor::get_stake_amount(), trb(0));
-			register_parachain(STAKE_AMOUNT);
-			assert_eq!(Tellor::get_stake_amount(), STAKE_AMOUNT.into());
-		})
+		with_block(|| assert_eq!(Tellor::get_stake_amount(), STAKE_AMOUNT.into()))
 	});
 }
 
@@ -1034,7 +1003,7 @@ fn get_staker_info() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L443
 	ext.execute_with(|| {
@@ -1083,9 +1052,6 @@ fn get_time_of_last_new_value() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L461
 	ext.execute_with(|| {
 		with_block(|| {
@@ -1113,9 +1079,6 @@ fn get_timestamp_by_query_and_index() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L471
 	ext.execute_with(|| {
@@ -1155,9 +1118,6 @@ fn get_timestamp_index_by_timestamp() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L481
 	ext.execute_with(|| {
 		with_block(|| {
@@ -1196,7 +1156,7 @@ fn get_total_stake_amount() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L491
 	ext.execute_with(|| {
@@ -1225,7 +1185,7 @@ fn get_total_stakers() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L502
 	ext.execute_with(|| {
@@ -1274,7 +1234,7 @@ fn is_in_dispute() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	ext.execute_with(|| {
 		with_block(|| {
@@ -1313,9 +1273,6 @@ fn retrieve_data() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L519
 	ext.execute_with(|| {
@@ -1403,9 +1360,6 @@ fn get_index_for_data_before() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L519
 	ext.execute_with(|| {
@@ -1550,9 +1504,6 @@ fn get_data_before() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L697
 	ext.execute_with(|| {
