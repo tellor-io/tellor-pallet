@@ -150,6 +150,10 @@ impl tellor::Config for Test {
 	type Token = Balances;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
+	type MinimumStakeAmount = ();
+	type StakeAmountCurrencyTarget = ();
+	type StakingTokenPriceQueryId = ();
+	type UpdateStakeInterval = ();
 }
 
 pub struct ValueConverter;
