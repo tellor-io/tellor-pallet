@@ -26,7 +26,7 @@ use frame_support::{
 	BoundedVec, PalletId,
 };
 use sp_api::mock_impl_runtime_apis;
-use sp_core::{ConstU32, H256};
+use sp_core::{ConstU32, H256, U256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
@@ -606,7 +606,7 @@ mod oracle {
 	#[test]
 	fn get_stake_amount() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), Amount::zero());
+			assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), U256::zero());
 		});
 	}
 
@@ -658,7 +658,7 @@ mod oracle {
 	#[test]
 	fn get_total_stake_amount() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), Amount::zero());
+			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), U256::zero());
 		});
 	}
 

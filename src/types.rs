@@ -17,7 +17,8 @@
 use super::Config;
 use frame_support::pallet_prelude::*;
 pub(crate) use governance::Tally;
-use sp_core::{bounded::BoundedBTreeMap, H160, H256, U256};
+pub(crate) use sp_core::U256;
+use sp_core::{bounded::BoundedBTreeMap, H160, H256};
 pub(crate) use sp_runtime::traits::Keccak256;
 use sp_runtime::{
 	traits::{Convert, Zero},
@@ -162,8 +163,8 @@ pub(crate) mod oracle {
 			Self {
 				address,
 				start_date: Zero::zero(),
-				staked_balance: Amount::zero(),
-				locked_balance: Amount::zero(),
+				staked_balance: U256::zero(),
+				locked_balance: U256::zero(),
 				reward_debt: Zero::zero(),
 				reporter_last_timestamp: Zero::zero(),
 				reports_submitted: 0,
@@ -250,8 +251,8 @@ pub struct Configuration {
 }
 
 pub(super) struct U256ToBalance<T>(PhantomData<T>);
-impl<T: Config> Convert<Amount, BalanceOf<T>> for U256ToBalance<T> {
-	fn convert(a: Amount) -> BalanceOf<T> {
+impl<T: Config> Convert<U256, BalanceOf<T>> for U256ToBalance<T> {
+	fn convert(a: U256) -> BalanceOf<T> {
 		a.saturated_into::<u128>().saturated_into()
 	}
 }

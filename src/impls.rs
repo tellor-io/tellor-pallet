@@ -40,13 +40,13 @@ impl<T: Config> Pallet<T> {
 						.into()
 						.checked_mul(total_stake_amount)
 						.ok_or(ArithmeticError::Overflow)?)
-					.checked_div(Amount::from(Self::unit()?))
+					.checked_div(U256::from(Self::unit()?))
 					.ok_or(ArithmeticError::DivisionByZero)?
 					.checked_sub(<TotalRewardDebt<T>>::get().into())
 					.ok_or(ArithmeticError::Underflow)?,
 				)
 				.ok_or(ArithmeticError::Underflow)?)
-			.checked_div(Amount::from(30 * DAYS))
+			.checked_div(U256::from(30 * DAYS))
 			.expect("days constant is greater than zero; qed"),
 		));
 		Ok(())
@@ -61,7 +61,7 @@ impl<T: Config> Pallet<T> {
 	/// * `stake_amount` - The amount staked.
 	/// # Returns
 	/// A stake amount as a local token amount if successful.
-	pub(super) fn convert(stake_amount: Amount) -> Result<Amount, DispatchError> {
+	pub(super) fn convert(stake_amount: Amount) -> Result<U256, DispatchError> {
 		// todo: use rate from oracle
 		const UNIT: u128 = 10u128.pow(DECIMALS);
 		const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
@@ -69,13 +69,13 @@ impl<T: Config> Pallet<T> {
 		PRICE
 			// Convert price to result
 			.ok_or_else(|| Error::<T>::InvalidPrice.into())
-			.map(|price| Amount::from(price))
+			.map(|price| U256::from(price))
 			// Convert supplied amount into local balance amount based on price
 			.and_then(|price| {
 				Ok(stake_amount
 					.checked_mul(price)
 					.ok_or(ArithmeticError::Overflow)?
-					.checked_div(Amount::from(UNIT))
+					.checked_div(U256::from(UNIT))
 					.expect("unit constant is greater than zero; qed"))
 			})
 			// Redenominate to local balance number of decimals
@@ -316,7 +316,7 @@ impl<T: Config> Pallet<T> {
 	/// The latest dispute fee.
 	pub fn get_dispute_fee() -> Option<BalanceOf<T>> {
 		<StakeAmount<T>>::get()
-			.and_then(|a| a.checked_div(Amount::from(10)))
+			.and_then(|a| a.checked_div(U256::from(10)))
 			.and_then(|a| Self::convert(a).ok())
 			.map(|a| U256ToBalance::<T>::convert(a))
 	}
@@ -965,17 +965,17 @@ impl<T: Config> Pallet<T> {
 		T::Time::now().as_secs()
 	}
 
-	pub(super) fn redenominate(amount: Amount, decimals: u32) -> Result<Amount, DispatchError> {
+	pub(super) fn redenominate(amount: U256, decimals: u32) -> Result<U256, DispatchError> {
 		if DECIMALS > decimals {
-			Amount::from(10)
-				.checked_pow(Amount::from(DECIMALS - decimals))
+			U256::from(10)
+				.checked_pow(U256::from(DECIMALS - decimals))
 				.ok_or_else(|| ArithmeticError::Overflow.into())
 				.map(|r| {
 					amount.checked_div(r).expect("result is non-zero, provided non-overflow; qed")
 				})
 		} else if decimals > DECIMALS {
-			Amount::from(10)
-				.checked_pow(Amount::from(decimals - DECIMALS))
+			U256::from(10)
+				.checked_pow(U256::from(decimals - DECIMALS))
 				.ok_or_else(|| ArithmeticError::Overflow.into())
 				.and_then(|r| amount.checked_mul(r).ok_or_else(|| ArithmeticError::Overflow.into()))
 		} else {
@@ -1101,16 +1101,16 @@ impl<T: Config> Pallet<T> {
 		}
 		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::get())?;
 		let reward_rate = <RewardRate<T>>::get();
-		if total_stake_amount == Amount::zero() || reward_rate == Zero::zero() {
+		if total_stake_amount == U256::zero() || reward_rate == Zero::zero() {
 			<TimeOfLastAllocation<T>>::set(timestamp);
 			return Ok(())
 		}
 
 		// calculate accumulated reward per token staked
-		let unit: Amount = Self::unit()?.into();
+		let unit: U256 = Self::unit()?.into();
 		let accumulated_reward_per_share = <AccumulatedRewardPerShare<T>>::get().into();
-		let new_accumulated_reward_per_share: Amount = accumulated_reward_per_share +
-			(Amount::from(timestamp - time_of_last_allocation)
+		let new_accumulated_reward_per_share: U256 = accumulated_reward_per_share +
+			(U256::from(timestamp - time_of_last_allocation)
 				.checked_mul(reward_rate.into())
 				.ok_or(ArithmeticError::Overflow)?
 				.checked_mul(unit)
@@ -1175,7 +1175,7 @@ impl<T: Config> Pallet<T> {
 		let (staker, stake_info) = staker;
 		let staking_rewards = Self::staking_rewards();
 		let unit = Self::unit()?.into();
-		if stake_info.staked_balance > Amount::zero() {
+		if stake_info.staked_balance > U256::zero() {
 			// if address already has a staked balance, calculate and transfer pending rewards
 			let mut pending_reward = <U256ToBalance<T>>::convert(
 				Self::convert(stake_info.staked_balance)?

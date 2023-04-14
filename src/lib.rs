@@ -1263,7 +1263,7 @@ pub mod pallet {
 				ensure!(address == staker.address, Error::<T>::InvalidAddress);
 				let staked_balance = staker.staked_balance;
 				let locked_balance = staker.locked_balance;
-				if locked_balance > Amount::zero() {
+				if locked_balance > U256::zero() {
 					if locked_balance >= amount {
 						// if staker's locked balance covers full amount, use that
 						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
@@ -1273,10 +1273,10 @@ pub mod pallet {
 						<ToWithdraw<T>>::mutate(|locked| {
 							*locked = locked.saturating_sub(staker.locked_balance)
 						});
-						staker.locked_balance = Amount::zero();
+						staker.locked_balance = U256::zero();
 					}
 				} else {
-					if staked_balance == Amount::zero() {
+					if staked_balance == U256::zero() {
 						// if staked balance and locked balance equal 0, save current vote tally.
 						// voting participation used for calculating rewards
 						staker.start_vote_count = Self::get_vote_count();
@@ -1369,7 +1369,7 @@ pub mod pallet {
 					Some(staker) => {
 						// Ensure reporter is locked and that enough time has passed
 						ensure!(
-							staker.locked_balance > Amount::zero(),
+							staker.locked_balance > U256::zero(),
 							Error::<T>::NoWithdrawalRequested
 						);
 						ensure!(
@@ -1410,7 +1410,7 @@ pub mod pallet {
 						let staked_balance = staker.staked_balance;
 						let locked_balance = staker.locked_balance;
 						ensure!(
-							staked_balance.saturating_add(locked_balance) > Amount::zero(),
+							staked_balance.saturating_add(locked_balance) > U256::zero(),
 							Error::<T>::InsufficientStake
 						);
 						if locked_balance >= amount {
@@ -1430,17 +1430,14 @@ pub mod pallet {
 							<ToWithdraw<T>>::mutate(|locked| {
 								*locked = locked.saturating_sub(locked_balance)
 							});
-							staker.locked_balance = Amount::zero();
+							staker.locked_balance = U256::zero();
 						} else {
 							// if sum(locked balance + staked balance) is less than stakeAmount, slash sum
 							<ToWithdraw<T>>::mutate(|locked| {
 								*locked = locked.saturating_sub(locked_balance)
 							});
-							Self::update_stake_and_pay_rewards(
-								(&reporter, staker),
-								Amount::zero(),
-							)?;
-							staker.locked_balance = Amount::zero();
+							Self::update_stake_and_pay_rewards((&reporter, staker), U256::zero())?;
+							staker.locked_balance = U256::zero();
 						}
 						Ok(())
 					},
@@ -1470,11 +1467,11 @@ pub mod pallet {
 		#[pallet::call_index(14)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
-			ensure!(Self::get_total_stake_amount() == Amount::zero(), Error::<T>::ActiveStake);
+			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);
 
 			// Update local configuration
 			<StakeAmount<T>>::set(None);
-			Self::deposit_event(Event::Configured { stake_amount: Amount::zero() });
+			Self::deposit_event(Event::Configured { stake_amount: U256::zero() });
 
 			// Register relevant supplied config with parachain registry contract
 			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotRegistered)?;

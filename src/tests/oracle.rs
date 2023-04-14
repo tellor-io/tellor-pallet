@@ -1955,9 +1955,9 @@ fn update_stake_and_pay_rewards() {
 				let expected_accumulated_reward_per_share =
 					(timestamp - timestamp_0) * expected_reward_rate / (10 * PRICE);
 				let expected_balance = U256ToBalance::convert(
-					Amount::from(token(10) * PRICE) *
-						Amount::from(expected_accumulated_reward_per_share) /
-						Amount::from(token(1)),
+					U256::from(token(10) * PRICE) *
+						U256::from(expected_accumulated_reward_per_share) /
+						U256::from(token(1)),
 				);
 				assert_eq!(Balances::free_balance(1), expected_balance);
 				assert_eq!(
