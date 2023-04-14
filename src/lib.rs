@@ -197,7 +197,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type StakeAmountCurrencyTarget: Get<U256>;
 		#[pallet::constant]
-		type UpdateStakeInterval: Get<Self::BlockNumber>;
+		type UpdateStakeAmountInterval: Get<Self::BlockNumber>;
 	}
 
 	// AutoPay
@@ -530,7 +530,7 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(n: T::BlockNumber) -> Weight {
 			// Update stake amount
-			if n >= <StakeAmountBlockNumber<T>>::get() + T::UpdateStakeInterval::get() {
+			if n >= <StakeAmountBlockNumber<T>>::get() + T::UpdateStakeAmountInterval::get() {
 				match Pallet::<T>::_update_stake_amount() {
 					Ok(_) => <StakeAmountBlockNumber<T>>::set(n),
 					Err(_e) => todo!("log error"),

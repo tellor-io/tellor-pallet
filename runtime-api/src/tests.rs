@@ -126,6 +126,7 @@ impl tellor::Config for Test {
 	type MaxTipsPerQuery = ();
 	type MaxValueLength = MaxValueLength;
 	type MaxVotes = ();
+	type MinimumStakeAmount = ();
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
 	type Price = u32;
@@ -133,10 +134,13 @@ impl tellor::Config for Test {
 	type Registry = ();
 	type Staking = ();
 	type StakingOrigin = EnsureStaking;
+	type StakingTokenPriceQueryId = ();
 	type Time = Time;
 	type Token = Balances;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
+	type StakeAmountCurrencyTarget = ();
+	type UpdateStakeAmountInterval = ();
 }
 pub struct TestSendXcm;
 impl tellor::traits::SendXcm for TestSendXcm {

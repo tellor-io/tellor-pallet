@@ -155,7 +155,7 @@ impl tellor::Config for Test {
 	type Xcm = TestSendXcm;
 	type StakeAmountCurrencyTarget = ();
 	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
-	type UpdateStakeInterval = ();
+	type UpdateStakeAmountInterval = ();
 }
 
 pub struct ValueConverter;
