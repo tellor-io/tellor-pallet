@@ -61,7 +61,7 @@ impl<T: Config> Pallet<T> {
 	/// * `stake_amount` - The amount staked.
 	/// # Returns
 	/// A stake amount as a local token amount if successful.
-	pub(super) fn convert(stake_amount: Amount) -> Result<U256, DispatchError> {
+	pub(super) fn convert(stake_amount: Tributes) -> Result<U256, DispatchError> {
 		// todo: use rate from oracle
 		const UNIT: u128 = 10u128.pow(DECIMALS);
 		const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
@@ -831,7 +831,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the amount required to report oracle values.
 	/// # Returns
 	/// The stake amount.
-	pub fn get_stake_amount() -> Amount {
+	pub fn get_stake_amount() -> Tributes {
 		<StakeAmount<T>>::get().unwrap_or_default()
 	}
 
@@ -890,7 +890,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the total amount staked for reporting.
 	/// # Returns
 	/// The total amount of token staked.
-	pub fn get_total_stake_amount() -> Amount {
+	pub fn get_total_stake_amount() -> Tributes {
 		<TotalStakeAmount<T>>::get()
 	}
 
@@ -1169,7 +1169,7 @@ impl<T: Config> Pallet<T> {
 	/// * `new_staked_balance` - The new staked balance of the staker.
 	pub(super) fn update_stake_and_pay_rewards(
 		staker: (&AccountIdOf<T>, &mut StakeInfoOf<T>),
-		new_staked_balance: Amount,
+		new_staked_balance: Tributes,
 	) -> DispatchResult {
 		Self::update_rewards()?;
 		let (staker, stake_info) = staker;

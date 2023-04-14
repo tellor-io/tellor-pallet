@@ -29,7 +29,7 @@ pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 /// Address of a reporter on controller chain.
 pub type Address = H160;
 /// TRB stake amount as reported from controller chain.
-pub type Amount = U256;
+pub type Tributes = U256;
 /// Local currency used for onetime tips, funding feeds, accumulated rewards and dispute fees.
 pub(crate) type BalanceOf<T> = <T as Config>::Balance;
 pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
@@ -139,9 +139,9 @@ pub(crate) mod oracle {
 		/// Stake or withdrawal request start date.
 		pub(crate) start_date: Timestamp,
 		/// Staked token balance
-		pub(crate) staked_balance: Amount,
+		pub(crate) staked_balance: Tributes,
 		/// Amount locked for withdrawal.
-		pub(crate) locked_balance: Amount,
+		pub(crate) locked_balance: Tributes,
 		/// Used for staking reward calculation.
 		pub(crate) reward_debt: Balance,
 		/// Timestamp of reporter's last reported value.
@@ -191,7 +191,7 @@ pub(crate) mod governance {
 		/// Reporter who submitted the disputed value.
 		pub(crate) disputed_reporter: AccountId,
 		/// Amount slashed from reporter.
-		pub(crate) slashed_amount: Amount,
+		pub(crate) slashed_amount: Tributes,
 	}
 
 	#[derive(

@@ -34,8 +34,8 @@ use sp_runtime::{
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
-	Amount, DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp,
-	Tip, VoteResult,
+	DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp, Tip,
+	Tributes, VoteResult,
 };
 use xcm::latest::prelude::*;
 
@@ -273,7 +273,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reports_submitted_by_address_and_query_id(reporter, query_id)
 		}
 
-		fn get_stake_amount() -> Amount {
+		fn get_stake_amount() -> Tributes {
 			tellor::Pallet::<Test>::get_stake_amount()
 		}
 
@@ -297,7 +297,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_timestamp_index_by_timestamp(query_id, timestamp)
 		}
 
-		fn get_total_stake_amount() -> Amount {
+		fn get_total_stake_amount() -> Tributes {
 			tellor::Pallet::<Test>::get_total_stake_amount()
 		}
 

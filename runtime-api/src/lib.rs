@@ -22,7 +22,7 @@ pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
 pub use governance::VoteInfo;
 use sp_std::vec::Vec;
-use tellor::{Amount, DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, VoteResult};
+use tellor::{DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, Tributes, VoteResult};
 
 mod autopay;
 mod governance;
@@ -215,7 +215,7 @@ sp_api::decl_runtime_apis! {
 		/// Returns the amount required to report oracle values.
 		/// # Returns
 		/// The stake amount.
-		fn get_stake_amount() -> Amount;
+		fn get_stake_amount() -> Tributes;
 
 		/// Returns all information about a staker.
 		/// # Arguments
@@ -256,7 +256,7 @@ sp_api::decl_runtime_apis! {
 		/// Returns the total amount staked for reporting.
 		/// # Returns
 		/// The total amount of token staked.
-		fn get_total_stake_amount() -> Amount;
+		fn get_total_stake_amount() -> Tributes;
 
 		/// Returns the total number of current stakers.
 		/// # Returns

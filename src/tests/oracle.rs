@@ -435,7 +435,7 @@ fn slash_reporter() {
 			assert_eq!(staker_details.locked_balance, trb(0));
 
 			// reporter now has insufficient stake for another submission, so top up stake before final dispute/slash
-			super::deposit_stake(reporter, Amount::from(STAKE_AMOUNT) - trb(75), address);
+			super::deposit_stake(reporter, Tributes::from(STAKE_AMOUNT) - trb(75), address);
 			submit_value_and_begin_dispute(reporter, query_id, query_data) // start dispute, required for slashing
 		});
 

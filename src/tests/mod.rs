@@ -20,7 +20,7 @@ use crate::{
 	mock,
 	mock::*,
 	types::{
-		AccountIdOf, Address, Amount, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp,
+		AccountIdOf, Address, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp, Tributes,
 		ValueOf,
 	},
 	xcm::{ethereum_xcm, XcmConfig},
@@ -53,9 +53,9 @@ const PRICE: Balance = 5; // 1 TRB = 5 UNIT (uses static price for now)
 const STAKE_AMOUNT: u128 = 100 * TRB;
 const TRB: u128 = 10u128.pow(DECIMALS);
 
-fn trb(amount: impl Into<f64>) -> Amount {
+fn trb(amount: impl Into<f64>) -> Tributes {
 	// TRB amount has 18 decimals
-	Amount::from((amount.into() * TRB as f64) as u128)
+	Tributes::from((amount.into() * TRB as f64) as u128)
 }
 
 fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeId {
@@ -92,7 +92,7 @@ fn submit_value_and_begin_dispute(
 	}
 }
 
-fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address: Address) {
+fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Tributes>, address: Address) {
 	assert_ok!(Tellor::report_stake_deposited(
 		Origin::Staking.into(),
 		reporter,
@@ -101,7 +101,7 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address
 	));
 }
 
-fn register_parachain(stake_amount: impl Into<Amount>) {
+fn register_parachain(stake_amount: impl Into<Tributes>) {
 	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 	assert_ok!(Tellor::register(
 		RuntimeOrigin::root(),

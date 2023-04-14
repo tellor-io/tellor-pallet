@@ -37,7 +37,7 @@ pub use types::{
 	autopay::{FeedDetails, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
-	Address, Amount, DisputeId, FeedId, QueryId, Timestamp,
+	Address, DisputeId, FeedId, QueryId, Timestamp, Tributes,
 };
 
 #[cfg(test)]
@@ -233,7 +233,7 @@ pub mod pallet {
 	pub(super) type RewardRate<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Minimum amount required to be a staker.
 	#[pallet::storage]
-	pub(super) type StakeAmount<T> = StorageValue<_, Amount>;
+	pub(super) type StakeAmount<T> = StorageValue<_, Tributes>;
 	/// Mapping from a staker's account identifier to their staking info.
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
@@ -254,13 +254,13 @@ pub mod pallet {
 	pub(super) type TotalRewardDebt<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Total amount of tokens locked in the staking controller contract.
 	#[pallet::storage]
-	pub(super) type TotalStakeAmount<T> = StorageValue<_, Amount, ValueQuery>;
+	pub(super) type TotalStakeAmount<T> = StorageValue<_, Tributes, ValueQuery>;
 	/// Total number of stakers with at least StakeAmount staked, not exact.
 	#[pallet::storage]
 	pub(super) type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
 	/// Amount locked for withdrawal.
 	#[pallet::storage]
-	pub(super) type ToWithdraw<T> = StorageValue<_, Amount, ValueQuery>;
+	pub(super) type ToWithdraw<T> = StorageValue<_, Tributes, ValueQuery>;
 	// Governance
 	#[pallet::storage]
 	pub(super) type DisputeIdsByReporter<T> =
@@ -333,13 +333,17 @@ pub mod pallet {
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when a new staker is reported.
-		NewStakerReported { staker: AccountIdOf<T>, amount: Amount, address: Address },
+		NewStakerReported { staker: AccountIdOf<T>, amount: Tributes, address: Address },
 		/// Emitted when a stake slash is reported.
-		SlashReported { reporter: AccountIdOf<T>, recipient: AccountIdOf<T>, amount: Amount },
+		SlashReported { reporter: AccountIdOf<T>, recipient: AccountIdOf<T>, amount: Tributes },
 		/// Emitted when a stake withdrawal is reported.
 		StakeWithdrawnReported { staker: AccountIdOf<T> },
 		/// Emitted when a stake withdrawal request is reported.
-		StakeWithdrawRequestReported { reporter: AccountIdOf<T>, amount: Amount, address: Address },
+		StakeWithdrawRequestReported {
+			reporter: AccountIdOf<T>,
+			amount: Tributes,
+			address: Address,
+		},
 		/// Emitted when a value is removed (via governance).
 		ValueRemoved { query_id: QueryId, timestamp: Timestamp },
 
@@ -364,7 +368,7 @@ pub mod pallet {
 
 		// Registration
 		/// Emitted when the pallet is (re-)configured.
-		Configured { stake_amount: Amount },
+		Configured { stake_amount: Tributes },
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
 		/// Emitted when deregistration from the controller contracts is attempted.
@@ -516,7 +520,7 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		pub fn register(
 			origin: OriginFor<T>,
-			stake_amount: Amount,
+			stake_amount: Tributes,
 			fees: Box<MultiAsset>,
 			weight_limit: WeightLimit,
 			require_weight_at_most: u64,
@@ -1252,7 +1256,7 @@ pub mod pallet {
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
-			amount: Amount,
+			amount: Tributes,
 			address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
@@ -1304,7 +1308,7 @@ pub mod pallet {
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
-			amount: Amount,
+			amount: Tributes,
 			address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
@@ -1356,7 +1360,7 @@ pub mod pallet {
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
-			amount: Amount,
+			amount: Tributes,
 			// todo: consider removal of address
 			address: Address,
 		) -> DispatchResult {
@@ -1398,7 +1402,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
 			recipient: AccountIdOf<T>,
-			amount: Amount,
+			amount: Tributes,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
