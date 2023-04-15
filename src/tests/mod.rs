@@ -49,7 +49,6 @@ type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
 type U256ToBalance = crate::types::U256ToBalance<Test>;
 
-const PRICE: Balance = 5; // 1 TRB = 5 UNIT (uses static price for now)
 const STAKE_AMOUNT: u128 = 100 * TRB;
 const TRB: u128 = 10u128.pow(DECIMALS);
 
@@ -166,7 +165,7 @@ fn converts_token() {
 
 #[test]
 fn converts() {
-	assert_eq!(Tellor::convert(trb(100)).unwrap(), (token(100) * PRICE).into())
+	assert_eq!(Tellor::convert(trb(100)).unwrap(), token(100).into())
 }
 
 #[test]

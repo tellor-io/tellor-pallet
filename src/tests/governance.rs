@@ -24,6 +24,8 @@ type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>
 type ParachainId = <Test as Config>::ParachainId;
 type VoteRounds = crate::pallet::VoteRounds<Test>;
 
+const PRICE: Balance = 5; // 1 TRB = 5 UNIT (uses static price for now)
+
 #[test]
 fn begin_dispute() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
@@ -116,7 +118,7 @@ fn begin_dispute() {
 				balance_before_begin_dispute -
 					balance_after_begin_dispute -
 					U256ToBalance::convert(
-						Tellor::convert(StakeAmount::<Test>::get().unwrap()).unwrap()
+						Tellor::convert(StakeAmount::<Test>::get().unwrap()).unwrap() * PRICE
 					) / 10 == 0,
 				"dispute fee paid should be correct"
 			);
@@ -274,7 +276,7 @@ fn begin_dispute_by_non_reporter() {
 				balance_before_begin_dispute -
 					balance_after_begin_dispute -
 					U256ToBalance::convert(
-						Tellor::convert(StakeAmount::<Test>::get().unwrap()).unwrap()
+						Tellor::convert(StakeAmount::<Test>::get().unwrap()).unwrap() * PRICE
 					) / 10 == 0,
 				"dispute fee paid should be correct"
 			);

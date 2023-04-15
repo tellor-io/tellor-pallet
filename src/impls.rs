@@ -60,30 +60,14 @@ impl<T: Config> Pallet<T> {
 		T::ValueConverter::convert(value.into_inner())
 	}
 
-	/// Converts a stake amount to a local token amount.
+	/// Converts a stake amount to a local balance amount.
 	/// # Arguments
 	/// * `stake_amount` - The amount staked.
 	/// # Returns
-	/// A stake amount as a local token amount if successful.
+	/// A stake amount as a local balance amount if successful.
 	pub(super) fn convert(stake_amount: Tributes) -> Result<U256, DispatchError> {
-		// todo: use rate from oracle
-		const UNIT: u128 = 10u128.pow(DECIMALS);
-		const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
-
-		PRICE
-			// Convert price to result
-			.ok_or_else(|| Error::<T>::InvalidPrice.into())
-			.map(|price| U256::from(price))
-			// Convert supplied amount into local balance amount based on price
-			.and_then(|price| {
-				Ok(stake_amount
-					.checked_mul(price)
-					.ok_or(ArithmeticError::Overflow)?
-					.checked_div(U256::from(UNIT))
-					.expect("unit constant is greater than zero; qed"))
-			})
-			// Convert to local number of decimals
-			.and_then(|amount| Self::convert_to_decimals(amount, T::Decimals::get() as u32))
+		// Convert to local number of decimals
+		Self::convert_to_decimals(stake_amount, T::Decimals::get() as u32)
 	}
 
 	/// Converts the supplied amount to the supplied number of decimals.
@@ -348,6 +332,19 @@ impl<T: Config> Pallet<T> {
 	pub fn get_dispute_fee() -> Option<BalanceOf<T>> {
 		<StakeAmount<T>>::get()
 			.and_then(|a| a.checked_div(U256::from(10)))
+			.and_then(|a| {
+				// todo: use rate from oracle
+				const UNIT: u128 = 10u128.pow(DECIMALS);
+				const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
+
+				PRICE
+					.map(|price| U256::from(price))
+					// Convert amount into local balance amount based on price
+					.and_then(|price| {
+						a.checked_mul(price).and_then(|a| a.checked_div(U256::from(UNIT)))
+					})
+			})
+			// Convert to local number of decimals
 			.and_then(|a| Self::convert(a).ok())
 			.map(|a| U256ToBalance::<T>::convert(a))
 	}
