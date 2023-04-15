@@ -1617,8 +1617,6 @@ fn update_stake_amount() {
 	ext.execute_with(|| {
 		with_block(|| {
 			// Setup
-			// 	await token.mint(accounts[1].address, web3.utils.toWei("10000"));
-			// 	await token.connect(accounts[1]).approve(tellor.address, web3.utils.toWei("10000"))
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
@@ -1627,7 +1625,10 @@ fn update_stake_amount() {
 			));
 
 			// Test no reported TRB price
-			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
+			assert_noop!(
+				Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)),
+				Error::InvalidStakingTokenPrice
+			);
 			println!("REQUIRED_STAKE: {}", REQUIRED_STAKE);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 
@@ -1639,13 +1640,16 @@ fn update_stake_amount() {
 				0,
 				query_data.clone()
 			));
-			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
+			assert_noop!(
+				Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)),
+				Error::InvalidStakingTokenPrice
+			);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 
 		// Test updating when 12 hrs have passed
 		with_block_after(60 * 60 * 12, || {
-			assert_ok!(Tellor::_update_stake_amount());
+			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 
@@ -1678,7 +1682,7 @@ fn update_stake_amount() {
 			));
 		});
 		with_block_after(60 * 60 * 12, || {
-			assert_ok!(Tellor::_update_stake_amount());
+			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 
@@ -1694,7 +1698,10 @@ fn update_stake_amount() {
 			));
 		});
 		with_block_after(86_400 / 2, || {
-			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
+			assert_noop!(
+				Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)),
+				Error::InvalidStakingTokenPrice
+			);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 
@@ -1710,7 +1717,10 @@ fn update_stake_amount() {
 			));
 		});
 		with_block_after(86_400 / 2, || {
-			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
+			assert_noop!(
+				Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)),
+				Error::InvalidStakingTokenPrice
+			);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 
@@ -1726,7 +1736,10 @@ fn update_stake_amount() {
 			));
 		});
 		with_block_after(86_400 / 2, || {
-			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
+			assert_noop!(
+				Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)),
+				Error::InvalidStakingTokenPrice
+			);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 
@@ -1759,7 +1772,7 @@ fn update_stake_amount() {
 			));
 		});
 		with_block_after(60 * 60 * 12, || {
-			assert_ok!(Tellor::_update_stake_amount());
+			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 	});
