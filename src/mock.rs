@@ -16,7 +16,7 @@
 
 use crate as tellor;
 use crate::{
-	types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
+	constants::HOURS, types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
 	Error::ValueConversionError,
 };
 use frame_support::{
@@ -26,7 +26,7 @@ use frame_support::{
 };
 use frame_system as system;
 use once_cell::sync::Lazy;
-use sp_core::{ConstU32, ConstU8, H256};
+use sp_core::{ConstU128, ConstU32, ConstU8, H256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, Convert, IdentityLookup},
@@ -114,7 +114,7 @@ static GOVERNANCE: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 
 parameter_types! {
-	pub const MinimumStakeAmount: u128 = 100 * 10u128.pow(18);
+	pub const MinimumStakeAmount: u128 = 100 * 10u128.pow(18); // 100 TRB
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
 	pub const ParachainId: u32 = PARA_ID;
 	pub TellorRegistry: ContractLocation = (EVM_PARA_ID, *REGISTRY).into();
@@ -147,15 +147,15 @@ impl tellor::Config for Test {
 	type Price = u128;
 	type RegistrationOrigin = system::EnsureRoot<AccountId>;
 	type Registry = TellorRegistry;
+	type StakeAmountCurrencyTarget = ConstU128<1_500>;
 	type Staking = TellorStaking;
 	type StakingOrigin = EnsureStaking;
+	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
 	type Time = Timestamp;
 	type Token = Balances;
+	type UpdateStakeAmountInterval = ConstU64<{ 12 * HOURS }>;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
-	type StakeAmountCurrencyTarget = ();
-	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
-	type UpdateStakeAmountInterval = ();
 }
 
 pub struct ValueConverter;

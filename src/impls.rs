@@ -331,7 +331,7 @@ impl<T: Config> Pallet<T> {
 	/// The latest dispute fee.
 	pub fn get_dispute_fee() -> Option<BalanceOf<T>> {
 		<StakeAmount<T>>::get()
-			.and_then(|a| a.checked_div(U256::from(10)))
+			.checked_div(U256::from(10))
 			.and_then(|a| {
 				// todo: use rate from oracle
 				const UNIT: u128 = 10u128.pow(DECIMALS);
@@ -1289,7 +1289,7 @@ impl<T: Config> Pallet<T> {
 		) else {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
-		let Some(staking_token_price) = T::ValueConverter::convert(value.into_inner()) else {
+		let Ok(staking_token_price) = T::ValueConverter::convert(value.into_inner()) else {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
 		let staking_token_price = staking_token_price.into();
@@ -1298,8 +1298,8 @@ impl<T: Config> Pallet<T> {
 				staking_token_price < 10u128.pow(24).into(),
 			Error::<T>::InvalidStakingTokenPrice
 		);
-		let adjusted_stake_amount = (T::StakeAmountCurrencyTarget::get()
-			.checked_mul(Amount::from(10u128.pow(18)))
+		let adjusted_stake_amount = (Tributes::from(T::StakeAmountCurrencyTarget::get())
+			.checked_mul(Tributes::from(10u128.pow(18)))
 			.ok_or(ArithmeticError::Overflow)?)
 		.checked_div(staking_token_price)
 		.expect("price range checked above; qed");

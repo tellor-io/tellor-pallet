@@ -173,6 +173,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type Registry: Get<ContractLocation>;
 
+		// Amount required to be a staker, in the currency as specified in the staking token price query identifier.
+		#[pallet::constant]
+		type StakeAmountCurrencyTarget: Get<u128>;
+
 		/// The location of the staking controller contract.
 		#[pallet::constant]
 		type Staking: Get<ContractLocation>;
@@ -189,15 +193,14 @@ pub mod pallet {
 
 		type Token: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
 
+		/// Frequency of stake amount updates.
+		#[pallet::constant]
+		type UpdateStakeAmountInterval: Get<Timestamp>;
+
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Result<Self::Price, DispatchError>>;
 
 		type Xcm: traits::SendXcm;
-
-		#[pallet::constant]
-		type StakeAmountCurrencyTarget: Get<U256>;
-		#[pallet::constant]
-		type UpdateStakeAmountInterval: Get<Self::BlockNumber>;
 	}
 
 	// AutoPay
@@ -238,6 +241,8 @@ pub mod pallet {
 	#[pallet::getter(fn accumulated_reward_per_share)]
 	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Mapping of query identifiers to a report.
+	#[pallet::storage]
+	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
 	#[pallet::storage]
 	pub(super) type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
 	/// Total staking rewards released per second.
@@ -298,10 +303,6 @@ pub mod pallet {
 	// Configuration
 	#[pallet::storage]
 	pub(super) type Configuration<T> = StorageValue<_, types::Configuration>;
-	// Last Updated Stake Block Number
-	#[pallet::storage]
-	pub(super) type StakeAmountBlockNumber<T> =
-		StorageValue<_, <T as frame_system::Config>::BlockNumber, ValueQuery>;
 
 	#[pallet::type_value]
 	pub fn MinimumStakeAmount<T: Config>() -> Amount {
@@ -528,12 +529,18 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(n: T::BlockNumber) -> Weight {
+		fn on_initialize(_n: T::BlockNumber) -> Weight {
 			// Update stake amount
-			let interval = T::UpdateStakeAmountInterval::get();
-			if interval > 0 && n >= <StakeAmountBlockNumber<T>>::get() + interval {
-				if let Ok(_) = Pallet::<T>::_update_stake_amount() {
-					<StakeAmountBlockNumber<T>>::set(n)
+			const MIN_INTERVAL: Timestamp = 12 * HOURS;
+			let update_interval = T::UpdateStakeAmountInterval::get();
+			if update_interval > Zero::zero() {
+				let timestamp = Self::now();
+				if timestamp >=
+					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL.into())
+				{
+					if let Ok(_) = Pallet::<T>::_update_stake_amount() {
+						<LastStakeAmountUpdate<T>>::set(timestamp)
+					}
 				}
 			}
 
