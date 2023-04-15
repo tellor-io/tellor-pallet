@@ -530,10 +530,10 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(n: T::BlockNumber) -> Weight {
 			// Update stake amount
-			if n >= <StakeAmountBlockNumber<T>>::get() + T::UpdateStakeAmountInterval::get() {
-				match Pallet::<T>::_update_stake_amount() {
-					Ok(_) => <StakeAmountBlockNumber<T>>::set(n),
-					Err(_e) => todo!("log error"),
+			let interval = T::UpdateStakeAmountInterval::get();
+			if interval > 0 && n >= <StakeAmountBlockNumber<T>>::get() + interval {
+				if let Ok(_) = Pallet::<T>::_update_stake_amount() {
+					<StakeAmountBlockNumber<T>>::set(n)
 				}
 			}
 
