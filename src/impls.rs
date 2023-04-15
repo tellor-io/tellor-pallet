@@ -23,12 +23,16 @@ use sp_runtime::{
 };
 
 impl<T: Config> Pallet<T> {
-	/// Funds the staking account with staking rewards (paid by autopay and minting)
+	/// Funds the staking account with staking rewards from the source account.
 	/// # Arguments
+	/// * `source` - The source account.
 	/// * `amount` - The amount of tokens to fund the staking account with.
-	pub(super) fn add_staking_rewards(amount: BalanceOf<T>) -> DispatchResult {
+	pub(super) fn _add_staking_rewards(
+		source: &AccountIdOf<T>,
+		amount: BalanceOf<T>,
+	) -> DispatchResult {
 		let staking_rewards = Self::staking_rewards();
-		T::Token::transfer(&Self::tips(), &staking_rewards, amount, false)?;
+		T::Token::transfer(source, &staking_rewards, amount, false)?;
 		Self::update_rewards()?;
 		let staking_rewards_balance = T::Token::balance(&staking_rewards).into();
 		// update reward rate = real staking rewards balance / 30 days

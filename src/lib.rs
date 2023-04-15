@@ -589,14 +589,15 @@ pub mod pallet {
 			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
+			let tips = &Self::tips();
 			T::Token::transfer(
-				&Self::tips(),
+				tips,
 				&reporter,
 				// todo: safe math
 				cumulative_reward - fee,
 				false,
 			)?;
-			Self::add_staking_rewards(fee)?;
+			Self::_add_staking_rewards(tips, fee)?;
 			if Self::get_current_tip(query_id) == Zero::zero() {
 				let index = <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default();
 				if index != 0 {
@@ -716,14 +717,15 @@ pub mod pallet {
 			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
+			let tips = &Self::tips();
 			T::Token::transfer(
-				&Self::tips(),
+				tips,
 				&reporter,
 				// todo: safe math
 				cumulative_reward - fee,
 				false,
 			)?;
-			Self::add_staking_rewards(fee)?;
+			Self::_add_staking_rewards(tips, fee)?;
 			Self::deposit_event(Event::TipClaimed {
 				feed_id,
 				query_id,
@@ -907,13 +909,22 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Funds the staking account with staking rewards.
+		///
+		/// - `amount`: Amount of tokens to fund staking account with.
+		#[pallet::call_index(6)]
+		pub fn add_staking_rewards(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
+			let funder = ensure_signed(origin)?;
+			Self::_add_staking_rewards(&funder, amount)
+		}
+
 		/// Allows a reporter to submit a value to the oracle.
 		///
 		/// - `query_id`: Identifier of the specific data feed.
 		/// - `value`: Value the user submits to the oracle.
 		/// - `nonce`: The current value count for the query identifier.
 		/// - `query_data`: The data used to fulfil the data query.
-		#[pallet::call_index(6)]
+		#[pallet::call_index(7)]
 		pub fn submit_value(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1043,7 +1054,7 @@ pub mod pallet {
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
 		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
-		#[pallet::call_index(7)]
+		#[pallet::call_index(8)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1196,7 +1207,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `supports`: Whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
-		#[pallet::call_index(8)]
+		#[pallet::call_index(9)]
 		pub fn vote(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1252,7 +1263,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who deposited a stake.
 		/// - `amount`: The amount staked.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(9)]
+		#[pallet::call_index(10)]
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1304,7 +1315,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who requested a withdrawal.
 		/// - `amount`: The amount requested to withdraw.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(10)]
+		#[pallet::call_index(11)]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1356,7 +1367,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who withdrew a stake.
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(11)]
+		#[pallet::call_index(12)]
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1397,7 +1408,7 @@ pub mod pallet {
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
-		#[pallet::call_index(12)]
+		#[pallet::call_index(13)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1455,7 +1466,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The result of the dispute.
-		#[pallet::call_index(13)]
+		#[pallet::call_index(14)]
 		pub fn report_vote_executed(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1468,7 +1479,7 @@ pub mod pallet {
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(14)]
+		#[pallet::call_index(15)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);

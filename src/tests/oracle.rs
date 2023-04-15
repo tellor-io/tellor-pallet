@@ -1363,7 +1363,7 @@ const REWARD_RATE_TARGET: u64 = 60 * 60 * 24 * 30; // 30 days
 
 #[test]
 fn add_staking_rewards() {
-	let tips = &Tellor::tips();
+	let funder = 1;
 	let staking_rewards = &Tellor::staking_rewards();
 
 	let mut ext = new_test_ext();
@@ -1373,19 +1373,27 @@ fn add_staking_rewards() {
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L539
 	ext.execute_with(|| {
-		Balances::make_free_balance_be(tips, token(1_000));
-		assert_eq!(Balances::free_balance(tips), token(1_000));
+		Balances::make_free_balance_be(&funder, token(1_000));
+		assert_eq!(Balances::free_balance(funder), token(1_000));
 
-		assert_ok!(Tellor::add_staking_rewards(token(1_000)));
+		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), token(1_000)));
 		assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
-		assert_eq!(Balances::free_balance(tips), 0);
+		assert_eq!(Balances::free_balance(funder), 0);
 		assert_eq!(Tellor::reward_rate(), token(1_000) / REWARD_RATE_TARGET);
 
 		// Test min value
-		assert_ok!(Tellor::add_staking_rewards(0));
+		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), 0));
 		assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
-		assert_eq!(Balances::free_balance(tips), 0);
+		assert_eq!(Balances::free_balance(funder), 0);
 		assert_eq!(Tellor::reward_rate(), token(1_000) / REWARD_RATE_TARGET);
+
+		// Test max value
+		Balances::make_free_balance_be(&funder, Balance::MAX);
+		Balances::make_free_balance_be(&staking_rewards, 0);
+		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), Balance::MAX));
+		assert_eq!(Balances::free_balance(staking_rewards), Balance::MAX);
+		assert_eq!(Balances::free_balance(funder), 0);
+		assert_eq!(Tellor::reward_rate(), Balance::MAX / REWARD_RATE_TARGET);
 	});
 }
 
@@ -1710,6 +1718,7 @@ fn update_stake_amount() {
 #[test]
 fn update_rewards() {
 	let reporter = 1;
+	let funder = 2;
 	let address = Address::random();
 	let staking_rewards_account = &Tellor::staking_rewards();
 	let unit = unit();
@@ -1770,8 +1779,9 @@ fn update_rewards() {
 		let expected_reward_rate = staking_rewards / (86_400 * 30);
 		let timestamp_1 = with_block(|| {
 			// add staking rewards
+			Balances::make_free_balance_be(&funder, staking_rewards);
 			assert_eq!(Balances::free_balance(staking_rewards_account), 0);
-			assert_ok!(Tellor::add_staking_rewards(staking_rewards));
+			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), staking_rewards));
 
 			let timestamp = now();
 			assert_eq!(timestamp, timestamp_0 + 1);
@@ -1878,6 +1888,7 @@ fn update_rewards() {
 #[test]
 fn update_stake_and_pay_rewards() {
 	let reporter = 1;
+	let funder = 1;
 	let address = Address::random();
 	let staking_rewards = &Tellor::staking_rewards();
 	let mut ext = new_test_ext();
@@ -1898,14 +1909,12 @@ fn update_stake_and_pay_rewards() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L919
 	ext.execute_with(|| {
 		let (timestamp_0, expected_reward_rate) = with_block(|| {
-			// await token.mint(accounts[0].address, web3.utils.toWei("1000"))
-			// await token.approve(tellor.address, web3.utils.toWei("1000"))
-			Balances::make_free_balance_be(&Tellor::tips(), token(1_000));
+			Balances::make_free_balance_be(&funder, token(1_000));
 			// check initial conditions
 			assert_eq!(Balances::free_balance(staking_rewards), 0);
 			assert_eq!(Tellor::reward_rate(), 0);
 			// add staking rewards
-			assert_ok!(Tellor::add_staking_rewards(token(1_000)));
+			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), token(1_000)));
 			// check conditions after adding rewards
 			assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
 			assert_eq!(Tellor::total_reward_debt(), 0);
