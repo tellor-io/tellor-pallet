@@ -1627,7 +1627,7 @@ fn update_stake_amount() {
 			));
 
 			// Test no reported TRB price
-			assert_ok!(Tellor::_update_stake_amount());
+			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
 			println!("REQUIRED_STAKE: {}", REQUIRED_STAKE);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 
@@ -1639,7 +1639,7 @@ fn update_stake_amount() {
 				0,
 				query_data.clone()
 			));
-			assert_ok!(Tellor::_update_stake_amount());
+			assert_noop!(Tellor::_update_stake_amount(), Error::InvalidStakingTokenPrice);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 

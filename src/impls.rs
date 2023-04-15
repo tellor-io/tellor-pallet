@@ -1283,39 +1283,38 @@ impl<T: Config> Pallet<T> {
 
 	// Updates the stake amount after retrieving the latest token price from oracle.
 	pub(super) fn _update_stake_amount() -> DispatchResult {
-		if let Some((value, _timestamp)) = Self::get_data_before(
+		let Some((value, _)) = Self::get_data_before(
 			T::StakingTokenPriceQueryId::get(),
 			Self::now().saturating_sub(12 * HOURS),
-		) {
-			match T::ValueConverter::convert(value.into_inner()) {
-				None => return Err(Error::<T>::InvalidStakingTokenPrice.into()),
-				Some(staking_token_price) => {
-					let staking_token_price = staking_token_price.into();
-					ensure!(
-						staking_token_price >= 10u128.pow(16).into() &&
-							staking_token_price < 10u128.pow(24).into(),
-						Error::<T>::InvalidStakingTokenPrice
-					);
-					let adjusted_stake_amount = (T::StakeAmountCurrencyTarget::get()
-						.checked_mul(Amount::from(10u128.pow(18)))
-						.ok_or(ArithmeticError::Overflow)?)
-					.checked_div(staking_token_price)
-					.expect("price range checked above; qed");
+		) else {
+			return Err(Error::<T>::InvalidStakingTokenPrice.into());
+		};
+		let Some(staking_token_price) = T::ValueConverter::convert(value.into_inner()) else {
+			return Err(Error::<T>::InvalidStakingTokenPrice.into());
+		};
+		let staking_token_price = staking_token_price.into();
+		ensure!(
+			staking_token_price >= 10u128.pow(16).into() &&
+				staking_token_price < 10u128.pow(24).into(),
+			Error::<T>::InvalidStakingTokenPrice
+		);
+		let adjusted_stake_amount = (T::StakeAmountCurrencyTarget::get()
+			.checked_mul(Amount::from(10u128.pow(18)))
+			.ok_or(ArithmeticError::Overflow)?)
+		.checked_div(staking_token_price)
+		.expect("price range checked above; qed");
 
-					let amount = <StakeAmount<T>>::mutate(|amount| {
-						let minimum_stake_amount = T::MinimumStakeAmount::get().into();
-						if adjusted_stake_amount < minimum_stake_amount {
-							*amount = minimum_stake_amount;
-							minimum_stake_amount
-						} else {
-							*amount = adjusted_stake_amount;
-							adjusted_stake_amount
-						}
-					});
-					Self::deposit_event(Event::NewStakeAmount { amount });
-				},
+		let amount = <StakeAmount<T>>::mutate(|amount| {
+			let minimum_stake_amount = T::MinimumStakeAmount::get().into();
+			if adjusted_stake_amount < minimum_stake_amount {
+				*amount = minimum_stake_amount;
+				minimum_stake_amount
+			} else {
+				*amount = adjusted_stake_amount;
+				adjusted_stake_amount
 			}
-		}
+		});
+		Self::deposit_event(Event::NewStakeAmount { amount });
 		Ok(())
 	}
 }
