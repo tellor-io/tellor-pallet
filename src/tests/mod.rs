@@ -31,7 +31,7 @@ use frame_support::{
 	assert_noop, assert_ok,
 	traits::{Get, PalletInfoAccess, UnixTime},
 };
-use sp_core::{bytes::to_hex, keccak_256, H256};
+use sp_core::{bytes::to_hex, keccak_256, H256, U256};
 use sp_runtime::{
 	traits::{AccountIdConversion, BadOrigin},
 	ArithmeticError,
@@ -170,6 +170,32 @@ fn converts() {
 }
 
 #[test]
+fn converts_to_decimals() {
+	assert_eq!(
+		Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), 12),
+		Ok((100 * 10u64.pow(12)).into())
+	);
+	assert_eq!(
+		Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), 20),
+		Ok((100 * 10u128.pow(20)).into())
+	);
+	assert_eq!(
+		Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), 18),
+		Ok((100 * 10u128.pow(18)).into())
+	);
+	assert_eq!(Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), 0), Ok(100.into()));
+	assert_eq!(Tellor::convert_to_decimals(U256::zero(), u32::MAX), Ok(0.into()));
+	assert_eq!(
+		Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), u8::MAX.into()),
+		Err(ArithmeticError::Overflow.into())
+	);
+	assert_eq!(
+		Tellor::convert_to_decimals(U256::MAX, u32::MAX),
+		Err(ArithmeticError::Overflow.into())
+	);
+}
+
+#[test]
 fn dispute_fees() {
 	assert_eq!(
 		Tellor::dispute_fees(),
@@ -183,27 +209,6 @@ fn encodes_spot_price() {
 		"0xa6f013ee236804827b77696d350e9f0ac3e879328f2a3021d473a0b778ad78ac",
 		to_hex(&keccak_256(&spot_price("btc", "usd")), false)
 	)
-}
-
-#[test]
-fn redenominates() {
-	assert_eq!(
-		Tellor::redenominate((100 * 10u128.pow(18)).into(), 12),
-		Ok((100 * 10u64.pow(12)).into())
-	);
-	assert_eq!(
-		Tellor::redenominate((100 * 10u128.pow(18)).into(), 20),
-		Ok((100 * 10u128.pow(20)).into())
-	);
-	assert_eq!(
-		Tellor::redenominate((100 * 10u128.pow(18)).into(), 18),
-		Ok((100 * 10u128.pow(18)).into())
-	);
-	assert_eq!(Tellor::redenominate((100 * 10u128.pow(18)).into(), 0), Ok(100.into()));
-	assert_eq!(
-		Tellor::redenominate((100 * 10u128.pow(18)).into(), u8::MAX.into()),
-		Err(ArithmeticError::Overflow.into())
-	);
 }
 
 #[test]

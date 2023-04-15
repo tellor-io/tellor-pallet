@@ -82,8 +82,35 @@ impl<T: Config> Pallet<T> {
 					.checked_div(U256::from(UNIT))
 					.expect("unit constant is greater than zero; qed"))
 			})
-			// Redenominate to local balance number of decimals
-			.and_then(|amount| Self::redenominate(amount, T::Decimals::get() as u32))
+			// Convert to local number of decimals
+			.and_then(|amount| Self::convert_to_decimals(amount, T::Decimals::get() as u32))
+	}
+
+	/// Converts the supplied amount to the supplied number of decimals.
+	/// # Arguments
+	/// * `amount` - The amount to be converted.
+	/// * `decimals` - The number of decimals.
+	/// # Returns
+	/// The converted amount if successful.
+	pub(super) fn convert_to_decimals(amount: U256, decimals: u32) -> Result<U256, DispatchError> {
+		if amount == U256::zero() {
+			return Ok(amount)
+		}
+		if DECIMALS > decimals {
+			U256::from(10)
+				.checked_pow(U256::from(DECIMALS - decimals))
+				.ok_or_else(|| ArithmeticError::Overflow.into())
+				.map(|r| {
+					amount.checked_div(r).expect("result is non-zero, provided non-overflow; qed")
+				})
+		} else if decimals > DECIMALS {
+			U256::from(10)
+				.checked_pow(U256::from(decimals - DECIMALS))
+				.ok_or_else(|| ArithmeticError::Overflow.into())
+				.and_then(|r| amount.checked_mul(r).ok_or_else(|| ArithmeticError::Overflow.into()))
+		} else {
+			Ok(amount)
+		}
 	}
 
 	/// Determines if an account voted for a specific dispute round.
@@ -967,24 +994,6 @@ impl<T: Config> Pallet<T> {
 	pub(super) fn now() -> u64 {
 		// Use seconds to match EVM smart contracts
 		T::Time::now().as_secs()
-	}
-
-	pub(super) fn redenominate(amount: U256, decimals: u32) -> Result<U256, DispatchError> {
-		if DECIMALS > decimals {
-			U256::from(10)
-				.checked_pow(U256::from(DECIMALS - decimals))
-				.ok_or_else(|| ArithmeticError::Overflow.into())
-				.map(|r| {
-					amount.checked_div(r).expect("result is non-zero, provided non-overflow; qed")
-				})
-		} else if decimals > DECIMALS {
-			U256::from(10)
-				.checked_pow(U256::from(decimals - DECIMALS))
-				.ok_or_else(|| ArithmeticError::Overflow.into())
-				.and_then(|r| amount.checked_mul(r).ok_or_else(|| ArithmeticError::Overflow.into()))
-		} else {
-			Ok(amount)
-		}
 	}
 
 	/// Removes a value from the oracle.
