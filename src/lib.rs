@@ -242,6 +242,7 @@ pub mod pallet {
 	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Mapping of query identifiers to a report.
 	#[pallet::storage]
+	#[pallet::getter(fn last_stake_amount_update)]
 	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
 	#[pallet::storage]
 	pub(super) type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;

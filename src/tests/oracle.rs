@@ -20,8 +20,11 @@ use crate::{
 	types::{Nonce, QueryId, Timestamp},
 	Config,
 };
-use frame_support::{assert_noop, assert_ok, traits::Currency};
-use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, U256};
+use frame_support::{
+	assert_noop, assert_ok,
+	traits::{Currency, Hooks},
+};
+use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, Get, U256};
 use sp_runtime::{
 	traits::{BadOrigin, Convert},
 	SaturatedConversion, Saturating,
@@ -29,10 +32,9 @@ use sp_runtime::{
 
 type BoundedReportsSubmittedByQueryId =
 	BoundedBTreeMap<QueryId, u128, <Test as Config>::MaxQueriesPerReporter>;
+type StakeAmountCurrencyTarget = <Test as Config>::StakeAmountCurrencyTarget;
 
-const STAKE_AMOUNT_CURRENCY_TARGET: u128 = 500 * 10u128.pow(18);
-const PRICE_TRB: u128 = 500 * 10u128.pow(18);
-const REQUIRED_STAKE: u128 = STAKE_AMOUNT_CURRENCY_TARGET / PRICE_TRB;
+const PRICE_TRB: u128 = 50 * 10u128.pow(18);
 
 #[test]
 fn deposit_stake() {
@@ -1339,9 +1341,6 @@ fn add_staking_rewards() {
 
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L539
 	ext.execute_with(|| {
 		Balances::make_free_balance_be(&funder, token(1_000));
@@ -1613,6 +1612,9 @@ fn update_stake_amount() {
 	let reporter = 1;
 	let mut ext = new_test_ext();
 
+	let stake_amount_currency_target: u128 = StakeAmountCurrencyTarget::get();
+	let required_stake: u128 = stake_amount_currency_target / PRICE_TRB;
+
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L762
 	ext.execute_with(|| {
 		with_block(|| {
@@ -1629,7 +1631,7 @@ fn update_stake_amount() {
 				Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)),
 				Error::InvalidStakingTokenPrice
 			);
-			println!("REQUIRED_STAKE: {}", REQUIRED_STAKE);
+			println!("REQUIRED_STAKE: {}", required_stake);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 
 			// Test updating when 12 hrs have NOT passed
@@ -1650,6 +1652,9 @@ fn update_stake_amount() {
 		// Test updating when 12 hrs have passed
 		with_block_after(60 * 60 * 12, || {
 			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
+			System::assert_last_event(
+				Event::NewStakeAmount { amount: MINIMUM_STAKE_AMOUNT.into() }.into(),
+			);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 
@@ -1683,6 +1688,9 @@ fn update_stake_amount() {
 		});
 		with_block_after(60 * 60 * 12, || {
 			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
+			System::assert_last_event(
+				Event::NewStakeAmount { amount: MINIMUM_STAKE_AMOUNT.into() }.into(),
+			);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
 		});
 
@@ -1773,7 +1781,109 @@ fn update_stake_amount() {
 		});
 		with_block_after(60 * 60 * 12, || {
 			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
+			System::assert_last_event(
+				Event::NewStakeAmount { amount: MINIMUM_STAKE_AMOUNT.into() }.into(),
+			);
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
+
+		// Test with price that updates stake amount
+		let price = PRICE_TRB / 11;
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(price),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 12, || {
+			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
+			let expected_stake_amount = (U256::from(stake_amount_currency_target) *
+				U256::from(10u128.pow(18))) /
+				U256::from(price);
+			System::assert_last_event(
+				Event::NewStakeAmount { amount: expected_stake_amount }.into(),
+			);
+			assert_eq!(Tellor::get_stake_amount(), expected_stake_amount);
+		});
+	});
+}
+
+#[test]
+fn update_stake_amount_via_hook() {
+	let query_data: QueryDataOf<Test> = spot_price("trb", "gbp").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	println!("{:?}", query_id);
+	let reporter = 1;
+	let mut ext = new_test_ext();
+
+	let stake_amount_currency_target: u128 = StakeAmountCurrencyTarget::get();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				trb(10_000),
+				Address::random()
+			));
+		})
+	});
+
+	ext.execute_with(|| {
+		with_block(|| {
+			// Test no reported TRB price
+			assert_noop!(
+				Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)),
+				Error::InvalidStakingTokenPrice
+			);
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+
+			// Add price
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(PRICE_TRB * 2),
+				0,
+				query_data.clone()
+			));
+
+			assert_eq!(Tellor::last_stake_amount_update(), 0);
+		});
+
+		// Test updating when 12 hrs have passed
+		with_block_after(60 * 60 * 12, || {
+			Tellor::on_initialize(System::block_number());
+			System::assert_last_event(
+				Event::NewStakeAmount { amount: MINIMUM_STAKE_AMOUNT.into() }.into(),
+			);
+			assert_eq!(Tellor::last_stake_amount_update(), Tellor::now());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+		});
+
+		// Test with price that updates stake amount
+		let price = PRICE_TRB / 11;
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(price),
+				0,
+				query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 12, || {
+			Tellor::on_initialize(System::block_number());
+			let expected_stake_amount = (U256::from(stake_amount_currency_target) *
+				U256::from(10u128.pow(18))) /
+				U256::from(price);
+			System::assert_last_event(
+				Event::NewStakeAmount { amount: expected_stake_amount }.into(),
+			);
+			assert_eq!(Tellor::get_stake_amount(), expected_stake_amount);
 		});
 	});
 }
@@ -1786,9 +1896,6 @@ fn update_rewards() {
 	let staking_rewards_account = &Tellor::staking_rewards();
 	let unit = unit();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L827
 	ext.execute_with(|| {
@@ -1965,9 +2072,6 @@ fn update_stake_and_pay_rewards() {
 		// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/contracts/testing/GovernanceMock.sol#L16
 		crate::pallet::VoteTallyByAddress::<Test>::mutate(account, |c| c.saturating_inc());
 	}
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L919
 	ext.execute_with(|| {

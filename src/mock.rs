@@ -147,7 +147,7 @@ impl tellor::Config for Test {
 	type Price = u128;
 	type RegistrationOrigin = system::EnsureRoot<AccountId>;
 	type Registry = TellorRegistry;
-	type StakeAmountCurrencyTarget = ConstU128<1_500>;
+	type StakeAmountCurrencyTarget = ConstU128<{ 500 * 10u128.pow(18) }>;
 	type Staking = TellorStaking;
 	type StakingOrigin = EnsureStaking;
 	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
