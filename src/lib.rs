@@ -306,7 +306,7 @@ pub mod pallet {
 	pub(super) type Configuration<T> = StorageValue<_, types::Configuration>;
 
 	#[pallet::type_value]
-	pub fn MinimumStakeAmount<T: Config>() -> Amount {
+	pub fn MinimumStakeAmount<T: Config>() -> Tributes {
 		T::MinimumStakeAmount::get().into()
 	}
 
@@ -357,7 +357,7 @@ pub mod pallet {
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when the stake amount has changed.
-		NewStakeAmount { amount: Amount },
+		NewStakeAmount { amount: Tributes },
 		/// Emitted when a new staker is reported.
 		NewStakerReported { staker: AccountIdOf<T>, amount: Tributes, address: Address },
 		/// Emitted when a stake slash is reported.
@@ -394,7 +394,7 @@ pub mod pallet {
 
 		// Registration
 		/// Emitted when the pallet is (re-)configured.
-		Configured { },
+		Configured {},
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
 		/// Emitted when deregistration from the controller contracts is attempted.
@@ -1087,12 +1087,19 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Updates the stake amount after retrieving the latest token price from oracle.
+		#[pallet::call_index(8)]
+		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
+			ensure_signed(origin)?;
+			Self::_update_stake_amount()
+		}
+
 		/// Initialises a dispute/vote in the system.
 		///
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
 		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
-		#[pallet::call_index(8)]
+		#[pallet::call_index(9)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1243,7 +1250,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `supports`: Whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
-		#[pallet::call_index(9)]
+		#[pallet::call_index(10)]
 		pub fn vote(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1299,7 +1306,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who deposited a stake.
 		/// - `amount`: The amount staked.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(10)]
+		#[pallet::call_index(11)]
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1351,7 +1358,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who requested a withdrawal.
 		/// - `amount`: The amount requested to withdraw.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(11)]
+		#[pallet::call_index(12)]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1403,7 +1410,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who withdrew a stake.
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(12)]
+		#[pallet::call_index(13)]
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1444,7 +1451,7 @@ pub mod pallet {
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
-		#[pallet::call_index(13)]
+		#[pallet::call_index(14)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1502,7 +1509,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The result of the dispute.
-		#[pallet::call_index(14)]
+		#[pallet::call_index(15)]
 		pub fn report_vote_executed(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1515,13 +1522,13 @@ pub mod pallet {
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(15)]
+		#[pallet::call_index(16)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);
 
 			// Deregister from parachain registry contract
-			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotRegistered)?;
+			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotConfigured)?;
 			let registry_contract = T::Registry::get();
 			let message = xcm::transact_with_config(
 				ethereum_xcm::transact(
@@ -1540,13 +1547,6 @@ pub mod pallet {
 				contract_address: registry_contract.address.into(),
 			});
 			Ok(())
-		}
-
-		/// Updates the stake amount after retrieving the latest token price from oracle.
-		#[pallet::call_index(15)]
-		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
-			ensure_signed(origin)?;
-			Self::_update_stake_amount()
 		}
 	}
 }
