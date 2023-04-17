@@ -1414,8 +1414,6 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
 			amount: Tributes,
-			// todo: consider removal of address
-			address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
 			T::StakingOrigin::ensure_origin(origin)?;
