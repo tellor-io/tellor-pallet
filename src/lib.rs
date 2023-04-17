@@ -152,6 +152,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxVotes: Get<u32>;
 
+		/// The minimum amount of tokens required to stake.
+		#[pallet::constant]
+		type MinimumStakeAmount: Get<u128>;
+
 		/// The identifier of the pallet within the runtime.
 		#[pallet::constant]
 		type PalletId: Get<PalletId>;
@@ -160,7 +164,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
 
-		type Price: AtLeast32BitUnsigned + Copy + Default;
+		type Price: AtLeast32BitUnsigned + Copy + Default + Into<U256>;
 
 		/// Origin that manages registration and deregistration from the controller contracts.
 		type RegistrationOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
@@ -169,6 +173,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type Registry: Get<ContractLocation>;
 
+		// Amount required to be a staker, in the currency as specified in the staking token price query identifier.
+		#[pallet::constant]
+		type StakeAmountCurrencyTarget: Get<u128>;
+
 		/// The location of the staking controller contract.
 		#[pallet::constant]
 		type Staking: Get<ContractLocation>;
@@ -176,10 +184,18 @@ pub mod pallet {
 		/// Origin that handles staking.
 		type StakingOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
+		/// Staking token 'SpotPrice' query identifier, used for updating stake amount.
+		#[pallet::constant]
+		type StakingTokenPriceQueryId: Get<QueryId>;
+
 		/// The on-chain time provider.
 		type Time: UnixTime;
 
 		type Token: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
+
+		/// Frequency of stake amount updates.
+		#[pallet::constant]
+		type UpdateStakeAmountInterval: Get<Timestamp>;
 
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Result<Self::Price, DispatchError>>;
@@ -226,6 +242,9 @@ pub mod pallet {
 	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Mapping of query identifiers to a report.
 	#[pallet::storage]
+	#[pallet::getter(fn last_stake_amount_update)]
+	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
+	#[pallet::storage]
 	pub(super) type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
 	/// Total staking rewards released per second.
 	#[pallet::storage]
@@ -233,7 +252,7 @@ pub mod pallet {
 	pub(super) type RewardRate<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 	/// Minimum amount required to be a staker.
 	#[pallet::storage]
-	pub(super) type StakeAmount<T> = StorageValue<_, Tributes>;
+	pub(super) type StakeAmount<T> = StorageValue<_, Tributes, ValueQuery, MinimumStakeAmount<T>>;
 	/// Mapping from a staker's account identifier to their staking info.
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
@@ -286,6 +305,11 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type Configuration<T> = StorageValue<_, types::Configuration>;
 
+	#[pallet::type_value]
+	pub fn MinimumStakeAmount<T: Config>() -> Tributes {
+		T::MinimumStakeAmount::get().into()
+	}
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -332,6 +356,8 @@ pub mod pallet {
 			query_data: QueryDataOf<T>,
 			reporter: AccountIdOf<T>,
 		},
+		/// Emitted when the stake amount has changed.
+		NewStakeAmount { amount: Tributes },
 		/// Emitted when a new staker is reported.
 		NewStakerReported { staker: AccountIdOf<T>, amount: Tributes, address: Address },
 		/// Emitted when a stake slash is reported.
@@ -368,7 +394,7 @@ pub mod pallet {
 
 		// Registration
 		/// Emitted when the pallet is (re-)configured.
-		Configured { stake_amount: Tributes },
+		Configured {},
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
 		/// Emitted when deregistration from the controller contracts is attempted.
@@ -433,6 +459,8 @@ pub mod pallet {
 		/// Nonce must match the timestamp index.
 		InvalidNonce,
 		InvalidPrice,
+		/// Invalid staking token price.
+		InvalidStakingTokenPrice,
 		/// Value must be submitted.
 		InvalidValue,
 		/// The maximum number of queries has been reached.
@@ -481,8 +509,8 @@ pub mod pallet {
 		/// Time for voting has not elapsed.
 		VotingPeriodActive,
 
-		// Registration
-		NotRegistered,
+		// Configuration
+		NotConfigured,
 
 		// XCM
 		MaxEthereumXcmInputSizeExceeded,
@@ -503,7 +531,22 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(_n: T::BlockNumber) -> Weight {
+			// Update stake amount
+			const MIN_INTERVAL: Timestamp = 12 * HOURS;
+			let update_interval = T::UpdateStakeAmountInterval::get();
+			if update_interval > Zero::zero() {
+				let timestamp = Self::now();
+				if timestamp >=
+					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL) &&
+					Pallet::<T>::do_update_stake_amount().is_ok()
+				{
+					<LastStakeAmountUpdate<T>>::set(timestamp)
+				}
+			}
+
 			// todo: check for any pending votes to be tallied and sent to governance controller contract
+
+			// todo: calculate actual weight
 			Weight::zero()
 		}
 	}
@@ -512,7 +555,6 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Registers the parachain with the Tellor controller contracts.
 		///
-		/// - `stake_amount`: The stake amount required to report oracle data to the parachain.
 		/// - `fees`: The asset(s) to pay for cross-chain message fees.
 		/// - `weight_limit`: The maximum amount of weight to purchase for remote execution of messages.
 		/// - `require_weight_at_most`: The maximum weight of any remote call.
@@ -520,7 +562,6 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		pub fn register(
 			origin: OriginFor<T>,
-			stake_amount: Tributes,
 			fees: Box<MultiAsset>,
 			weight_limit: WeightLimit,
 			require_weight_at_most: u64,
@@ -528,8 +569,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 
-			// Update local configuration
-			<StakeAmount<T>>::set(Some(stake_amount));
+			// Update configuration
 			let config = types::Configuration {
 				xcm_config: xcm::XcmConfig {
 					fees: *fees.clone(),
@@ -539,7 +579,7 @@ pub mod pallet {
 				gas_limit,
 			};
 			<Configuration<T>>::set(Some(config));
-			Self::deposit_event(Event::Configured { stake_amount });
+			Self::deposit_event(Event::Configured {});
 
 			// Register relevant supplied config with parachain registry contract
 			let registry_contract = T::Registry::get();
@@ -597,7 +637,7 @@ pub mod pallet {
 				cumulative_reward - fee,
 				false,
 			)?;
-			Self::_add_staking_rewards(tips, fee)?;
+			Self::do_add_staking_rewards(tips, fee)?;
 			if Self::get_current_tip(query_id) == Zero::zero() {
 				let index = <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default();
 				if index != 0 {
@@ -664,7 +704,7 @@ pub mod pallet {
 					Error::<T>::InvalidClaimer
 				);
 				cumulative_reward
-					.saturating_accrue(Self::_get_reward_amount(feed_id, query_id, *timestamp)?);
+					.saturating_accrue(Self::do_get_reward_amount(feed_id, query_id, *timestamp)?);
 
 				if cumulative_reward >= balance {
 					ensure!(
@@ -725,7 +765,7 @@ pub mod pallet {
 				cumulative_reward - fee,
 				false,
 			)?;
-			Self::_add_staking_rewards(tips, fee)?;
+			Self::do_add_staking_rewards(tips, fee)?;
 			Self::deposit_event(Event::TipClaimed {
 				feed_id,
 				query_id,
@@ -748,7 +788,7 @@ pub mod pallet {
 			amount: BalanceOf<T>,
 		) -> DispatchResult {
 			let feed_funder = ensure_signed(origin)?;
-			Self::_fund_feed(feed_funder, feed_id, query_id, amount)
+			Self::do_fund_feed(feed_funder, feed_id, query_id, amount)
 		}
 
 		/// Initializes data feed parameters.
@@ -832,7 +872,7 @@ pub mod pallet {
 				feed_creator: feed_creator.clone(),
 			});
 			if amount > Zero::zero() {
-				Self::_fund_feed(feed_creator, feed_id, query_id, amount)?;
+				Self::do_fund_feed(feed_creator, feed_id, query_id, amount)?;
 			}
 			Ok(())
 		}
@@ -869,7 +909,7 @@ pub mod pallet {
 					},
 					Some(tips) => {
 						let timestamp_retrieved =
-							Self::_get_current_value(query_id).map_or(0, |v| v.1);
+							Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
 						match tips.last_mut() {
 							Some(last_tip) if timestamp_retrieved < last_tip.timestamp => {
 								last_tip.timestamp = Self::now().saturating_add(1u8.into());
@@ -915,7 +955,7 @@ pub mod pallet {
 		#[pallet::call_index(6)]
 		pub fn add_staking_rewards(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
 			let funder = ensure_signed(origin)?;
-			Self::_add_staking_rewards(&funder, amount)
+			Self::do_add_staking_rewards(&funder, amount)
 		}
 
 		/// Allows a reporter to submit a value to the oracle.
@@ -951,8 +991,7 @@ pub mod pallet {
 			let mut staker =
 				<StakerDetails<T>>::get(&reporter).ok_or(Error::<T>::InsufficientStake)?;
 			ensure!(
-				staker.staked_balance >=
-					<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+				staker.staked_balance >= <StakeAmount<T>>::get(),
 				Error::<T>::InsufficientStake
 			);
 			// Require reporter to abide by given reporting lock
@@ -966,9 +1005,7 @@ pub mod pallet {
 						.checked_div(
 							staker
 								.staked_balance
-								.checked_div(
-									<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?
-								)
+								.checked_div(<StakeAmount<T>>::get())
 								.ok_or(ArithmeticError::DivisionByZero)?
 								.saturated_into::<u128>()
 						)
@@ -1049,12 +1086,19 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Updates the stake amount after retrieving the latest token price from oracle.
+		#[pallet::call_index(8)]
+		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
+			ensure_signed(origin)?;
+			Self::do_update_stake_amount()
+		}
+
 		/// Initialises a dispute/vote in the system.
 		///
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
 		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
-		#[pallet::call_index(8)]
+		#[pallet::call_index(9)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1112,7 +1156,7 @@ pub mod pallet {
 				value: <ValueOf<T>>::default(),
 				disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp)
 					.ok_or(Error::<T>::NoValueExists)?,
-				slashed_amount: <StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+				slashed_amount: <StakeAmount<T>>::get(),
 			};
 			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 			if vote_round == 1 {
@@ -1152,9 +1196,7 @@ pub mod pallet {
 				dispute.value =
 					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
 			}
-			let stake_amount = U256ToBalance::<T>::convert(Self::convert(
-				<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
-			)?);
+			let stake_amount = U256ToBalance::<T>::convert(Self::convert(<StakeAmount<T>>::get())?);
 			if vote.fee > stake_amount {
 				vote.fee = stake_amount;
 			}
@@ -1175,7 +1217,7 @@ pub mod pallet {
 				.ok_or(Error::<T>::NotReporter)?
 				.address;
 
-			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotConfigured)?;
 
 			// todo: charge dispute initiator corresponding xcm fees
 
@@ -1207,7 +1249,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `supports`: Whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
-		#[pallet::call_index(9)]
+		#[pallet::call_index(10)]
 		pub fn vote(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1263,7 +1305,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who deposited a stake.
 		/// - `amount`: The amount staked.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(10)]
+		#[pallet::call_index(11)]
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1315,7 +1357,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who requested a withdrawal.
 		/// - `amount`: The amount requested to withdraw.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(11)]
+		#[pallet::call_index(12)]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1345,7 +1387,7 @@ pub mod pallet {
 
 			// Confirm staking withdraw request
 			let staking_contract = T::Staking::get();
-			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotRegistered)?;
+			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotConfigured)?;
 			let message = xcm::transact_with_config(
 				ethereum_xcm::transact(
 					staking_contract.address,
@@ -1367,7 +1409,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who withdrew a stake.
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(12)]
+		#[pallet::call_index(13)]
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1408,7 +1450,7 @@ pub mod pallet {
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
-		#[pallet::call_index(13)]
+		#[pallet::call_index(14)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1466,7 +1508,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The result of the dispute.
-		#[pallet::call_index(14)]
+		#[pallet::call_index(15)]
 		pub fn report_vote_executed(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1479,17 +1521,13 @@ pub mod pallet {
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(15)]
+		#[pallet::call_index(16)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);
 
-			// Update local configuration
-			<StakeAmount<T>>::set(None);
-			Self::deposit_event(Event::Configured { stake_amount: U256::zero() });
-
-			// Register relevant supplied config with parachain registry contract
-			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotRegistered)?;
+			// Deregister from parachain registry contract
+			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotConfigured)?;
 			let registry_contract = T::Registry::get();
 			let message = xcm::transact_with_config(
 				ethereum_xcm::transact(

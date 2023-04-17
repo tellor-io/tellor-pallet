@@ -23,39 +23,6 @@ use sp_runtime::{
 };
 
 impl<T: Config> Pallet<T> {
-	/// Funds the staking account with staking rewards from the source account.
-	/// # Arguments
-	/// * `source` - The source account.
-	/// * `amount` - The amount of tokens to fund the staking account with.
-	pub(super) fn _add_staking_rewards(
-		source: &AccountIdOf<T>,
-		amount: BalanceOf<T>,
-	) -> DispatchResult {
-		let staking_rewards = Self::staking_rewards();
-		T::Token::transfer(source, &staking_rewards, amount, false)?;
-		Self::update_rewards()?;
-		let staking_rewards_balance = T::Token::balance(&staking_rewards).into();
-		// update reward rate = real staking rewards balance / 30 days
-		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::get())?;
-		<RewardRate<T>>::set(U256ToBalance::<T>::convert(
-			(staking_rewards_balance
-				.checked_sub(
-					(<AccumulatedRewardPerShare<T>>::get()
-						.into()
-						.checked_mul(total_stake_amount)
-						.ok_or(ArithmeticError::Overflow)?)
-					.checked_div(U256::from(Self::unit()?))
-					.ok_or(ArithmeticError::DivisionByZero)?
-					.checked_sub(<TotalRewardDebt<T>>::get().into())
-					.ok_or(ArithmeticError::Underflow)?,
-				)
-				.ok_or(ArithmeticError::Underflow)?)
-			.checked_div(U256::from(30 * DAYS))
-			.expect("days constant is greater than zero; qed"),
-		));
-		Ok(())
-	}
-
 	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, DispatchError> {
 		T::ValueConverter::convert(value.into_inner())
 	}
@@ -116,6 +83,183 @@ impl<T: Config> Pallet<T> {
 	/// value and only call this once.
 	pub(super) fn dispute_fees() -> T::AccountId {
 		T::PalletId::get().into_sub_account_truncating(b"dispute")
+	}
+
+	/// Funds the staking account with staking rewards from the source account.
+	/// # Arguments
+	/// * `source` - The source account.
+	/// * `amount` - The amount of tokens to fund the staking account with.
+	pub(super) fn do_add_staking_rewards(
+		source: &AccountIdOf<T>,
+		amount: BalanceOf<T>,
+	) -> DispatchResult {
+		let staking_rewards = Self::staking_rewards();
+		T::Token::transfer(source, &staking_rewards, amount, false)?;
+		Self::update_rewards()?;
+		let staking_rewards_balance = T::Token::balance(&staking_rewards).into();
+		// update reward rate = real staking rewards balance / 30 days
+		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::get())?;
+		<RewardRate<T>>::set(U256ToBalance::<T>::convert(
+			(staking_rewards_balance
+				.checked_sub(
+					(<AccumulatedRewardPerShare<T>>::get()
+						.into()
+						.checked_mul(total_stake_amount)
+						.ok_or(ArithmeticError::Overflow)?)
+					.checked_div(U256::from(Self::unit()?))
+					.ok_or(ArithmeticError::DivisionByZero)?
+					.checked_sub(<TotalRewardDebt<T>>::get().into())
+					.ok_or(ArithmeticError::Underflow)?,
+				)
+				.ok_or(ArithmeticError::Underflow)?)
+			.checked_div(U256::from(30 * DAYS))
+			.expect("days constant is greater than zero; qed"),
+		));
+		Ok(())
+	}
+
+	/// Allows data feed account to be filled with tokens.
+	/// # Arguments
+	/// * `feed_funder`: Account funding the feed.
+	/// * `feed_id`: Unique feed identifier.
+	/// * `query_id`: Identifier of reported data type associated with feed.
+	/// * `amount`: Quantity of tokens to fund feed.
+	pub(super) fn do_fund_feed(
+		feed_funder: AccountIdOf<T>,
+		feed_id: FeedId,
+		query_id: QueryId,
+		amount: BalanceOf<T>,
+	) -> DispatchResult {
+		let Some(mut feed) = <DataFeeds<T>>::get(query_id, feed_id) else {
+			return Err(Error::<T>::InvalidFeed.into());
+		};
+
+		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
+		feed.details.balance.saturating_accrue(amount);
+		T::Token::transfer(&feed_funder, &Self::tips(), amount, true)?;
+		// Add to array of feeds with funding
+		if feed.details.feeds_with_funding_index == 0 && feed.details.balance > Zero::zero() {
+			let index = <FeedsWithFunding<T>>::try_mutate(
+				|feeds_with_funding| -> Result<usize, DispatchError> {
+					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
+					Ok(feeds_with_funding.len())
+				},
+			)?;
+			feed.details.feeds_with_funding_index = index.saturated_into::<u32>();
+		}
+		let feed_details = feed.details.clone();
+		<DataFeeds<T>>::insert(query_id, feed_id, feed);
+		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
+		Self::deposit_event(Event::DataFeedFunded {
+			feed_id,
+			query_id,
+			amount,
+			feed_funder,
+			feed_details,
+		});
+		Ok(())
+	}
+
+	/// Read potential reward for an oracle submission.
+	/// # Arguments
+	/// * `feed_id` - Data feed unique identifier.
+	/// * `query_id` - Identifier of reported data.
+	/// * `timestamp` - Timestamp of oracle submission.
+	/// # Returns
+	/// Potential reward for an oracle submission.
+	pub(super) fn do_get_reward_amount(
+		feed_id: FeedId,
+		query_id: QueryId,
+		timestamp: Timestamp,
+	) -> Result<BalanceOf<T>, DispatchError> {
+		ensure!(Self::now().saturating_sub(timestamp) < 4 * WEEKS, Error::<T>::ClaimPeriodExpired);
+
+		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
+		ensure!(
+			!feed.reward_claimed.get(&timestamp).unwrap_or(&false),
+			Error::<T>::TipAlreadyClaimed
+		);
+		let n = (timestamp.saturating_sub(feed.details.start_time))
+			.checked_div(feed.details.interval)
+			.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
+		let c = feed.details.start_time.saturating_add(feed.details.interval.saturating_mul(n)); // finds start timestamp c of interval n
+		let value_retrieved = Self::retrieve_data(query_id, timestamp);
+		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
+		let (value_retrieved_before, timestamp_before) =
+			Self::get_data_before(query_id, timestamp).unwrap_or_default();
+		let mut price_change = 0; // price change from last value to current value
+		if feed.details.price_threshold != 0 {
+			let v1 =
+				Self::bytes_to_price(value_retrieved.expect("value retrieved checked above; qed"))?;
+			let v2 = Self::bytes_to_price(value_retrieved_before)?;
+			if v2 == Zero::zero() {
+				price_change = 10_000;
+			} else if v1 >= v2 {
+				price_change = (T::Price::from(10_000u16).saturating_mul(v1.saturating_sub(v2)))
+					.checked_div(&v2)
+					.expect("v2 checked against zero above; qed")
+					.saturated_into();
+			} else {
+				price_change = (T::Price::from(10_000u16).saturating_mul(v2.saturating_sub(v1)))
+					.checked_div(&v2)
+					.expect("v2 checked against zero above; qed")
+					.saturated_into();
+			}
+		}
+		let mut reward_amount = feed.details.reward;
+		let time_diff = timestamp.saturating_sub(c); // time difference between report timestamp and start of interval
+
+		// ensure either report is first within a valid window, or price change threshold is met
+		if time_diff < feed.details.window && timestamp_before < c {
+			// add time based rewards if applicable
+			reward_amount.saturating_accrue(
+				feed.details.reward_increase_per_second.saturating_mul(time_diff.into()),
+			);
+		} else {
+			ensure!(price_change > feed.details.price_threshold, Error::<T>::PriceThresholdNotMet);
+		}
+
+		if feed.details.balance < reward_amount {
+			reward_amount = feed.details.balance;
+		}
+		Ok(reward_amount)
+	}
+
+	// Updates the stake amount after retrieving the latest token price from oracle.
+	pub(super) fn do_update_stake_amount() -> DispatchResult {
+		let Some((value, _)) = Self::get_data_before(
+			T::StakingTokenPriceQueryId::get(),
+			Self::now().saturating_sub(12 * HOURS),
+		) else {
+			return Err(Error::<T>::InvalidStakingTokenPrice.into());
+		};
+		let Ok(staking_token_price) = T::ValueConverter::convert(value.into_inner()) else {
+			return Err(Error::<T>::InvalidStakingTokenPrice.into());
+		};
+		let staking_token_price = staking_token_price.into();
+		ensure!(
+			staking_token_price >= 10u128.pow(16).into() &&
+				staking_token_price < 10u128.pow(24).into(),
+			Error::<T>::InvalidStakingTokenPrice
+		);
+		let adjusted_stake_amount = (Tributes::from(T::StakeAmountCurrencyTarget::get())
+			.checked_mul(Tributes::from(10u128.pow(18)))
+			.ok_or(ArithmeticError::Overflow)?)
+		.checked_div(staking_token_price)
+		.expect("price range checked above; qed");
+
+		let amount = <StakeAmount<T>>::mutate(|amount| {
+			let minimum_stake_amount = T::MinimumStakeAmount::get().into();
+			if adjusted_stake_amount < minimum_stake_amount {
+				*amount = minimum_stake_amount;
+				minimum_stake_amount
+			} else {
+				*amount = adjusted_stake_amount;
+				adjusted_stake_amount
+			}
+		});
+		Self::deposit_event(Event::NewStakeAmount { amount });
+		Ok(())
 	}
 
 	/// Executes the vote and transfers corresponding dispute fees to initiator/reporter.
@@ -182,42 +326,6 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
-	pub(super) fn _fund_feed(
-		feed_funder: AccountIdOf<T>,
-		feed_id: FeedId,
-		query_id: QueryId,
-		amount: BalanceOf<T>,
-	) -> DispatchResult {
-		let Some(mut feed) = <DataFeeds<T>>::get(query_id, feed_id) else {
-			return Err(Error::<T>::InvalidFeed.into());
-		};
-
-		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
-		feed.details.balance.saturating_accrue(amount);
-		T::Token::transfer(&feed_funder, &Self::tips(), amount, true)?;
-		// Add to array of feeds with funding
-		if feed.details.feeds_with_funding_index == 0 && feed.details.balance > Zero::zero() {
-			let index = <FeedsWithFunding<T>>::try_mutate(
-				|feeds_with_funding| -> Result<usize, DispatchError> {
-					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-					Ok(feeds_with_funding.len())
-				},
-			)?;
-			feed.details.feeds_with_funding_index = index.saturated_into::<u32>();
-		}
-		let feed_details = feed.details.clone();
-		<DataFeeds<T>>::insert(query_id, feed_id, feed);
-		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
-		Self::deposit_event(Event::DataFeedFunded {
-			feed_id,
-			query_id,
-			amount,
-			feed_funder,
-			feed_details,
-		});
-		Ok(())
-	}
-
 	/// Returns the block number at a given timestamp.
 	/// # Arguments
 	/// * `query_id` - The identifier of the specific data feed.
@@ -252,7 +360,8 @@ impl<T: Config> Pallet<T> {
 		if <Tips<T>>::get(query_id).map_or(0, |t| t.len()) == 0 {
 			return Zero::zero()
 		}
-		let timestamp_retrieved = Self::_get_current_value(query_id).map_or(0, |v| v.1);
+		let timestamp_retrieved =
+			Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
 		match <Tips<T>>::get(query_id) {
 			Some(tips) => match tips.last() {
 				Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
@@ -262,12 +371,25 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// Returns the current value of a data feed given a specific identifier.
+	/// # Arguments
+	/// * `query_id` - The identifier of the specific data feed.
+	/// # Returns
+	/// The latest submitted value for the given identifier.
+	pub fn get_current_value(query_id: QueryId) -> Option<ValueOf<T>> {
+		// todo: implement properly
+		<Reports<T>>::get(query_id)
+			.and_then(|r| r.value_by_timestamp.last_key_value().map(|kv| kv.1.clone()))
+	}
+
 	/// Allows the user to get the latest value for the query identifier specified.
 	/// # Arguments
 	/// * `query_id` - Identifier to look up the value for
 	/// # Returns
 	/// The value retrieved, along with its timestamp, if found.
-	pub(super) fn _get_current_value(query_id: QueryId) -> Option<(ValueOf<T>, Timestamp)> {
+	pub(super) fn get_current_value_and_timestamp(
+		query_id: QueryId,
+	) -> Option<(ValueOf<T>, Timestamp)> {
 		let mut count = Self::get_new_value_count_by_query_id(query_id);
 		if count == 0 {
 			return None
@@ -284,17 +406,6 @@ impl<T: Config> Pallet<T> {
 			}
 		}
 		None
-	}
-
-	/// Returns the current value of a data feed given a specific identifier.
-	/// # Arguments
-	/// * `query_id` - The identifier of the specific data feed.
-	/// # Returns
-	/// The latest submitted value for the given identifier.
-	pub fn get_current_value(query_id: QueryId) -> Option<ValueOf<T>> {
-		// todo: implement properly
-		<Reports<T>>::get(query_id)
-			.and_then(|r| r.value_by_timestamp.last_key_value().map(|kv| kv.1.clone()))
 	}
 
 	/// Retrieves the latest value for the query identifier before the specified timestamp.
@@ -331,14 +442,14 @@ impl<T: Config> Pallet<T> {
 	/// The latest dispute fee.
 	pub fn get_dispute_fee() -> Option<BalanceOf<T>> {
 		<StakeAmount<T>>::get()
-			.and_then(|a| a.checked_div(U256::from(10)))
+			.checked_div(U256::from(10))
 			.and_then(|a| {
 				// todo: use rate from oracle
 				const UNIT: u128 = 10u128.pow(DECIMALS);
 				const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
 
 				PRICE
-					.map(|price| U256::from(price))
+					.map(U256::from)
 					// Convert amount into local balance amount based on price
 					.and_then(|price| {
 						a.checked_mul(price).and_then(|a| a.checked_div(U256::from(UNIT)))
@@ -346,7 +457,7 @@ impl<T: Config> Pallet<T> {
 			})
 			// Convert to local number of decimals
 			.and_then(|a| Self::convert(a).ok())
-			.map(|a| U256ToBalance::<T>::convert(a))
+			.map(U256ToBalance::<T>::convert)
 	}
 
 	/// Returns information on a dispute for a given identifier.
@@ -731,64 +842,6 @@ impl<T: Config> Pallet<T> {
 			.unwrap_or_default()
 	}
 
-	pub(super) fn _get_reward_amount(
-		feed_id: FeedId,
-		query_id: QueryId,
-		timestamp: Timestamp,
-	) -> Result<BalanceOf<T>, DispatchError> {
-		ensure!(Self::now().saturating_sub(timestamp) < 4 * WEEKS, Error::<T>::ClaimPeriodExpired);
-
-		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
-		ensure!(
-			!feed.reward_claimed.get(&timestamp).unwrap_or(&false),
-			Error::<T>::TipAlreadyClaimed
-		);
-		let n = (timestamp.saturating_sub(feed.details.start_time))
-			.checked_div(feed.details.interval)
-			.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
-		let c = feed.details.start_time.saturating_add(feed.details.interval.saturating_mul(n)); // finds start timestamp c of interval n
-		let value_retrieved = Self::retrieve_data(query_id, timestamp);
-		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
-		let (value_retrieved_before, timestamp_before) =
-			Self::get_data_before(query_id, timestamp).unwrap_or_default();
-		let mut price_change = 0; // price change from last value to current value
-		if feed.details.price_threshold != 0 {
-			let v1 =
-				Self::bytes_to_price(value_retrieved.expect("value retrieved checked above; qed"))?;
-			let v2 = Self::bytes_to_price(value_retrieved_before)?;
-			if v2 == Zero::zero() {
-				price_change = 10_000;
-			} else if v1 >= v2 {
-				price_change = (T::Price::from(10_000u16).saturating_mul(v1.saturating_sub(v2)))
-					.checked_div(&v2)
-					.expect("v2 checked against zero above; qed")
-					.saturated_into();
-			} else {
-				price_change = (T::Price::from(10_000u16).saturating_mul(v2.saturating_sub(v1)))
-					.checked_div(&v2)
-					.expect("v2 checked against zero above; qed")
-					.saturated_into();
-			}
-		}
-		let mut reward_amount = feed.details.reward;
-		let time_diff = timestamp.saturating_sub(c); // time difference between report timestamp and start of interval
-
-		// ensure either report is first within a valid window, or price change threshold is met
-		if time_diff < feed.details.window && timestamp_before < c {
-			// add time based rewards if applicable
-			reward_amount.saturating_accrue(
-				feed.details.reward_increase_per_second.saturating_mul(time_diff.into()),
-			);
-		} else {
-			ensure!(price_change > feed.details.price_threshold, Error::<T>::PriceThresholdNotMet);
-		}
-
-		if feed.details.balance < reward_amount {
-			reward_amount = feed.details.balance;
-		}
-		Ok(reward_amount)
-	}
-
 	/// Read potential reward for a set of oracle submissions.
 	/// # Arguments
 	/// * `feed_id` - Data feed unique identifier.
@@ -807,7 +860,7 @@ impl<T: Config> Pallet<T> {
 		let mut cumulative_reward = <BalanceOf<T>>::zero();
 		for timestamp in timestamps {
 			cumulative_reward.saturating_accrue(
-				Self::_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
+				Self::do_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
 			)
 		}
 		if cumulative_reward > feed.details.balance {
@@ -860,7 +913,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The stake amount.
 	pub fn get_stake_amount() -> Tributes {
-		<StakeAmount<T>>::get().unwrap_or_default()
+		<StakeAmount<T>>::get()
 	}
 
 	/// Returns all information about a staker.
@@ -1226,7 +1279,7 @@ impl<T: Config> Pallet<T> {
 		stake_info.staked_balance = new_staked_balance;
 		// Update total stakers
 		<TotalStakers<T>>::try_mutate(|total| -> Result<(), Error<T>> {
-			if stake_info.staked_balance >= <StakeAmount<T>>::get().ok_or(Error::NotRegistered)? {
+			if stake_info.staked_balance >= <StakeAmount<T>>::get() {
 				if !stake_info.staked {
 					total.saturating_inc();
 				}

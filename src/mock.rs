@@ -16,7 +16,7 @@
 
 use crate as tellor;
 use crate::{
-	types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
+	constants::HOURS, types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
 	Error::ValueConversionError,
 };
 use frame_support::{
@@ -26,7 +26,7 @@ use frame_support::{
 };
 use frame_system as system;
 use once_cell::sync::Lazy;
-use sp_core::{ConstU32, ConstU8, H256};
+use sp_core::{ConstU128, ConstU32, ConstU8, H256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, Convert, IdentityLookup},
@@ -114,11 +114,13 @@ static GOVERNANCE: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 
 parameter_types! {
+	pub const MinimumStakeAmount: u128 = 100 * 10u128.pow(18); // 100 TRB
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
 	pub const ParachainId: u32 = PARA_ID;
 	pub TellorRegistry: ContractLocation = (EVM_PARA_ID, *REGISTRY).into();
 	pub TellorGovernance: ContractLocation = (EVM_PARA_ID, *GOVERNANCE).into();
 	pub TellorStaking: ContractLocation = (EVM_PARA_ID, *STAKING).into();
+	pub StakingTokenPriceQueryId: H256 = H256([211,194,112,119,36,198,191,243,89,99,24,187,3,60,229,109,166,126,119,8,208,251,201,107,66,216,126,12,172,199,241,136]);
 }
 
 impl tellor::Config for Test {
@@ -139,15 +141,19 @@ impl tellor::Config for Test {
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so ValueConverter needs to handle conversion to price for threshold checks
 	type MaxVotes = ConstU32<10>;
+	type MinimumStakeAmount = MinimumStakeAmount;
 	type PalletId = TellorPalletId;
 	type ParachainId = ParachainId;
 	type Price = u128;
 	type RegistrationOrigin = system::EnsureRoot<AccountId>;
 	type Registry = TellorRegistry;
+	type StakeAmountCurrencyTarget = ConstU128<{ 500 * 10u128.pow(18) }>;
 	type Staking = TellorStaking;
 	type StakingOrigin = EnsureStaking;
+	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
 	type Time = Timestamp;
 	type Token = Balances;
+	type UpdateStakeAmountInterval = ConstU64<{ 12 * HOURS }>;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
 }

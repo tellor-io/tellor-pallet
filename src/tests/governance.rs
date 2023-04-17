@@ -37,8 +37,8 @@ fn begin_dispute() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
-			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+			configure_parachain();
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random())
 		})
 	});
 
@@ -57,7 +57,7 @@ fn begin_dispute() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				another_reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_noop!(
@@ -118,7 +118,7 @@ fn begin_dispute() {
 				balance_before_begin_dispute -
 					balance_after_begin_dispute -
 					U256ToBalance::convert(
-						Tellor::convert(StakeAmount::<Test>::get().unwrap()).unwrap() * PRICE
+						Tellor::convert(StakeAmount::<Test>::get()).unwrap() * PRICE
 					) / 10 == 0,
 				"dispute fee paid should be correct"
 			);
@@ -142,7 +142,7 @@ fn begin_dispute() {
 				Origin::Governance.into(),
 				reporter,
 				another_reporter,
-				STAKE_AMOUNT.into()
+				MINIMUM_STAKE_AMOUNT.into()
 			));
 		});
 
@@ -160,7 +160,7 @@ fn begin_dispute() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				3,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -199,8 +199,8 @@ fn begin_dispute_by_non_reporter() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
-			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+			configure_parachain();
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random())
 		})
 	});
 
@@ -276,7 +276,7 @@ fn begin_dispute_by_non_reporter() {
 				balance_before_begin_dispute -
 					balance_after_begin_dispute -
 					U256ToBalance::convert(
-						Tellor::convert(StakeAmount::<Test>::get().unwrap()).unwrap() * PRICE
+						Tellor::convert(StakeAmount::<Test>::get()).unwrap() * PRICE
 					) / 10 == 0,
 				"dispute fee paid should be correct"
 			);
@@ -300,7 +300,7 @@ fn begin_dispute_by_non_reporter() {
 				Origin::Governance.into(),
 				reporter,
 				another_reporter,
-				STAKE_AMOUNT.into()
+				MINIMUM_STAKE_AMOUNT.into()
 			));
 		});
 
@@ -318,7 +318,7 @@ fn begin_dispute_by_non_reporter() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				3,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -349,10 +349,10 @@ fn begin_dispute_by_non_reporter() {
 fn begins_dispute_xcm() {
 	new_test_ext().execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
+			configure_parachain();
 
 			let reporter = 1;
-			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 
 			let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 			let query_id = keccak_256(query_data.as_ref()).into();
@@ -403,8 +403,7 @@ fn begin_dispute_checks_max_vote_rounds() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
-			deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 		})
 	});
 
@@ -444,8 +443,8 @@ fn execute_vote() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
-			deposit_stake(dispute_reporter, STAKE_AMOUNT, Address::random())
+			configure_parachain();
+			deposit_stake(dispute_reporter, MINIMUM_STAKE_AMOUNT, Address::random())
 		})
 	});
 
@@ -455,7 +454,7 @@ fn execute_vote() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter_1,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_noop!(Tellor::execute_vote(H256::random(), result), Error::InvalidDispute);
@@ -548,7 +547,7 @@ fn execute_vote() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter_3,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -612,7 +611,7 @@ fn tally_votes() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L143
 	ext.execute_with(|| {
@@ -623,7 +622,7 @@ fn tally_votes() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -667,7 +666,7 @@ fn vote() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L170
 	ext.execute_with(|| {
@@ -678,7 +677,7 @@ fn vote() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter_2,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -771,7 +770,7 @@ fn did_vote() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L248
 	ext.execute_with(|| {
@@ -779,7 +778,7 @@ fn did_vote() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -818,7 +817,7 @@ fn get_dispute_info() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L260
 	ext.execute_with(|| {
@@ -826,7 +825,7 @@ fn get_dispute_info() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -864,8 +863,8 @@ fn get_disputes_by_reporter() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
-			deposit_stake(dispute_initiator, STAKE_AMOUNT, Address::random())
+			configure_parachain();
+			deposit_stake(dispute_initiator, MINIMUM_STAKE_AMOUNT, Address::random())
 		})
 	});
 
@@ -874,7 +873,7 @@ fn get_disputes_by_reporter() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -944,7 +943,7 @@ fn get_open_disputes_on_id() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L274
 	ext.execute_with(|| {
@@ -952,7 +951,7 @@ fn get_open_disputes_on_id() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -968,7 +967,7 @@ fn get_open_disputes_on_id() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				another_reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1019,7 +1018,7 @@ fn get_vote_count() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L298
 	ext.execute_with(|| {
@@ -1028,7 +1027,7 @@ fn get_vote_count() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1087,7 +1086,7 @@ fn get_vote_info() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L322
 	ext.execute_with(|| {
@@ -1095,7 +1094,7 @@ fn get_vote_info() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1169,7 +1168,7 @@ fn get_vote_rounds() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L361
 	ext.execute_with(|| {
@@ -1177,7 +1176,7 @@ fn get_vote_rounds() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1221,7 +1220,7 @@ fn get_vote_tally_by_address() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L383
 	ext.execute_with(|| {
@@ -1229,7 +1228,7 @@ fn get_vote_tally_by_address() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1253,7 +1252,7 @@ fn get_vote_tally_by_address() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				another_reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			assert_ok!(Tellor::submit_value(
@@ -1301,7 +1300,7 @@ fn get_tips_by_address() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L404
 	ext.execute_with(|| {
@@ -1309,7 +1308,7 @@ fn get_tips_by_address() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 			Balances::make_free_balance_be(&user, token(1_000) + 1);
@@ -1371,8 +1370,8 @@ fn invalid_dispute() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			register_parachain(STAKE_AMOUNT);
-			super::deposit_stake(reporter, STAKE_AMOUNT, Address::random());
+			configure_parachain();
+			super::deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 		})
 	});
 
@@ -1421,7 +1420,7 @@ fn slash_dispute_initiator() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+	ext.execute_with(|| with_block(|| configure_parachain()));
 
 	ext.execute_with(|| {
 		Balances::make_free_balance_be(&another_reporter, token(1_000));
@@ -1440,7 +1439,7 @@ fn slash_dispute_initiator() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 
@@ -1455,7 +1454,7 @@ fn slash_dispute_initiator() {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				another_reporter,
-				STAKE_AMOUNT.into(),
+				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
 

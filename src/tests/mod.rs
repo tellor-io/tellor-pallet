@@ -49,7 +49,7 @@ type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
 type U256ToBalance = crate::types::U256ToBalance<Test>;
 
-const STAKE_AMOUNT: u128 = 100 * TRB;
+const MINIMUM_STAKE_AMOUNT: u128 = 100 * TRB;
 const TRB: u128 = 10u128.pow(DECIMALS);
 
 fn trb(amount: impl Into<f64>) -> Tributes {
@@ -100,11 +100,11 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Tributes>, addre
 	));
 }
 
-fn register_parachain(stake_amount: impl Into<Tributes>) {
+// Configures the parachain for remote transact calls to controller contracts
+fn configure_parachain() {
 	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 	assert_ok!(Tellor::register(
 		RuntimeOrigin::root(),
-		stake_amount.into(),
 		Box::new(MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000u128) }),
 		WeightLimit::Unlimited,
 		1000,
@@ -226,21 +226,17 @@ fn register() {
 			for origin in
 				vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
 			{
-				assert_noop!(
-					Tellor::register(origin, trb(0), fees.clone(), Unlimited, 0, 0),
-					BadOrigin
-				);
+				assert_noop!(Tellor::register(origin, fees.clone(), Unlimited, 0, 0), BadOrigin);
 			}
 
 			assert_ok!(Tellor::register(
 				RuntimeOrigin::root(),
-				STAKE_AMOUNT.into(),
 				fees.clone(),
 				weight_limit.clone(),
 				require_weight_at_most,
 				gas_limit
 			));
-			assert_eq!(StakeAmount::<Test>::get().unwrap(), STAKE_AMOUNT.into());
+			assert_eq!(StakeAmount::<Test>::get(), MINIMUM_STAKE_AMOUNT.into());
 			assert_eq!(
 				Configuration::get().unwrap(),
 				Config {
@@ -252,9 +248,7 @@ fn register() {
 					gas_limit
 				}
 			);
-			System::assert_has_event(
-				Event::Configured { stake_amount: STAKE_AMOUNT.into() }.into(),
-			);
+			System::assert_has_event(Event::Configured {}.into());
 
 			assert_eq!(
 				sent_xcm(),
