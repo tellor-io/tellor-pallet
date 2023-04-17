@@ -24,7 +24,7 @@ use frame_support::{
 	traits::{OriginTrait, PalletInfoAccess},
 };
 use sp_core::Get;
-use sp_std::{boxed::Box, fmt::Debug, vec, vec::Vec};
+use sp_std::{fmt::Debug, vec, vec::Vec};
 use traits::SendXcm;
 use xcm_executor::traits::{Convert, ConvertOrigin};
 
@@ -106,26 +106,23 @@ impl Into<MultiLocation> for ContractLocation {
 	}
 }
 
-pub(crate) fn transact(
-	fees: Box<MultiAsset>,
-	weight_limit: WeightLimit,
-	require_weight_at_most: u64,
-	call: Vec<u8>,
-) -> Xcm<()> {
+/// Constructs XCM message for remote transact of the supplied call.
+/// # Arguments
+/// * `call` - The encoded transaction to be applied.
+/// * `config` - The configuration to be used to construct the XCM message.
+/// # Returns
+/// A XCM message for remote transact.
+pub(crate) fn transact(call: Vec<u8>, config: XcmConfig) -> Xcm<()> {
 	// Construct xcm message
 	Xcm(vec![
-		WithdrawAsset((*fees.clone()).into()),
-		BuyExecution { fees: *fees, weight_limit },
+		WithdrawAsset(config.fees.clone().into()),
+		BuyExecution { fees: config.fees, weight_limit: config.weight_limit },
 		Transact {
 			origin_type: OriginKind::SovereignAccount,
-			require_weight_at_most,
+			require_weight_at_most: config.require_weight_at_most,
 			call: call.into(),
 		},
 	])
-}
-
-pub(crate) fn transact_with_config(call: Vec<u8>, config: XcmConfig) -> Xcm<()> {
-	transact(Box::new(config.fees), config.weight_limit, config.require_weight_at_most, call)
 }
 
 #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo)]

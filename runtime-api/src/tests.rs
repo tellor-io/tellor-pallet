@@ -112,6 +112,7 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Balance = Balance;
+	type ConfigureOrigin = frame_system::EnsureRoot<AccountId>;
 	type Decimals = ();
 	type Fee = ();
 	type Governance = ();
@@ -130,7 +131,7 @@ impl tellor::Config for Test {
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
 	type Price = u32;
-	type RegistrationOrigin = frame_system::EnsureRoot<AccountId>;
+	type RegisterOrigin = frame_system::EnsureRoot<AccountId>;
 	type Registry = ();
 	type StakeAmountCurrencyTarget = ();
 	type Staking = ();
