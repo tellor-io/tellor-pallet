@@ -37,7 +37,7 @@ pub use types::{
 	autopay::{FeedDetails, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
-	Address, Amount, DisputeId, FeedId, QueryId, Timestamp,
+	Address, DisputeId, FeedId, QueryId, Timestamp, Tributes,
 };
 
 #[cfg(test)]
@@ -77,7 +77,7 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
-	use sp_runtime::traits::SaturatedConversion;
+	use sp_runtime::{traits::SaturatedConversion, ArithmeticError};
 	use sp_std::{prelude::*, result};
 
 	#[pallet::pallet]
@@ -96,6 +96,10 @@ pub mod pallet {
 
 		/// The units in which we record balances.
 		type Balance: Balance + From<u64> + Into<U256>;
+
+		/// The number of decimals used by the balance unit.
+		#[pallet::constant]
+		type Decimals: Get<u8>;
 
 		/// Percentage, 1000 is 100%, 50 is 5%, etc
 		#[pallet::constant]
@@ -178,7 +182,7 @@ pub mod pallet {
 		type Token: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
 
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
-		type ValueConverter: Convert<Vec<u8>, Option<Self::Price>>;
+		type ValueConverter: Convert<Vec<u8>, Result<Self::Price, DispatchError>>;
 
 		type Xcm: traits::SendXcm;
 	}
@@ -216,24 +220,47 @@ pub mod pallet {
 	pub(super) type UserTipsTotal<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, BalanceOf<T>, ValueQuery>;
 	// Oracle
+	/// Accumulated staking reward per staked token
+	#[pallet::storage]
+	#[pallet::getter(fn accumulated_reward_per_share)]
+	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+	/// Mapping of query identifiers to a report.
 	#[pallet::storage]
 	pub(super) type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
+	/// Total staking rewards released per second.
 	#[pallet::storage]
-	pub(super) type RewardRate<T> = StorageValue<_, BalanceOf<T>>;
+	#[pallet::getter(fn reward_rate)]
+	pub(super) type RewardRate<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+	/// Minimum amount required to be a staker.
 	#[pallet::storage]
-	pub(super) type StakeAmount<T> = StorageValue<_, Amount>;
+	pub(super) type StakeAmount<T> = StorageValue<_, Tributes>;
+	/// Mapping from a staker's account identifier to their staking info.
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
 	#[pallet::storage]
 	pub(super) type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
+	/// The time of last update to AccumulatedRewardPerShare.
+	#[pallet::storage]
+	#[pallet::getter(fn time_of_last_allocation)]
+	pub(super) type TimeOfLastAllocation<T> = StorageValue<_, Timestamp, ValueQuery>;
+	/// The time of the last new submitted value.
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_new_value)]
 	pub(super) type TimeOfLastNewValue<T> = StorageValue<_, Timestamp>;
+	/// Staking reward debt, used to calculate real staking rewards balance.
 	#[pallet::storage]
-	pub(super) type TotalStakeAmount<T> = StorageValue<_, Amount, ValueQuery>;
+	#[pallet::getter(fn total_reward_debt)]
+	pub(super) type TotalRewardDebt<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+	/// Total amount of tokens locked in the staking controller contract.
+	#[pallet::storage]
+	pub(super) type TotalStakeAmount<T> = StorageValue<_, Tributes, ValueQuery>;
+	/// Total number of stakers with at least StakeAmount staked, not exact.
 	#[pallet::storage]
 	pub(super) type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
+	/// Amount locked for withdrawal.
+	#[pallet::storage]
+	pub(super) type ToWithdraw<T> = StorageValue<_, Tributes, ValueQuery>;
 	// Governance
 	#[pallet::storage]
 	pub(super) type DisputeIdsByReporter<T> =
@@ -306,13 +333,17 @@ pub mod pallet {
 			reporter: AccountIdOf<T>,
 		},
 		/// Emitted when a new staker is reported.
-		NewStakerReported { staker: AccountIdOf<T>, amount: Amount, address: Address },
+		NewStakerReported { staker: AccountIdOf<T>, amount: Tributes, address: Address },
 		/// Emitted when a stake slash is reported.
-		SlashReported { reporter: AccountIdOf<T>, recipient: AccountIdOf<T>, amount: Amount },
+		SlashReported { reporter: AccountIdOf<T>, recipient: AccountIdOf<T>, amount: Tributes },
 		/// Emitted when a stake withdrawal is reported.
 		StakeWithdrawnReported { staker: AccountIdOf<T> },
 		/// Emitted when a stake withdrawal request is reported.
-		StakeWithdrawRequestReported { reporter: AccountIdOf<T>, amount: Amount, address: Address },
+		StakeWithdrawRequestReported {
+			reporter: AccountIdOf<T>,
+			amount: Tributes,
+			address: Address,
+		},
 		/// Emitted when a value is removed (via governance).
 		ValueRemoved { query_id: QueryId, timestamp: Timestamp },
 
@@ -337,7 +368,7 @@ pub mod pallet {
 
 		// Registration
 		/// Emitted when the pallet is (re-)configured.
-		Configured { stake_amount: Amount },
+		Configured { stake_amount: Tributes },
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
 		/// Emitted when deregistration from the controller contracts is attempted.
@@ -356,7 +387,6 @@ pub mod pallet {
 		FeedAlreadyExists,
 		/// No funds available for this feed or insufficient balance for all submitted timestamps.
 		InsufficientFeedBalance,
-		IntervalCalculationError,
 		/// Amount must be greater than zero.
 		InvalidAmount,
 		/// Claimer must be the reporter.
@@ -382,7 +412,6 @@ pub mod pallet {
 		MaxTipsReached,
 		/// No tips submitted for this query identifier.
 		NoTipsSubmitted,
-		PriceChangeCalculationError,
 		/// Price threshold not met.
 		PriceThresholdNotMet,
 		/// Timestamp not eligible for tip.
@@ -403,6 +432,7 @@ pub mod pallet {
 		InsufficientStake,
 		/// Nonce must match the timestamp index.
 		InvalidNonce,
+		InvalidPrice,
 		/// Value must be submitted.
 		InvalidValue,
 		/// The maximum number of queries has been reached.
@@ -413,7 +443,6 @@ pub mod pallet {
 		NoWithdrawalRequested,
 		/// Still in reporter time lock, please wait!
 		ReporterTimeLocked,
-		ReportingLockCalculationError,
 		/// Timestamp already reported.
 		TimestampAlreadyReported,
 		/// Withdrawal period didn't pass.
@@ -422,6 +451,7 @@ pub mod pallet {
 		// Governance
 		/// Voter has already voted.
 		AlreadyVoted,
+		DisputeFeeCalculationError,
 		/// Dispute must be started within reporting lock time.
 		DisputeReportingPeriodExpired,
 		/// New dispute round must be started within a day.
@@ -490,7 +520,7 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		pub fn register(
 			origin: OriginFor<T>,
-			stake_amount: Amount,
+			stake_amount: Tributes,
 			fees: Box<MultiAsset>,
 			weight_limit: WeightLimit,
 			require_weight_at_most: u64,
@@ -559,19 +589,19 @@ pub mod pallet {
 			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
+			let tips = &Self::tips();
 			T::Token::transfer(
-				&Self::tips(),
+				tips,
 				&reporter,
 				// todo: safe math
 				cumulative_reward - fee,
 				false,
 			)?;
-			Self::add_staking_rewards(fee)?;
+			Self::_add_staking_rewards(tips, fee)?;
 			if Self::get_current_tip(query_id) == Zero::zero() {
 				let index = <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default();
 				if index != 0 {
-					// todo: safe math
-					let idx: usize = index as usize - 1;
+					let idx = (index as usize).checked_sub(1).ok_or(Error::<T>::InvalidIndex)?;
 					// Replace unfunded feed in array with last element
 					<QueryIdsWithFunding<T>>::try_mutate(
 						|query_ids_with_funding| -> DispatchResult {
@@ -687,14 +717,15 @@ pub mod pallet {
 			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
+			let tips = &Self::tips();
 			T::Token::transfer(
-				&Self::tips(),
+				tips,
 				&reporter,
 				// todo: safe math
 				cumulative_reward - fee,
 				false,
 			)?;
-			Self::add_staking_rewards(fee)?;
+			Self::_add_staking_rewards(tips, fee)?;
 			Self::deposit_event(Event::TipClaimed {
 				feed_id,
 				query_id,
@@ -878,13 +909,22 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Funds the staking account with staking rewards.
+		///
+		/// - `amount`: Amount of tokens to fund staking account with.
+		#[pallet::call_index(6)]
+		pub fn add_staking_rewards(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
+			let funder = ensure_signed(origin)?;
+			Self::_add_staking_rewards(&funder, amount)
+		}
+
 		/// Allows a reporter to submit a value to the oracle.
 		///
 		/// - `query_id`: Identifier of the specific data feed.
 		/// - `value`: Value the user submits to the oracle.
 		/// - `nonce`: The current value count for the query identifier.
 		/// - `query_data`: The data used to fulfil the data query.
-		#[pallet::call_index(6)]
+		#[pallet::call_index(7)]
 		pub fn submit_value(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -929,10 +969,10 @@ pub mod pallet {
 								.checked_div(
 									<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?
 								)
-								.ok_or(Error::<T>::ReportingLockCalculationError)?
+								.ok_or(ArithmeticError::DivisionByZero)?
 								.saturated_into::<u128>()
 						)
-						.ok_or(Error::<T>::ReportingLockCalculationError)?,
+						.ok_or(ArithmeticError::DivisionByZero)?,
 				Error::<T>::ReporterTimeLocked
 			);
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
@@ -1014,7 +1054,7 @@ pub mod pallet {
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
 		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
-		#[pallet::call_index(7)]
+		#[pallet::call_index(8)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1056,7 +1096,7 @@ pub mod pallet {
 				vote_round,
 				start_date: Self::now(),
 				block_number: frame_system::Pallet::<T>::block_number(),
-				fee: Self::get_dispute_fee(),
+				fee: Self::get_dispute_fee().ok_or(Error::<T>::DisputeFeeCalculationError)?,
 				tally_date: 0,
 				users: Tally::default(),
 				reporters: Tally::default(),
@@ -1112,8 +1152,9 @@ pub mod pallet {
 				dispute.value =
 					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
 			}
-			let stake_amount =
-				Self::convert(<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?);
+			let stake_amount = U256ToBalance::<T>::convert(Self::convert(
+				<StakeAmount<T>>::get().ok_or(Error::<T>::NotRegistered)?,
+			)?);
 			if vote.fee > stake_amount {
 				vote.fee = stake_amount;
 			}
@@ -1166,7 +1207,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `supports`: Whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
-		#[pallet::call_index(8)]
+		#[pallet::call_index(9)]
 		pub fn vote(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1222,11 +1263,11 @@ pub mod pallet {
 		/// - `reporter`: The reporter who deposited a stake.
 		/// - `amount`: The amount staked.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(9)]
+		#[pallet::call_index(10)]
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
-			amount: Amount,
+			amount: Tributes,
 			address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
@@ -1237,36 +1278,30 @@ pub mod pallet {
 				ensure!(address == staker.address, Error::<T>::InvalidAddress);
 				let staked_balance = staker.staked_balance;
 				let locked_balance = staker.locked_balance;
-				if locked_balance > Amount::zero() {
+				if locked_balance > U256::zero() {
 					if locked_balance >= amount {
 						// if staker's locked balance covers full amount, use that
 						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
-					// 		toWithdraw -= _amount; // <- todo: check whether this is required
+						<ToWithdraw<T>>::mutate(|locked| *locked = locked.saturating_sub(amount));
 					} else {
 						// otherwise, stake the whole locked balance
-						// 		toWithdraw -= _staker.lockedBalance; <- todo: check whether this is required
-						staker.locked_balance = Amount::zero();
+						<ToWithdraw<T>>::mutate(|locked| {
+							*locked = locked.saturating_sub(staker.locked_balance)
+						});
+						staker.locked_balance = U256::zero();
 					}
 				} else {
-					if staked_balance == Amount::zero() {
-						// todo:
-						// 		// if staked balance and locked balance equal 0, save current vote tally.
-						// 		// voting participation used for calculating rewards
-						// 		(bool _success, bytes memory _returnData) = governance.call(
-						// 			abi.encodeWithSignature("getVoteCount()")
-						// 		);
-						// 		if (_success) {
-						// 			_staker.startVoteCount = uint256(abi.decode(_returnData, (uint256)));
-						// 		}
-						// 		(_success,_returnData) = governance.call(
-						// 			abi.encodeWithSignature("getVoteTallyByAddress(address)",msg.sender)
-						// 		);
-						// 		if(_success){
-						// 			_staker.startVoteTally =  abi.decode(_returnData,(uint256));
-						// 		}
+					if staked_balance == U256::zero() {
+						// if staked balance and locked balance equal 0, save current vote tally.
+						// voting participation used for calculating rewards
+						staker.start_vote_count = Self::get_vote_count();
+						staker.start_vote_tally = Self::get_vote_tally_by_address(&reporter);
 					}
 				}
-				Self::update_stake_and_pay_rewards(&mut staker, staked_balance + amount)?;
+				Self::update_stake_and_pay_rewards(
+					(&reporter, &mut staker),
+					staked_balance + amount,
+				)?;
 				staker.start_date = Self::now(); // This resets the staker start date to now
 				*maybe = Some(staker);
 				Ok(())
@@ -1280,11 +1315,11 @@ pub mod pallet {
 		/// - `reporter`: The reporter who requested a withdrawal.
 		/// - `amount`: The amount requested to withdraw.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(10)]
+		#[pallet::call_index(11)]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
-			amount: Amount,
+			amount: Tributes,
 			address: Address,
 		) -> DispatchResult {
 			// ensure origin is staking controller contract
@@ -1298,10 +1333,10 @@ pub mod pallet {
 						ensure!(staker.staked_balance >= amount, Error::<T>::InsufficientStake);
 						// todo: safe math
 						let stake_amount = staker.staked_balance - amount;
-						Self::update_stake_and_pay_rewards(staker, stake_amount)?;
+						Self::update_stake_and_pay_rewards((&reporter, staker), stake_amount)?;
 						staker.start_date = Self::now();
 						staker.locked_balance = staker.locked_balance.saturating_add(amount);
-						// toWithdraw += _amount; // <- todo: check whether this is required here
+						<ToWithdraw<T>>::mutate(|locked| *locked = locked.saturating_add(amount));
 						Ok(())
 					},
 				}
@@ -1332,11 +1367,11 @@ pub mod pallet {
 		/// - `reporter`: The reporter who withdrew a stake.
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(11)]
+		#[pallet::call_index(12)]
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
-			amount: Amount,
+			amount: Tributes,
 			// todo: consider removal of address
 			address: Address,
 		) -> DispatchResult {
@@ -1349,14 +1384,16 @@ pub mod pallet {
 					Some(staker) => {
 						// Ensure reporter is locked and that enough time has passed
 						ensure!(
-							staker.locked_balance > Amount::zero(),
+							staker.locked_balance > U256::zero(),
 							Error::<T>::NoWithdrawalRequested
 						);
 						ensure!(
 							Self::now().saturating_sub(staker.start_date) >= 7 * DAYS,
 							Error::<T>::WithdrawalPeriodPending
 						);
-						// toWithdraw -= _staker.lockedBalance; // todo: required?
+						<ToWithdraw<T>>::mutate(|locked| {
+							*locked = locked.saturating_sub(staker.locked_balance)
+						});
 						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
 						Ok(())
 					},
@@ -1371,12 +1408,12 @@ pub mod pallet {
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
-		#[pallet::call_index(12)]
+		#[pallet::call_index(13)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
 			recipient: AccountIdOf<T>,
-			amount: Amount,
+			amount: Tributes,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
@@ -1388,28 +1425,34 @@ pub mod pallet {
 						let staked_balance = staker.staked_balance;
 						let locked_balance = staker.locked_balance;
 						ensure!(
-							staked_balance.saturating_add(locked_balance) > Amount::zero(),
+							staked_balance.saturating_add(locked_balance) > U256::zero(),
 							Error::<T>::InsufficientStake
 						);
 						if locked_balance >= amount {
 							// if locked balance is at least stakeAmount, slash from locked balance
 							staker.locked_balance = staker.locked_balance.saturating_sub(amount);
-						// 	toWithdraw -= stakeAmount;  // todo: required?
+							<ToWithdraw<T>>::mutate(|locked| {
+								*locked = locked.saturating_sub(amount)
+							});
 						} else if locked_balance.saturating_add(staked_balance) >= amount {
 							// if locked balance + staked balance is at least stake amount,
 							// slash from locked balance and slash remainder from staked balance
 							Self::update_stake_and_pay_rewards(
-								staker,
+								(&reporter, staker),
 								staked_balance
 									.saturating_sub(amount.saturating_sub(locked_balance)),
 							)?;
-							// 	toWithdraw -= _lockedBalance; // todo: required?
-							staker.locked_balance = Amount::zero();
+							<ToWithdraw<T>>::mutate(|locked| {
+								*locked = locked.saturating_sub(locked_balance)
+							});
+							staker.locked_balance = U256::zero();
 						} else {
 							// if sum(locked balance + staked balance) is less than stakeAmount, slash sum
-							// 	toWithdraw -= _lockedBalance; // todo: required?
-							Self::update_stake_and_pay_rewards(staker, Amount::zero())?;
-							staker.locked_balance = Amount::zero();
+							<ToWithdraw<T>>::mutate(|locked| {
+								*locked = locked.saturating_sub(locked_balance)
+							});
+							Self::update_stake_and_pay_rewards((&reporter, staker), U256::zero())?;
+							staker.locked_balance = U256::zero();
 						}
 						Ok(())
 					},
@@ -1423,7 +1466,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The result of the dispute.
-		#[pallet::call_index(13)]
+		#[pallet::call_index(14)]
 		pub fn report_vote_executed(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1436,14 +1479,14 @@ pub mod pallet {
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(14)]
+		#[pallet::call_index(15)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
-			ensure!(Self::get_total_stake_amount() == Amount::zero(), Error::<T>::ActiveStake);
+			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);
 
 			// Update local configuration
 			<StakeAmount<T>>::set(None);
-			Self::deposit_event(Event::Configured { stake_amount: Amount::zero() });
+			Self::deposit_event(Event::Configured { stake_amount: U256::zero() });
 
 			// Register relevant supplied config with parachain registry contract
 			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotRegistered)?;

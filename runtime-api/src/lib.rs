@@ -22,7 +22,7 @@ pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
 pub use governance::VoteInfo;
 use sp_std::vec::Vec;
-use tellor::{Amount, DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, VoteResult};
+use tellor::{DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, Tributes, VoteResult};
 
 mod autopay;
 mod governance;
@@ -30,7 +30,7 @@ mod governance;
 mod tests;
 
 sp_api::decl_runtime_apis! {
-	pub trait TellorAutoPay<AccountId: Codec, Amount: Codec>
+	pub trait TellorAutoPay<AccountId: Codec, Balance: Codec>
 	{
 		/// Read current data feeds.
 		/// # Arguments
@@ -44,19 +44,19 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
 		/// Amount of tip.
-		fn get_current_tip(query_id: QueryId) -> Amount;
+		fn get_current_tip(query_id: QueryId) -> Balance;
 
 		/// Read a specific data feed.
 		/// # Arguments
 		/// * `query_id` - Unique feed identifier of parameters.
 		/// # Returns
 		/// Details of the specified feed.
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Amount>>;
+		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Balance>>;
 
 		/// Read currently funded feed details.
 		/// # Returns
 		/// Details for funded feeds.
-		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Amount>>;
+		fn get_funded_feed_details() -> Vec<FeedDetailsWithQueryData<Balance>>;
 
 		/// Read currently funded feeds.
 		/// # Returns
@@ -71,7 +71,7 @@ sp_api::decl_runtime_apis! {
 		/// Read currently funded single tips with query data.
 		/// # Returns
 		/// The current single tips.
-		fn get_funded_single_tips_info() -> Vec<SingleTipWithQueryData<Amount>>;
+		fn get_funded_single_tips_info() -> Vec<SingleTipWithQueryData<Balance>>;
 
 		/// Read the number of past tips for a query identifier.
 		/// # Arguments
@@ -85,7 +85,7 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
 		/// All past tips.
-		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Amount>>;
+		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Balance>>;
 
 		/// Read a past tip for a query identifier and index.
 		/// # Arguments
@@ -93,7 +93,7 @@ sp_api::decl_runtime_apis! {
 		/// * `index` - The index of the tip.
 		/// # Returns
 		/// The past tip, if found.
-		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Amount>>;
+		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Balance>>;
 
 		/// Look up a query identifier from a data feed identifier.
 		/// # Arguments
@@ -109,7 +109,7 @@ sp_api::decl_runtime_apis! {
 		/// * `timestamps` - Timestamps of oracle submissions.
 		/// # Returns
 		/// Potential reward for a set of oracle submissions.
-		fn get_reward_amount(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Timestamp>) -> Amount;
+		fn get_reward_amount(feed_id: FeedId, query_id: QueryId, timestamps: Vec<Timestamp>) -> Balance;
 
 		/// Read whether a reward has been claimed.
 		/// # Arguments
@@ -134,7 +134,7 @@ sp_api::decl_runtime_apis! {
 		/// * `user` - Address of user to query.
 		/// # Returns
 		/// Total amount of tips paid by a user.
-		fn get_tips_by_address(user: AccountId) -> Amount;
+		fn get_tips_by_address(user: AccountId) -> Balance;
 	}
 
 	pub trait TellorOracle<AccountId: Codec, BlockNumber: Codec, StakeInfo: Codec, Value: Codec> where
@@ -215,7 +215,7 @@ sp_api::decl_runtime_apis! {
 		/// Returns the amount required to report oracle values.
 		/// # Returns
 		/// The stake amount.
-		fn get_stake_amount() -> Amount;
+		fn get_stake_amount() -> Tributes;
 
 		/// Returns all information about a staker.
 		/// # Arguments
@@ -256,7 +256,7 @@ sp_api::decl_runtime_apis! {
 		/// Returns the total amount staked for reporting.
 		/// # Returns
 		/// The total amount of token staked.
-		fn get_total_stake_amount() -> Amount;
+		fn get_total_stake_amount() -> Tributes;
 
 		/// Returns the total number of current stakers.
 		/// # Returns
@@ -282,7 +282,7 @@ sp_api::decl_runtime_apis! {
 		fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Value>;
 	}
 
-	pub trait TellorGovernance<AccountId: Codec, Amount: Codec, BlockNumber: Codec, Value: Codec> where
+	pub trait TellorGovernance<AccountId: Codec, Balance: Codec, BlockNumber: Codec, Value: Codec> where
 	{
 		/// Determines if an account voted for a specific dispute round.
 		/// # Arguments
@@ -296,7 +296,7 @@ sp_api::decl_runtime_apis! {
 		/// Get the latest dispute fee.
 		/// # Returns
 		/// The latest dispute fee.
-		fn get_dispute_fee() -> Amount;
+		fn get_dispute_fee() -> Option<Balance>;
 
 		/// Returns the dispute identifiers for a reporter.
 		/// # Arguments
@@ -333,7 +333,7 @@ sp_api::decl_runtime_apis! {
 		/// # Returns
 		/// Information on a vote for a given dispute identifier including: the vote identifier, the
 		/// vote information, whether it has been executed, the vote result and the dispute initiator.
-		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Amount,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)>;
+		fn get_vote_info(dispute_id: DisputeId, vote_round: u8) -> Option<(VoteInfo<Balance,BlockNumber, Timestamp>,bool,Option<VoteResult>,AccountId)>;
 
 		/// Returns the voting rounds for a given dispute identifier.
 		/// # Arguments

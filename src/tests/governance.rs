@@ -18,11 +18,13 @@ use super::*;
 use crate::{constants::REPORTING_LOCK, mock::AccountId, types::Tally, Config, VoteResult};
 use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map};
-use sp_runtime::traits::BadOrigin;
+use sp_runtime::traits::{BadOrigin, Convert};
 
 type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
 type ParachainId = <Test as Config>::ParachainId;
 type VoteRounds = crate::pallet::VoteRounds<Test>;
+
+const PRICE: Balance = 5; // 1 TRB = 5 UNIT (uses static price for now)
 
 #[test]
 fn begin_dispute() {
@@ -115,8 +117,9 @@ fn begin_dispute() {
 			assert!(
 				balance_before_begin_dispute -
 					balance_after_begin_dispute -
-					Tellor::convert(StakeAmount::<Test>::get().unwrap()) / 10 ==
-					0,
+					U256ToBalance::convert(
+						Tellor::convert(StakeAmount::<Test>::get().unwrap()).unwrap() * PRICE
+					) / 10 == 0,
 				"dispute fee paid should be correct"
 			);
 
@@ -272,8 +275,9 @@ fn begin_dispute_by_non_reporter() {
 			assert!(
 				balance_before_begin_dispute -
 					balance_after_begin_dispute -
-					Tellor::convert(StakeAmount::<Test>::get().unwrap()) / 10 ==
-					0,
+					U256ToBalance::convert(
+						Tellor::convert(StakeAmount::<Test>::get().unwrap()).unwrap() * PRICE
+					) / 10 == 0,
 				"dispute fee paid should be correct"
 			);
 
@@ -497,7 +501,11 @@ fn execute_vote() {
 				1,
 				"number of vote rounds should be correct"
 			);
-			assert_eq!(balance_1 - balance_2, token(10), "dispute fee paid should be correct");
+			assert_eq!(
+				balance_1 - balance_2,
+				token(10) * PRICE,
+				"dispute fee paid should be correct"
+			); // uses static rate for now
 
 			assert_noop!(Tellor::execute_vote(H256::random(), result), Error::InvalidDispute); // dispute id must exist
 			assert_noop!(Tellor::execute_vote(dispute_id, result), Error::VoteNotTallied); // vote must be tallied
@@ -736,12 +744,12 @@ fn vote() {
 			assert!(!Tellor::did_vote(dispute_id, 1, 3), "voter's voted status should be correct");
 
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter_2),
+				Tellor::get_vote_tally_by_address(&reporter_2),
 				1,
 				"vote tally by address should be correct"
 			);
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter_1),
+				Tellor::get_vote_tally_by_address(&reporter_1),
 				1,
 				"vote tally by address should be correct"
 			);
@@ -1132,7 +1140,7 @@ fn get_vote_info() {
 			assert_eq!(vote.vote_round, 1, "vote round should be correct");
 			assert_eq!(vote.start_date, disputed_time, "vote start date should be correct");
 			assert_eq!(vote.block_number, disputed_block, "vote block number should be correct");
-			assert_eq!(vote.fee, token(10), "vote fee should be correct");
+			assert_eq!(vote.fee, token(10) * PRICE, "vote fee should be correct"); // uses static rate for now
 			assert_eq!(vote.tally_date, tallied, "vote tally date should be correct");
 			assert_eq!(
 				vote.users,
@@ -1264,19 +1272,19 @@ fn get_vote_tally_by_address() {
 			let dispute_id_2 = super::dispute_id(PARA_ID, query_id, now());
 
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter),
+				Tellor::get_vote_tally_by_address(&reporter),
 				0,
 				"vote tally should be correct"
 			);
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), dispute_id, Some(false)));
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter),
+				Tellor::get_vote_tally_by_address(&reporter),
 				1,
 				"vote tally should be correct"
 			);
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), dispute_id_2, Some(false)));
 			assert_eq!(
-				Tellor::get_vote_tally_by_address(reporter),
+				Tellor::get_vote_tally_by_address(&reporter),
 				2,
 				"vote tally should be correct"
 			);

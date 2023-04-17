@@ -15,21 +15,86 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
-use sp_runtime::traits::Hash;
+use crate::constants::DECIMALS;
+use frame_support::traits::fungible::Inspect;
+use sp_runtime::{
+	traits::{CheckedAdd, CheckedMul, Hash},
+	ArithmeticError,
+};
 
 impl<T: Config> Pallet<T> {
-	pub(super) fn add_staking_rewards(amount: BalanceOf<T>) -> DispatchResult {
-		T::Token::transfer(&Self::tips(), &Self::staking_rewards(), amount, false)?;
+	/// Funds the staking account with staking rewards from the source account.
+	/// # Arguments
+	/// * `source` - The source account.
+	/// * `amount` - The amount of tokens to fund the staking account with.
+	pub(super) fn _add_staking_rewards(
+		source: &AccountIdOf<T>,
+		amount: BalanceOf<T>,
+	) -> DispatchResult {
+		let staking_rewards = Self::staking_rewards();
+		T::Token::transfer(source, &staking_rewards, amount, false)?;
+		Self::update_rewards()?;
+		let staking_rewards_balance = T::Token::balance(&staking_rewards).into();
+		// update reward rate = real staking rewards balance / 30 days
+		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::get())?;
+		<RewardRate<T>>::set(U256ToBalance::<T>::convert(
+			(staking_rewards_balance
+				.checked_sub(
+					(<AccumulatedRewardPerShare<T>>::get()
+						.into()
+						.checked_mul(total_stake_amount)
+						.ok_or(ArithmeticError::Overflow)?)
+					.checked_div(U256::from(Self::unit()?))
+					.ok_or(ArithmeticError::DivisionByZero)?
+					.checked_sub(<TotalRewardDebt<T>>::get().into())
+					.ok_or(ArithmeticError::Underflow)?,
+				)
+				.ok_or(ArithmeticError::Underflow)?)
+			.checked_div(U256::from(30 * DAYS))
+			.expect("days constant is greater than zero; qed"),
+		));
 		Ok(())
 	}
 
-	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, Error<T>> {
-		T::ValueConverter::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)
+	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, DispatchError> {
+		T::ValueConverter::convert(value.into_inner())
 	}
 
-	pub(super) fn convert(amount: Amount) -> BalanceOf<T> {
-		// todo: use rate from oracle
-		<U256ToBalance<T>>::convert(amount / Amount::from(10).pow(Amount::from(6)))
+	/// Converts a stake amount to a local balance amount.
+	/// # Arguments
+	/// * `stake_amount` - The amount staked.
+	/// # Returns
+	/// A stake amount as a local balance amount if successful.
+	pub(super) fn convert(stake_amount: Tributes) -> Result<U256, DispatchError> {
+		// Convert to local number of decimals
+		Self::convert_to_decimals(stake_amount, T::Decimals::get() as u32)
+	}
+
+	/// Converts the supplied amount to the supplied number of decimals.
+	/// # Arguments
+	/// * `amount` - The amount to be converted.
+	/// * `decimals` - The number of decimals.
+	/// # Returns
+	/// The converted amount if successful.
+	pub(super) fn convert_to_decimals(amount: U256, decimals: u32) -> Result<U256, DispatchError> {
+		if amount == U256::zero() {
+			return Ok(amount)
+		}
+		if DECIMALS > decimals {
+			U256::from(10)
+				.checked_pow(U256::from(DECIMALS - decimals))
+				.ok_or_else(|| ArithmeticError::Overflow.into())
+				.map(|r| {
+					amount.checked_div(r).expect("result is non-zero, provided non-overflow; qed")
+				})
+		} else if decimals > DECIMALS {
+			U256::from(10)
+				.checked_pow(U256::from(decimals - DECIMALS))
+				.ok_or_else(|| ArithmeticError::Overflow.into())
+				.and_then(|r| amount.checked_mul(r).ok_or_else(|| ArithmeticError::Overflow.into()))
+		} else {
+			Ok(amount)
+		}
 	}
 
 	/// Determines if an account voted for a specific dispute round.
@@ -264,9 +329,24 @@ impl<T: Config> Pallet<T> {
 	/// Get the latest dispute fee.
 	/// # Returns
 	/// The latest dispute fee.
-	pub fn get_dispute_fee() -> BalanceOf<T> {
-		// todo: make configurable and use safe math
-		Self::convert(<StakeAmount<T>>::get().unwrap_or_default() / Amount::from(10))
+	pub fn get_dispute_fee() -> Option<BalanceOf<T>> {
+		<StakeAmount<T>>::get()
+			.and_then(|a| a.checked_div(U256::from(10)))
+			.and_then(|a| {
+				// todo: use rate from oracle
+				const UNIT: u128 = 10u128.pow(DECIMALS);
+				const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
+
+				PRICE
+					.map(|price| U256::from(price))
+					// Convert amount into local balance amount based on price
+					.and_then(|price| {
+						a.checked_mul(price).and_then(|a| a.checked_div(U256::from(UNIT)))
+					})
+			})
+			// Convert to local number of decimals
+			.and_then(|a| Self::convert(a).ok())
+			.map(|a| U256ToBalance::<T>::convert(a))
 	}
 
 	/// Returns information on a dispute for a given identifier.
@@ -655,14 +735,17 @@ impl<T: Config> Pallet<T> {
 		feed_id: FeedId,
 		query_id: QueryId,
 		timestamp: Timestamp,
-	) -> Result<BalanceOf<T>, Error<T>> {
+	) -> Result<BalanceOf<T>, DispatchError> {
 		ensure!(Self::now().saturating_sub(timestamp) < 4 * WEEKS, Error::<T>::ClaimPeriodExpired);
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
-		ensure!(!feed.reward_claimed.get(&timestamp).unwrap_or(&false), Error::TipAlreadyClaimed);
+		ensure!(
+			!feed.reward_claimed.get(&timestamp).unwrap_or(&false),
+			Error::<T>::TipAlreadyClaimed
+		);
 		let n = (timestamp.saturating_sub(feed.details.start_time))
 			.checked_div(feed.details.interval)
-			.ok_or(Error::<T>::IntervalCalculationError)?; // finds closest interval n to timestamp
+			.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
 		let c = feed.details.start_time.saturating_add(feed.details.interval.saturating_mul(n)); // finds start timestamp c of interval n
 		let value_retrieved = Self::retrieve_data(query_id, timestamp);
 		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
@@ -678,12 +761,12 @@ impl<T: Config> Pallet<T> {
 			} else if v1 >= v2 {
 				price_change = (T::Price::from(10_000u16).saturating_mul(v1.saturating_sub(v2)))
 					.checked_div(&v2)
-					.ok_or(Error::<T>::PriceChangeCalculationError)?
+					.expect("v2 checked against zero above; qed")
 					.saturated_into();
 			} else {
 				price_change = (T::Price::from(10_000u16).saturating_mul(v2.saturating_sub(v1)))
 					.checked_div(&v2)
-					.ok_or(Error::<T>::PriceChangeCalculationError)?
+					.expect("v2 checked against zero above; qed")
 					.saturated_into();
 			}
 		}
@@ -776,7 +859,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the amount required to report oracle values.
 	/// # Returns
 	/// The stake amount.
-	pub fn get_stake_amount() -> Amount {
+	pub fn get_stake_amount() -> Tributes {
 		<StakeAmount<T>>::get().unwrap_or_default()
 	}
 
@@ -835,7 +918,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the total amount staked for reporting.
 	/// # Returns
 	/// The total amount of token staked.
-	pub fn get_total_stake_amount() -> Amount {
+	pub fn get_total_stake_amount() -> Tributes {
 		<TotalStakeAmount<T>>::get()
 	}
 
@@ -887,7 +970,7 @@ impl<T: Config> Pallet<T> {
 	/// * `voter` - The account of the voter to check for.
 	/// # Returns
 	/// The total number of votes cast by the voter.
-	pub fn get_vote_tally_by_address(voter: AccountIdOf<T>) -> u128 {
+	pub fn get_vote_tally_by_address(voter: &AccountIdOf<T>) -> u128 {
 		<VoteTallyByAddress<T>>::get(voter)
 	}
 
@@ -1012,85 +1095,189 @@ impl<T: Config> Pallet<T> {
 		T::PalletId::get().into_sub_account_truncating(b"tips")
 	}
 
+	/// A unit in which balances are recorded.
+	fn unit() -> Result<u128, DispatchError> {
+		10u128
+			.checked_pow(T::Decimals::get().into())
+			.ok_or_else(|| ArithmeticError::Overflow.into())
+	}
+
+	/// Updates accumulated staking rewards per staked token.
+	pub(crate) fn update_rewards() -> DispatchResult {
+		let timestamp = Self::now();
+		let time_of_last_allocation = <TimeOfLastAllocation<T>>::get();
+		if time_of_last_allocation == timestamp {
+			return Ok(())
+		}
+		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::get())?;
+		let reward_rate = <RewardRate<T>>::get();
+		if total_stake_amount == U256::zero() || reward_rate == Zero::zero() {
+			<TimeOfLastAllocation<T>>::set(timestamp);
+			return Ok(())
+		}
+
+		// calculate accumulated reward per token staked
+		let unit: U256 = Self::unit()?.into();
+		let accumulated_reward_per_share = <AccumulatedRewardPerShare<T>>::get().into();
+		let new_accumulated_reward_per_share: U256 = accumulated_reward_per_share +
+			(U256::from(timestamp - time_of_last_allocation)
+				.checked_mul(reward_rate.into())
+				.ok_or(ArithmeticError::Overflow)?
+				.checked_mul(unit)
+				.ok_or(ArithmeticError::Overflow)?)
+			.checked_div(total_stake_amount)
+			.expect("total stake amount checked against zero above; qed");
+		// calculate accumulated reward with new_accumulated_reward_per_share
+		let total_reward_debt = <TotalRewardDebt<T>>::get().into();
+		let accumulated_reward = (new_accumulated_reward_per_share
+			.checked_mul(total_stake_amount)
+			.ok_or(ArithmeticError::Overflow)?)
+		.checked_div(unit)
+		.ok_or(ArithmeticError::DivisionByZero)?
+		.checked_sub(total_reward_debt)
+		.ok_or(ArithmeticError::Underflow)?;
+		let staking_rewards_balance = T::Token::balance(&Self::staking_rewards()).into();
+		if accumulated_reward >= staking_rewards_balance {
+			// if staking rewards run out, calculate remaining reward per staked token and set
+			// RewardRate to 0
+			let new_pending_rewards = staking_rewards_balance
+				.checked_sub(
+					(accumulated_reward_per_share
+						.checked_mul(total_stake_amount)
+						.ok_or(ArithmeticError::Overflow)?)
+					.checked_div(unit)
+					.ok_or(ArithmeticError::DivisionByZero)?
+					.checked_sub(total_reward_debt)
+					.ok_or(ArithmeticError::Underflow)?,
+				)
+				.ok_or(ArithmeticError::Underflow)?;
+			<AccumulatedRewardPerShare<T>>::try_mutate(|value| -> DispatchResult {
+				*value = value
+					.checked_add(&U256ToBalance::<T>::convert(
+						(new_pending_rewards.checked_mul(unit).ok_or(ArithmeticError::Overflow)?)
+							.checked_div(total_stake_amount)
+							.expect("total stake amount checked against zero above; qed"),
+					))
+					.ok_or(ArithmeticError::Overflow)?;
+				Ok(())
+			})?;
+			<RewardRate<T>>::set(Zero::zero());
+		} else {
+			<AccumulatedRewardPerShare<T>>::set(U256ToBalance::<T>::convert(
+				new_accumulated_reward_per_share,
+			));
+		}
+		<TimeOfLastAllocation<T>>::set(timestamp);
+		Ok(())
+	}
+
+	/// Called whenever a user's stake amount changes. First updates staking rewards, transfers
+	/// pending rewards to user's address, and finally updates user's stake amount and other relevant
+	/// variables.
+	/// # Arguments
+	/// * `staker` - Staker whose stake is being updated.
+	/// * `new_staked_balance` - The new staked balance of the staker.
 	pub(super) fn update_stake_and_pay_rewards(
-		staker: &mut StakeInfoOf<T>,
-		new_staked_balance: Amount,
-	) -> Result<(), Error<T>> {
-		// todo: complete implementation
-		// _updateRewards();
-		if staker.staked_balance > Amount::zero() {
-			// todo
+		staker: (&AccountIdOf<T>, &mut StakeInfoOf<T>),
+		new_staked_balance: Tributes,
+	) -> DispatchResult {
+		Self::update_rewards()?;
+		let (staker, stake_info) = staker;
+		let staking_rewards = Self::staking_rewards();
+		let unit = Self::unit()?.into();
+		if stake_info.staked_balance > U256::zero() {
 			// if address already has a staked balance, calculate and transfer pending rewards
-			// 	uint256 _pendingReward = (_staker.stakedBalance *
-			// 		accumulatedRewardPerShare) /
-			// 		1e18 -
-			// 		_staker.rewardDebt;
-			// 	// get staker voting participation rate
-			// 	uint256 _numberOfVotes;
-			// 	(bool _success, bytes memory _returnData) = governance.call(
-			// 		abi.encodeWithSignature("getVoteCount()")
-			// 	);
-			// 	if (_success) {
-			// 		_numberOfVotes =
-			// 			uint256(abi.decode(_returnData, (uint256))) -
-			// 				_staker.startVoteCount;
-			// 	}
-			// 	if (_numberOfVotes > 0) {
-			// 		// staking reward = pending reward * voting participation rate
-			// 		(_success, _returnData) = governance.call(
-			// 			abi.encodeWithSignature("getVoteTallyByAddress(address)",_stakerAddress)
-			// 		);
-			// 		if(_success){
-			// 			uint256 _voteTally = abi.decode(_returnData,(uint256));
-			// 			uint256 _tempPendingReward =
-			// 				(_pendingReward *
-			// 					(_voteTally - _staker.startVoteTally)) /
-			// 					_numberOfVotes;
-			// 			if (_tempPendingReward < _pendingReward) {
-			// 				_pendingReward = _tempPendingReward;
-			// 			}
-			// 		}
-			// 	}
-			// 	stakingRewardsBalance -= _pendingReward;
-			// 	require(token.transfer(msg.sender, _pendingReward));
-			// 	totalRewardDebt -= _staker.rewardDebt;
+			let mut pending_reward = <U256ToBalance<T>>::convert(
+				Self::convert(stake_info.staked_balance)?
+					.checked_mul(<AccumulatedRewardPerShare<T>>::get().into())
+					.ok_or(ArithmeticError::Overflow)?
+					.checked_div(unit)
+					.ok_or(ArithmeticError::DivisionByZero)?
+					.checked_sub(stake_info.reward_debt.into())
+					.ok_or(ArithmeticError::Underflow)?,
+			);
+			// get staker voting participation rate
+			let number_of_votes =
+				Self::get_vote_count().saturating_sub(stake_info.start_vote_count);
+			if number_of_votes > 0 {
+				// staking reward = pending reward * voting participation rate
+				let vote_tally = Self::get_vote_tally_by_address(staker);
+				let temp_pending_reward = (pending_reward
+					.checked_mul(
+						&(vote_tally
+							.checked_sub(stake_info.start_vote_tally)
+							.ok_or(ArithmeticError::Underflow)?)
+						.saturated_into(),
+					)
+					.ok_or(ArithmeticError::Overflow)?) /
+					number_of_votes.saturated_into();
+				if temp_pending_reward < pending_reward {
+					pending_reward = temp_pending_reward;
+				}
+			}
+			T::Token::transfer(&staking_rewards, staker, pending_reward, true)?;
+			<TotalRewardDebt<T>>::mutate(|debt| {
+				*debt = debt.saturating_sub(stake_info.reward_debt)
+			});
 			<TotalStakeAmount<T>>::mutate(|total| {
-				*total = total.saturating_sub(staker.staked_balance)
+				*total = total.saturating_sub(stake_info.staked_balance)
 			});
 		}
-		staker.staked_balance = new_staked_balance;
+		stake_info.staked_balance = new_staked_balance;
 		// Update total stakers
 		<TotalStakers<T>>::try_mutate(|total| -> Result<(), Error<T>> {
-			if staker.staked_balance >= <StakeAmount<T>>::get().ok_or(Error::NotRegistered)? {
-				if !staker.staked {
+			if stake_info.staked_balance >= <StakeAmount<T>>::get().ok_or(Error::NotRegistered)? {
+				if !stake_info.staked {
 					total.saturating_inc();
 				}
-				staker.staked = true;
+				stake_info.staked = true;
 			} else {
-				if staker.staked && *total > 0 {
+				if stake_info.staked && *total > 0 {
 					total.saturating_dec();
 				}
-				staker.staked = false;
+				stake_info.staked = false;
 			}
 			Ok(())
 		})?;
-		// todo
-		// // tracks rewards accumulated before stake amount updated
-		// _staker.rewardDebt =
-		// 	(_staker.stakedBalance * accumulatedRewardPerShare) /
-		// 		1e18;
-		// totalRewardDebt += _staker.rewardDebt;
-		<TotalStakeAmount<T>>::mutate(|total| *total = total.saturating_add(staker.staked_balance));
-		// todo
-		// // update reward rate if staking rewards are available given staker's updated parameters
-		// if(rewardRate == 0) {
-		// 	rewardRate =
-		// 		(stakingRewardsBalance -
-		// 			((accumulatedRewardPerShare * totalStakeAmount) /
-		// 				1e18 -
-		// 				totalRewardDebt)) /
-		// 			30 days;
-		// }
+		// tracks rewards accumulated before stake amount updated
+		let accumulated_reward_per_share = <AccumulatedRewardPerShare<T>>::get().into();
+		stake_info.reward_debt = U256ToBalance::<T>::convert(
+			Self::convert(stake_info.staked_balance)?
+				.checked_mul(accumulated_reward_per_share)
+				.ok_or(ArithmeticError::Overflow)?
+				.checked_div(unit)
+				.ok_or(ArithmeticError::DivisionByZero)?,
+		);
+		let total_reward_debt = <TotalRewardDebt<T>>::mutate(|debt| {
+			*debt = debt.saturating_add(stake_info.reward_debt);
+			*debt
+		});
+		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::mutate(|total| {
+			*total = total.saturating_add(stake_info.staked_balance);
+			*total
+		}))?;
+		// update reward rate if staking rewards are available given staker's updated parameters
+		<RewardRate<T>>::try_mutate(|reward_rate| -> DispatchResult {
+			if *reward_rate == Zero::zero() {
+				*reward_rate = U256ToBalance::<T>::convert(
+					T::Token::balance(&staking_rewards)
+						.into()
+						.checked_sub(
+							accumulated_reward_per_share
+								.checked_mul(total_stake_amount)
+								.ok_or(ArithmeticError::Overflow)?
+								.checked_div(unit)
+								.ok_or(ArithmeticError::DivisionByZero)?
+								.checked_sub(total_reward_debt.into())
+								.ok_or(ArithmeticError::Underflow)?,
+						)
+						.ok_or(ArithmeticError::Underflow)?
+						.checked_div((30 * DAYS).into())
+						.expect("days constant is greater than zero; qed"),
+				);
+			}
+			Ok(())
+		})?;
 		Ok(())
 	}
 }
@@ -1153,6 +1340,6 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>> for Pallet<T> {
 	}
 
 	fn value_to_price(value: Vec<u8>) -> Option<PriceOf<T>> {
-		T::ValueConverter::convert(value)
+		T::ValueConverter::convert(value).ok()
 	}
 }

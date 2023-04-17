@@ -15,11 +15,12 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::{
+	constants::DECIMALS,
 	contracts::registry,
 	mock,
 	mock::*,
 	types::{
-		AccountIdOf, Address, Amount, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp,
+		AccountIdOf, Address, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp, Tributes,
 		ValueOf,
 	},
 	xcm::{ethereum_xcm, XcmConfig},
@@ -28,10 +29,13 @@ use crate::{
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{
 	assert_noop, assert_ok,
-	traits::{PalletInfoAccess, UnixTime},
+	traits::{Get, PalletInfoAccess, UnixTime},
 };
-use sp_core::{bytes::to_hex, keccak_256, H256};
-use sp_runtime::traits::{AccountIdConversion, BadOrigin};
+use sp_core::{bytes::to_hex, keccak_256, H256, U256};
+use sp_runtime::{
+	traits::{AccountIdConversion, BadOrigin},
+	ArithmeticError,
+};
 use std::convert::Into;
 use xcm::{latest::prelude::*, DoubleEncoded};
 
@@ -39,16 +43,18 @@ mod autopay;
 mod governance;
 mod oracle;
 
+type Balance = <Test as crate::Config>::Balance;
 type Config = crate::types::Configuration;
 type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
+type U256ToBalance = crate::types::U256ToBalance<Test>;
 
-const STAKE_AMOUNT: u128 = 100_000_000_000_000_000_000;
+const STAKE_AMOUNT: u128 = 100 * TRB;
+const TRB: u128 = 10u128.pow(DECIMALS);
 
-fn trb(amount: impl Into<f64>) -> Amount {
+fn trb(amount: impl Into<f64>) -> Tributes {
 	// TRB amount has 18 decimals
-	const UNIT: u128 = 1_000_000_000_000_000_000;
-	Amount::from((amount.into() * UNIT as f64) as u128)
+	Tributes::from((amount.into() * TRB as f64) as u128)
 }
 
 fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeId {
@@ -85,7 +91,7 @@ fn submit_value_and_begin_dispute(
 	}
 }
 
-fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address: Address) {
+fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Tributes>, address: Address) {
 	assert_ok!(Tellor::report_stake_deposited(
 		Origin::Staking.into(),
 		reporter,
@@ -94,7 +100,7 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Amount>, address
 	));
 }
 
-fn register_parachain(stake_amount: impl Into<Amount>) {
+fn register_parachain(stake_amount: impl Into<Tributes>) {
 	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
 	assert_ok!(Tellor::register(
 		RuntimeOrigin::root(),
@@ -116,14 +122,19 @@ fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 	])
 }
 
-fn token(amount: impl Into<f64>) -> BalanceOf<Test> {
-	// test parachain token has 12 decimals
-	pub(crate) const UNIT: u64 = 1_000_000_000_000;
-	(amount.into() * UNIT as f64) as u64
+fn token(amount: impl Into<f64>) -> Balance {
+	// test parachain token
+	(amount.into() * unit() as f64) as u64
 }
 
 fn uint_value(value: impl Into<Uint>) -> ValueOf<Test> {
 	ethabi::encode(&[Token::Uint(value.into())]).try_into().unwrap()
+}
+
+// A unit of the token configured on the pallet, with corresponding decimal places.
+fn unit() -> u128 {
+	let decimals: u8 = <Test as crate::Config>::Decimals::get();
+	10u128.pow(decimals.into())
 }
 
 fn xcm_transact(
@@ -150,6 +161,37 @@ fn xcm_transact(
 #[test]
 fn converts_token() {
 	assert_eq!(token(2.97), 2_970_000_000_000)
+}
+
+#[test]
+fn converts() {
+	assert_eq!(Tellor::convert(trb(100)).unwrap(), token(100).into())
+}
+
+#[test]
+fn converts_to_decimals() {
+	assert_eq!(
+		Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), 12),
+		Ok((100 * 10u64.pow(12)).into())
+	);
+	assert_eq!(
+		Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), 20),
+		Ok((100 * 10u128.pow(20)).into())
+	);
+	assert_eq!(
+		Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), 18),
+		Ok((100 * 10u128.pow(18)).into())
+	);
+	assert_eq!(Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), 0), Ok(100.into()));
+	assert_eq!(Tellor::convert_to_decimals(U256::zero(), u32::MAX), Ok(0.into()));
+	assert_eq!(
+		Tellor::convert_to_decimals((100 * 10u128.pow(18)).into(), u8::MAX.into()),
+		Err(ArithmeticError::Overflow.into())
+	);
+	assert_eq!(
+		Tellor::convert_to_decimals(U256::MAX, u32::MAX),
+		Err(ArithmeticError::Overflow.into())
+	);
 }
 
 #[test]

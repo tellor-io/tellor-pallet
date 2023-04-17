@@ -26,16 +26,16 @@ use frame_support::{
 	BoundedVec, PalletId,
 };
 use sp_api::mock_impl_runtime_apis;
-use sp_core::{ConstU32, H256};
+use sp_core::{ConstU32, H256, U256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
-	traits::{BlakeTwo256, IdentityLookup},
+	traits::{BlakeTwo256, Convert, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
-	Amount, DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp,
-	Tip, VoteResult,
+	DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp, Tip,
+	Tributes, VoteResult,
 };
 use xcm::latest::prelude::*;
 
@@ -112,6 +112,7 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Balance = Balance;
+	type Decimals = ();
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
@@ -134,7 +135,7 @@ impl tellor::Config for Test {
 	type StakingOrigin = EnsureStaking;
 	type Time = Time;
 	type Token = Balances;
-	type ValueConverter = ();
+	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
 }
 pub struct TestSendXcm;
@@ -144,6 +145,13 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		_dest: impl Into<MultiLocation>,
 		_message: Xcm<()>,
 	) -> Result<(), SendError> {
+		todo!()
+	}
+}
+
+pub struct ValueConverter;
+impl Convert<Vec<u8>, Result<u32, sp_runtime::DispatchError>> for ValueConverter {
+	fn convert(a: Vec<u8>) -> Result<u32, sp_runtime::DispatchError> {
 		todo!()
 	}
 }
@@ -265,7 +273,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reports_submitted_by_address_and_query_id(reporter, query_id)
 		}
 
-		fn get_stake_amount() -> Amount {
+		fn get_stake_amount() -> Tributes {
 			tellor::Pallet::<Test>::get_stake_amount()
 		}
 
@@ -289,7 +297,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_timestamp_index_by_timestamp(query_id, timestamp)
 		}
 
-		fn get_total_stake_amount() -> Amount {
+		fn get_total_stake_amount() -> Tributes {
 			tellor::Pallet::<Test>::get_total_stake_amount()
 		}
 
@@ -311,7 +319,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::did_vote(dispute_id, vote_round, voter)
 		}
 
-		fn get_dispute_fee() -> Balance {
+		fn get_dispute_fee() -> Option<Balance> {
 			tellor::Pallet::<Test>::get_dispute_fee()
 		}
 
@@ -356,7 +364,7 @@ mock_impl_runtime_apis! {
 		}
 
 		fn get_vote_tally_by_address(voter: AccountId) -> u128 {
-			tellor::Pallet::<Test>::get_vote_tally_by_address(voter)
+			tellor::Pallet::<Test>::get_vote_tally_by_address(&voter)
 		}
 	}
 }
@@ -598,7 +606,7 @@ mod oracle {
 	#[test]
 	fn get_stake_amount() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), Amount::zero());
+			assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), U256::zero());
 		});
 	}
 
@@ -650,7 +658,7 @@ mod oracle {
 	#[test]
 	fn get_total_stake_amount() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), Amount::zero());
+			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), U256::zero());
 		});
 	}
 
@@ -691,7 +699,7 @@ mod governance {
 	#[test]
 	fn get_dispute_fee() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), 0);
+			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), None);
 		});
 	}
 

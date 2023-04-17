@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{Address, Amount, ParaId};
-use sp_core::U256;
+use crate::types::ParaId;
+use sp_core::{H160, U256};
 use sp_std::{vec, vec::Vec};
 
 pub(crate) mod governance;
@@ -38,7 +38,7 @@ impl<'a> Call<'a> {
 		Call { function: Vec::new(), parameters: Vec::new() }
 	}
 
-	fn address(mut self, address: Address) -> Self {
+	fn address(mut self, address: H160) -> Self {
 		let mut encoded = [0u8; 32];
 		encoded[12..].copy_from_slice(address.as_fixed_bytes());
 		self.parameters.push(Parameter::Static(encoded));

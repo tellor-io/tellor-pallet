@@ -22,7 +22,10 @@ use crate::{
 };
 use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, U256};
-use sp_runtime::traits::BadOrigin;
+use sp_runtime::{
+	traits::{BadOrigin, Convert},
+	SaturatedConversion, Saturating,
+};
 
 type BoundedReportsSubmittedByQueryId =
 	BoundedBTreeMap<QueryId, u128, <Test as Config>::MaxQueriesPerReporter>;
@@ -73,7 +76,7 @@ fn deposit_stake() {
 			assert_eq!(staker_details.start_vote_tally, 0);
 			assert_eq!(staker_details.staked, true);
 			assert!(staker_details.reports_submitted_by_query_id.is_empty());
-			//assert_eq!(Tellor::total_reward_debt(), 0); // todo: total reward debt?
+			assert_eq!(Tellor::total_reward_debt(), 0);
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
 
 			// Test min value for amount argument
@@ -211,7 +214,7 @@ fn request_stake_withdraw() {
 			assert_eq!(staker_details.locked_balance, trb(0));
 			assert_eq!(staker_details.staked, true);
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
-			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
+			assert_eq!(Tellor::total_reward_debt(), 0);
 			assert_noop!(
 				Tellor::report_staking_withdraw_request(
 					Origin::Staking.into(),
@@ -235,7 +238,7 @@ fn request_stake_withdraw() {
 			assert_eq!(staker_details.locked_balance, trb(10));
 			assert_eq!(staker_details.staked, true);
 			assert_eq!(Tellor::get_total_stake_amount(), trb(990));
-			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
+			assert_eq!(Tellor::total_reward_debt(), 0);
 
 			// Test max/min for amount arg
 			assert_noop!(
@@ -260,7 +263,7 @@ fn request_stake_withdraw() {
 			assert_eq!(staker_details.locked_balance, trb(10));
 			assert_eq!(staker_details.staked, true);
 			assert_eq!(Tellor::get_total_stake_amount(), trb(990));
-			// expect(await tellor.totalRewardDebt()).to.equal(0) // todo:
+			assert_eq!(Tellor::total_reward_debt(), 0);
 
 			assert_eq!(Tellor::get_total_stakers(), 1);
 			assert_ok!(Tellor::report_staking_withdraw_request(
@@ -329,10 +332,8 @@ fn slash_reporter() {
 				STAKE_AMOUNT.into()
 			));
 
-			// todo?
-			// blocky0 = await h.getBlock()
-			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky0.timestamp)
-			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
+			assert_eq!(Tellor::time_of_last_allocation(), now());
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, trb(900));
 			assert_eq!(staker_details.locked_balance, trb(0));
@@ -367,9 +368,8 @@ fn slash_reporter() {
 				recipient,
 				STAKE_AMOUNT.into()
 			));
-			// todo?
-			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky1.timestamp)
-			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
+			assert_eq!(Tellor::time_of_last_allocation(), now());
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, trb(800));
 			assert_eq!(staker_details.locked_balance, trb(0));
@@ -403,9 +403,8 @@ fn slash_reporter() {
 				recipient,
 				STAKE_AMOUNT.into()
 			));
-			// todo?
-			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky2.timestamp)
-			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
+			assert_eq!(Tellor::time_of_last_allocation(), now());
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, trb(700));
 			assert_eq!(staker_details.locked_balance, trb(0));
@@ -436,7 +435,7 @@ fn slash_reporter() {
 			assert_eq!(staker_details.locked_balance, trb(0));
 
 			// reporter now has insufficient stake for another submission, so top up stake before final dispute/slash
-			super::deposit_stake(reporter, Amount::from(STAKE_AMOUNT) - trb(75), address);
+			super::deposit_stake(reporter, Tributes::from(STAKE_AMOUNT) - trb(75), address);
 			submit_value_and_begin_dispute(reporter, query_id, query_data) // start dispute, required for slashing
 		});
 
@@ -453,9 +452,8 @@ fn slash_reporter() {
 				recipient,
 				STAKE_AMOUNT.into()
 			));
-			// todo?
-			// expect(await tellor.timeOfLastAllocation()).to.equal(blocky.timestamp)
-			// expect(await tellor.accumulatedRewardPerShare()).to.equal(0)
+			assert_eq!(Tellor::time_of_last_allocation(), now());
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.staked_balance, trb(0));
 			assert_eq!(staker_details.locked_balance, trb(0));
@@ -1274,6 +1272,7 @@ fn is_in_dispute() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let mut ext = new_test_ext();
+
 	// Prerequisites
 	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
 
@@ -1360,11 +1359,42 @@ fn get_total_time_based_rewards_balance() {
 	todo!()
 }
 
+const REWARD_RATE_TARGET: u64 = 60 * 60 * 24 * 30; // 30 days
+
 #[test]
-#[ignore]
 fn add_staking_rewards() {
-	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L539
-	todo!()
+	let funder = 1;
+	let staking_rewards = &Tellor::staking_rewards();
+
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L539
+	ext.execute_with(|| {
+		Balances::make_free_balance_be(&funder, token(1_000));
+		assert_eq!(Balances::free_balance(funder), token(1_000));
+
+		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), token(1_000)));
+		assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
+		assert_eq!(Balances::free_balance(funder), 0);
+		assert_eq!(Tellor::reward_rate(), token(1_000) / REWARD_RATE_TARGET);
+
+		// Test min value
+		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), 0));
+		assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
+		assert_eq!(Balances::free_balance(funder), 0);
+		assert_eq!(Tellor::reward_rate(), token(1_000) / REWARD_RATE_TARGET);
+
+		// Test max value
+		Balances::make_free_balance_be(&funder, Balance::MAX);
+		Balances::make_free_balance_be(&staking_rewards, 0);
+		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), Balance::MAX));
+		assert_eq!(Balances::free_balance(staking_rewards), Balance::MAX);
+		assert_eq!(Balances::free_balance(funder), 0);
+		assert_eq!(Tellor::reward_rate(), Balance::MAX / REWARD_RATE_TARGET);
+	});
 }
 
 #[test]
@@ -1613,17 +1643,414 @@ fn get_data_before() {
 #[test]
 #[ignore]
 fn update_stake_amount() {
-	todo!()
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L762
+	ext.execute_with(|| {
+		// // Setup
+		// 	await token.mint(accounts[1].address, web3.utils.toWei("10000"));
+		// 	await token.connect(accounts[1]).approve(tellor.address, web3.utils.toWei("10000"))
+		// 	await tellor.connect(accounts[1]).depositStake(web3.utils.toWei("10000"))
+		//
+		// 	// Test no reported TRB price
+		// 	await tellor.updateStakeAmount()
+		// 	console.log("REQUIRED_STAKE: " + web3.utils.fromWei(REQUIRED_STAKE))
+		// 	expect(await tellor.stakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+		//
+		// 	// Test updating when 12 hrs have NOT passed
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 2), 0, TRB_QUERY_DATA)
+		// 	await tellor.connect(accounts[1]).updateStakeAmount()
+		// 	expect(await tellor.getStakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+		//
+		// 	// Test updating when 12 hrs have passed
+		// 	h.advanceTime(60 * 60 * 12)
+		// 	await tellor.connect(accounts[1]).updateStakeAmount()
+		// 	expect(await tellor.getStakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+		//
+		// 	// Test updating when multiple prices have been reported
+		// 	h.advanceTime(60 * 60 * 1)
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 1.5), 0, TRB_QUERY_DATA)
+		// 	h.advanceTime(60 * 60 * 1)
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 2), 0, TRB_QUERY_DATA)
+		// 	h.advanceTime(60 * 60 * 1)
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 3), 0, TRB_QUERY_DATA)
+		// 	h.advanceTime(60 * 60 * 12)
+		// 	await tellor.connect(accounts[1]).updateStakeAmount()
+		// 	expect(await tellor.getStakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+		//
+		// 	// Test bad TRB price encoding
+		// 	badPrice = abiCoder.encode(["string"], ["Where's the beef?"])
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, badPrice, 0, TRB_QUERY_DATA)
+		// 	await h.advanceTime(86400/2)
+		// 	await h.expectThrow(tellor.updateStakeAmount())
+		// 	expect(await tellor.stakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+		//
+		// 	// Test reported TRB price outside limits - high
+		// 	highPrice = h.toWei("1000001")
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(highPrice), 0, TRB_QUERY_DATA)
+		// 	await h.advanceTime(86400/2)
+		// 	await h.expectThrow(tellor.updateStakeAmount())
+		// 	expect(await tellor.stakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+		//
+		// 	// Test reported TRB price outside limits - low
+		// 	lowPrice = h.toWei("0.009")
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(lowPrice), 0, TRB_QUERY_DATA)
+		// 	await h.advanceTime(86400/2)
+		// 	await h.expectThrow(tellor.updateStakeAmount())
+		// 	expect(await tellor.stakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+		//
+		// 	// Test updating when multiple prices have been reported
+		// 	h.advanceTime(60 * 60 * 1)
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 7), 0, TRB_QUERY_DATA)
+		// 	h.advanceTime(60 * 60 * 1)
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 8), 0, TRB_QUERY_DATA)
+		// 	h.advanceTime(60 * 60 * 1)
+		// 	await tellor.connect(accounts[1]).submitValue(TRB_QUERY_ID, h.uintTob32(PRICE_TRB * 9), 0, TRB_QUERY_DATA)
+		// 	h.advanceTime(60 * 60 * 12)
+		// 	await tellor.connect(accounts[1]).updateStakeAmount()
+		// 	expect(await tellor.getStakeAmount()).to.equal(MINIMUM_STAKE_AMOUNT)
+	});
 }
 
 #[test]
-#[ignore]
 fn update_rewards() {
-	todo!()
+	let reporter = 1;
+	let funder = 2;
+	let address = Address::random();
+	let staking_rewards_account = &Tellor::staking_rewards();
+	let unit = unit();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L827
+	ext.execute_with(|| {
+		let timestamp_0 = with_block(|| {
+			// test totalStakeAmount equals 0
+			assert_ok!(Tellor::update_rewards());
+
+			let timestamp = now();
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
+			assert_eq!(Tellor::reward_rate(), 0);
+			timestamp
+		});
+
+		let timestamp_0 = with_block(|| {
+			// deposit a stake
+			Balances::make_free_balance_be(&Tellor::tips(), token(1_000));
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				trb(50),
+				address
+			));
+
+			let timestamp = now();
+			assert_eq!(timestamp, timestamp_0 + 1);
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
+			assert_eq!(Tellor::reward_rate(), 0);
+			timestamp
+		});
+
+		let timestamp_0 = with_block(|| {
+			// deposit another stake
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				trb(50),
+				address
+			));
+
+			let timestamp = now();
+			assert_eq!(timestamp, timestamp_0 + 1);
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
+			assert_eq!(Tellor::reward_rate(), 0);
+			timestamp
+		});
+
+		let staking_rewards = token(1_000);
+		let expected_reward_rate = staking_rewards / (86_400 * 30);
+		let timestamp_1 = with_block(|| {
+			// add staking rewards
+			Balances::make_free_balance_be(&funder, staking_rewards);
+			assert_eq!(Balances::free_balance(staking_rewards_account), 0);
+			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), staking_rewards));
+
+			let timestamp = now();
+			assert_eq!(timestamp, timestamp_0 + 1);
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
+			assert_eq!(Balances::free_balance(staking_rewards_account), staking_rewards);
+			assert_eq!(Tellor::total_reward_debt(), 0);
+			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
+			timestamp
+		});
+
+		// advance time 1 day
+		let (timestamp_2, expected_accumulated_reward_per_share) = with_block_after(86_400, || {
+			// update rewards
+			assert_ok!(Tellor::update_rewards());
+			let timestamp = now();
+
+			assert_eq!(timestamp, timestamp_1 + 86_400 + 1);
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+			assert_eq!(Balances::free_balance(staking_rewards_account), staking_rewards);
+			assert_eq!(Tellor::total_reward_debt(), 0);
+			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
+			// expAccumRewPerShare = BigInt(blocky2.timestamp - blocky1.timestamp) * BigInt(expectedRewardRate) * BigInt(1e18) / BigInt(100e18)
+			let expected_accumulated_reward_per_share = u128::from(timestamp - timestamp_1) *
+				u128::from(expected_reward_rate) *
+				unit / (100 * unit);
+			assert_eq!(
+				Tellor::accumulated_reward_per_share(),
+				expected_accumulated_reward_per_share.saturated_into::<Balance>()
+			);
+			(timestamp, expected_accumulated_reward_per_share)
+		});
+
+		let timestamp_3 = with_block(|| {
+			// deposit another stake
+			// todo:
+			// assert_ok!(Tellor::report_stake_deposited(
+			// 	Origin::Staking.into(),
+			// 	reporter,
+			// 	trb(50),
+			// 	address
+			// ));
+			assert_ok!(Tellor::update_rewards());
+
+			let timestamp = now();
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
+			let expected_accumulated_reward_per_share = expected_accumulated_reward_per_share +
+				(u128::from(timestamp - timestamp_2) * u128::from(expected_reward_rate) * unit /
+					(100 * unit));
+			assert_eq!(
+				Tellor::accumulated_reward_per_share(),
+				expected_accumulated_reward_per_share.saturated_into::<Balance>()
+			);
+			// todo:
+			// let expected_staking_rewards_balance = U256ToBalance::convert(
+			// 	Amount::from(staking_rewards) -
+			// 		(Amount::from(expected_accumulated_reward_per_share) *
+			// 			Amount::from(token(100))),
+			// );
+			//assert_eq!(Tellor::staking_rewards_balance(), expected_staking_rewards_balance);
+			timestamp
+		});
+
+		// advance time 30 days
+		let (timestamp_4, expected_accumulated_reward_per_share) =
+			with_block_after(86_400 * 30, || {
+				// update rewards
+				assert_ok!(Tellor::update_rewards());
+				let timestamp = now();
+
+				assert_eq!(timestamp, timestamp_3 + 86_400 * 30 + 1);
+				assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+				assert_eq!(Tellor::reward_rate(), 0); // rewards ran out, reward rate should be 0
+				let expected_accumulated_reward_per_share = token(1000) / 100;
+				assert_eq!(
+					Tellor::accumulated_reward_per_share(),
+					expected_accumulated_reward_per_share
+				);
+				(timestamp, expected_accumulated_reward_per_share)
+			});
+
+		// advance time 1 day
+		with_block_after(86_400, || {
+			// update rewards
+			assert_ok!(Tellor::update_rewards());
+			let timestamp = now();
+
+			// checks, should be no change
+			assert_eq!(timestamp, timestamp_4 + 86_400 + 1);
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp); // should update to latest updateRewards ts
+			assert_eq!(Tellor::reward_rate(), 0); // should still be zero
+
+			assert_eq!(Balances::free_balance(staking_rewards_account), staking_rewards);
+			assert_eq!(Tellor::total_reward_debt(), 0);
+			assert_eq!(
+				Tellor::accumulated_reward_per_share(),
+				expected_accumulated_reward_per_share
+			); // shouldn't change
+		});
+	});
 }
 
 #[test]
-#[ignore]
 fn update_stake_and_pay_rewards() {
-	todo!()
+	let reporter = 1;
+	let funder = 1;
+	let address = Address::random();
+	let staking_rewards = &Tellor::staking_rewards();
+	let mut ext = new_test_ext();
+
+	fn begin_dispute_mock() {
+		// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/contracts/testing/GovernanceMock.sol#L16
+		crate::pallet::VoteCount::<Test>::mutate(|c| c.saturating_inc());
+	}
+
+	fn vote_mock(account: AccountId) {
+		// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/contracts/testing/GovernanceMock.sol#L16
+		crate::pallet::VoteTallyByAddress::<Test>::mutate(account, |c| c.saturating_inc());
+	}
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| register_parachain(STAKE_AMOUNT)));
+
+	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L919
+	ext.execute_with(|| {
+		let (timestamp_0, expected_reward_rate) = with_block(|| {
+			Balances::make_free_balance_be(&funder, token(1_000));
+			// check initial conditions
+			assert_eq!(Balances::free_balance(staking_rewards), 0);
+			assert_eq!(Tellor::reward_rate(), 0);
+			// add staking rewards
+			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), token(1_000)));
+			// check conditions after adding rewards
+			assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
+			assert_eq!(Tellor::total_reward_debt(), 0);
+			let expected_reward_rate = token(1_000) / REWARD_RATE_TARGET;
+			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
+			// create 2 mock disputes, vote once
+			begin_dispute_mock();
+			begin_dispute_mock();
+			vote_mock(reporter);
+			// deposit stake
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				trb(10),
+				address
+			));
+			let timestamp = now();
+			// check conditions after depositing stake
+			assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
+			assert_eq!(Tellor::get_total_stake_amount(), trb(10));
+			assert_eq!(Tellor::total_reward_debt(), 0);
+			assert_eq!(Tellor::accumulated_reward_per_share(), 0);
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+			let staker_info = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_info.staked_balance, trb(10)); // staked balance
+			assert_eq!(staker_info.reward_debt, 0); // reward debt
+			assert_eq!(staker_info.start_vote_count, 2); // start vote count
+			assert_eq!(staker_info.start_vote_tally, 1); // start vote tally
+			(timestamp, expected_reward_rate)
+		});
+
+		// advance time
+		let (timestamp_1, expected_accumulated_reward_per_share, expected_balance) =
+			with_block_after(86_400 * 10, || {
+				// expect(await token.balanceOf(accounts[1].address)).to.equal(h.toWei("990"))
+				// deposit 0 stake, update rewards
+				assert_ok!(Tellor::report_stake_deposited(
+					Origin::Staking.into(),
+					reporter,
+					trb(0),
+					address
+				));
+				let timestamp = now();
+				// check conditions after updating rewards
+				assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+				assert_eq!(Tellor::reward_rate(), expected_reward_rate);
+				let expected_accumulated_reward_per_share =
+					(timestamp - timestamp_0) * expected_reward_rate / 10;
+				let expected_balance = U256ToBalance::convert(
+					U256::from(token(10)) * U256::from(expected_accumulated_reward_per_share) /
+						U256::from(token(1)),
+				);
+				assert_eq!(Balances::free_balance(1), expected_balance);
+				assert_eq!(
+					Tellor::accumulated_reward_per_share(),
+					expected_accumulated_reward_per_share
+				);
+				assert_eq!(Tellor::total_reward_debt(), expected_balance);
+				let staker_info = Tellor::get_staker_info(reporter).unwrap();
+				assert_eq!(staker_info.staked_balance, trb(10)); // staked balance
+				assert_eq!(staker_info.reward_debt, expected_balance); // reward debt
+				assert_eq!(staker_info.start_vote_count, 2); // start vote count
+				assert_eq!(staker_info.start_vote_tally, 1); // start vote tally
+
+				// start a dispute
+				begin_dispute_mock();
+				(timestamp, expected_accumulated_reward_per_share, expected_balance)
+			});
+
+		// advance time
+		let (timestamp_2, expected_accumulated_reward_per_share, expected_reward_debt) =
+			with_block_after(86400 * 10, || {
+				// deposit 0 stake, update rewards
+				assert_ok!(Tellor::report_stake_deposited(
+					Origin::Staking.into(),
+					reporter,
+					trb(0),
+					address
+				));
+				let timestamp = now();
+				// check conditions after updating rewards
+				assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+				assert_eq!(Tellor::reward_rate(), expected_reward_rate);
+				let expected_accumulated_reward_per_share = ((timestamp - timestamp_1) *
+					expected_reward_rate / 10) +
+					expected_accumulated_reward_per_share;
+				assert_eq!(Balances::free_balance(1), expected_balance);
+				assert_eq!(
+					Tellor::accumulated_reward_per_share(),
+					expected_accumulated_reward_per_share
+				);
+				let expected_reward_debt = expected_accumulated_reward_per_share * 10;
+				assert_eq!(Tellor::total_reward_debt(), expected_reward_debt);
+				let staker_info = Tellor::get_staker_info(reporter).unwrap();
+				assert_eq!(staker_info.staked_balance, trb(10)); // staked balance
+				assert_eq!(staker_info.reward_debt, expected_reward_debt); // reward debt
+				assert_eq!(staker_info.start_vote_count, 2); // start vote count
+				assert_eq!(staker_info.start_vote_tally, 1); // start vote tally
+
+				// start a dispute and vote
+				begin_dispute_mock();
+				vote_mock(reporter);
+				(timestamp, expected_accumulated_reward_per_share, expected_reward_debt)
+			});
+
+		// advance time
+		with_block_after(86_400 * 5, || {
+			// deposit 0 stake, update rewards
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter,
+				trb(0),
+				address
+			));
+			let timestamp = now();
+			// check conditions after updating rewards
+			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
+			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
+			let expected_accumulated_reward_per_share = ((timestamp - timestamp_2) *
+				expected_reward_rate /
+				10) + expected_accumulated_reward_per_share;
+			let expected_balance = expected_balance +
+				((expected_accumulated_reward_per_share * 10 - expected_reward_debt) / 2);
+			assert_eq!(Balances::free_balance(1), expected_balance);
+			assert_eq!(
+				Tellor::accumulated_reward_per_share(),
+				expected_accumulated_reward_per_share
+			);
+			let expected_reward_debt = expected_accumulated_reward_per_share * 10;
+			assert_eq!(Tellor::total_reward_debt(), expected_reward_debt);
+			let staker_info = Tellor::get_staker_info(reporter).unwrap();
+			assert_eq!(staker_info.staked_balance, trb(10)); // staked balance
+			assert_eq!(staker_info.reward_debt, expected_reward_debt); // reward debt
+			assert_eq!(staker_info.start_vote_count, 2); // start vote count
+			assert_eq!(staker_info.start_vote_tally, 1); // start vote tally
+			assert_eq!(Balances::free_balance(staking_rewards), token(1_000) - expected_balance);
+		});
+	});
 }

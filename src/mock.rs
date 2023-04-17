@@ -15,7 +15,10 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate as tellor;
-use crate::{types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking};
+use crate::{
+	types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
+	Error::ValueConversionError,
+};
 use frame_support::{
 	assert_ok, log, parameter_types,
 	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},
@@ -23,10 +26,11 @@ use frame_support::{
 };
 use frame_system as system;
 use once_cell::sync::Lazy;
-use sp_core::{ConstU32, H256};
+use sp_core::{ConstU32, ConstU8, H256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, Convert, IdentityLookup},
+	DispatchError,
 };
 use sp_std::cell::RefCell;
 use std::{
@@ -35,7 +39,7 @@ use std::{
 };
 use xcm::latest::prelude::*;
 
-pub(crate) type AccountId = u128; // u64 is not enough to hold bytes used to generate bounty account
+pub(crate) type AccountId = u128; // u64 is not enough to hold bytes used to generate sub accounts
 type Balance = u64;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -121,6 +125,7 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Balance = Balance;
+	type Decimals = ConstU8<12>;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
@@ -148,12 +153,12 @@ impl tellor::Config for Test {
 }
 
 pub struct ValueConverter;
-impl Convert<Vec<u8>, Option<u128>> for ValueConverter {
-	fn convert(a: Vec<u8>) -> Option<u128> {
+impl Convert<Vec<u8>, Result<u128, DispatchError>> for ValueConverter {
+	fn convert(a: Vec<u8>) -> Result<u128, DispatchError> {
 		// Should be more advanced depending on chain config
 		match a[16..].try_into() {
-			Ok(v) => Some(u128::from_be_bytes(v)),
-			Err(_) => None,
+			Ok(v) => Ok(u128::from_be_bytes(v)),
+			Err(_) => Err(ValueConversionError::<Test>.into()),
 		}
 	}
 }

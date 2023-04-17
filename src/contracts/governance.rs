@@ -20,8 +20,8 @@ pub(crate) fn begin_parachain_dispute(
 	query_id: &[u8],
 	timestamp: impl Into<U256>,
 	value: &[u8],
-	disputed_reporter: Address,
-	dispute_initiator: Address,
+	disputed_reporter: H160,
+	dispute_initiator: H160,
 	slash_amount: impl Into<U256>,
 ) -> Vec<u8> {
 	const FUNCTION: [u8; 4] = [29, 93, 54, 159];
@@ -101,8 +101,8 @@ mod tests {
 			115, 103, 116, 24, 76, 18, 145, 31, 14, 132, 213, 146, 98, 184, 227, 250, 43, 5, 1, 73,
 			97, 130, 5,
 		];
-		let disputed_reporter = Address::random();
-		let dispute_initiator = Address::random();
+		let disputed_reporter = H160::random();
+		let dispute_initiator = H160::random();
 		let slash_amount = 54321;
 
 		assert_eq!(
