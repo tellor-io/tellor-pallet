@@ -113,9 +113,9 @@ pub mod pallet {
 		/// Origin that handles dispute resolution (governance).
 		type GovernanceOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
-		/// Initial staking token to local token 'SpotPrice' (i.e. TRB:UNIT with 18 decimals).
+		/// Initial dispute fee.
 		#[pallet::constant]
-		type InitialTokenPrice: Get<u128>;
+		type InitialDisputeFee: Get<BalanceOf<Self>>;
 
 		/// The maximum number of timestamps per claim.
 		#[pallet::constant]
@@ -298,10 +298,6 @@ pub mod pallet {
 	/// Mapping of dispute identifiers to the details of the dispute.
 	#[pallet::storage]
 	pub(super) type DisputeInfo<T> = StorageMap<_, Identity, DisputeId, DisputeOf<T>>;
-	/// A timestamp at which the dispute fee was last updated.
-	#[pallet::storage]
-	#[pallet::getter(fn last_dispute_fee_update)]
-	pub(super) type LastDisputeFeeUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
 	/// Mapping of a query identifier to the number of corresponding open disputes.
 	#[pallet::storage]
 	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Identity, QueryId, u128>;
@@ -325,7 +321,7 @@ pub mod pallet {
 
 	#[pallet::type_value]
 	pub fn InitialDisputeFee<T: Config>() -> BalanceOf<T> {
-		<Pallet<T>>::calculate_dispute_fee(T::InitialTokenPrice::get())
+		T::InitialDisputeFee::get()
 	}
 
 	#[pallet::type_value]
@@ -561,18 +557,13 @@ pub mod pallet {
 			let update_interval = T::UpdateStakeAmountInterval::get();
 			if update_interval > Zero::zero() {
 				let timestamp = Self::now();
-				let interval = update_interval.max(MIN_INTERVAL);
-				// update stake amount
-				if timestamp >= <LastStakeAmountUpdate<T>>::get() + interval &&
-					Pallet::<T>::do_update_stake_amount().is_ok()
-				{
-					<LastStakeAmountUpdate<T>>::set(timestamp);
-				}
-				// update dispute fee
-				if timestamp >= <LastDisputeFeeUpdate<T>>::get() + interval &&
+				// todo: use storage transaction to ensure stake amount and dispute fee updated together
+				if timestamp >=
+					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL) &&
+					Pallet::<T>::do_update_stake_amount().is_ok() &&
 					Pallet::<T>::update_dispute_fee().is_ok()
 				{
-					<LastDisputeFeeUpdate<T>>::set(timestamp);
+					<LastStakeAmountUpdate<T>>::set(timestamp);
 				}
 			}
 
@@ -1097,7 +1088,7 @@ pub mod pallet {
 		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
 			ensure_signed(origin)?;
 			Self::do_update_stake_amount()?;
-			Self::update_dispute_fee() // todo: should an error here fail the whole tx?
+			Self::update_dispute_fee()
 		}
 
 		/// Initialises a dispute/vote in the system.

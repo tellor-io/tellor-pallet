@@ -1577,16 +1577,6 @@ fn get_data_before() {
 }
 
 #[test]
-fn update_dispute_fee() {
-	todo!()
-}
-
-#[test]
-fn update_dispute_fee_via_hook() {
-	todo!()
-}
-
-#[test]
 fn update_stake_amount() {
 	let query_data: QueryDataOf<Test> = spot_price("trb", "gbp").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();

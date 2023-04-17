@@ -131,7 +131,7 @@ impl tellor::Config for Test {
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
-	type InitialTokenPrice = ConstU128<{ 5 * 10u128.pow(18) }>;
+	type InitialDisputeFee = ConstU128<{ 50 * 10u128.pow(12) }>;
 	type MaxClaimTimestamps = ConstU32<10>;
 	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;

@@ -33,19 +33,19 @@ impl<T: Config> Pallet<T> {
 	/// * `price` - The current staking token to local balance price.
 	/// # Returns
 	/// The latest dispute fee.
-	pub(super) fn calculate_dispute_fee(price: impl Into<U256>) -> BalanceOf<T> {
-		<U256ToBalance<T>>::convert(
-			Self::convert(
-				<StakeAmount<T>>::get()
-					.checked_div(10.into())
-					.expect("other is non-zero; qed")
-					.checked_mul(price.into())
-					.unwrap() // todo: depends on the initial token price configured, could overflow
-					.checked_div(U256::from(10u128.pow(DECIMALS)))
-					.expect("other is non-zero; qed"),
-			)
-			.unwrap(), // todo: depends on the number of decimals configured, could overflow
+	pub(super) fn calculate_dispute_fee(
+		price: impl Into<U256>,
+	) -> Result<BalanceOf<T>, DispatchError> {
+		Self::convert(
+			<StakeAmount<T>>::get()
+				.checked_div(10.into())
+				.expect("other is non-zero; qed")
+				.checked_mul(price.into())
+				.ok_or(ArithmeticError::Overflow)?
+				.checked_div(U256::from(10u128.pow(DECIMALS)))
+				.expect("other is non-zero; qed"),
 		)
+		.map(<U256ToBalance<T>>::convert)
 	}
 
 	/// Converts a stake amount to a local balance amount.
@@ -1194,7 +1194,7 @@ impl<T: Config> Pallet<T> {
 			token_price >= 10u128.pow(16).into() && token_price < 10u128.pow(24).into(),
 			Error::<T>::InvalidPrice
 		);
-		let dispute_fee = Self::calculate_dispute_fee(token_price);
+		let dispute_fee = Self::calculate_dispute_fee(token_price)?;
 		<DisputeFee<T>>::set(dispute_fee);
 		Self::deposit_event(Event::NewDisputeFee { dispute_fee });
 		Ok(())
