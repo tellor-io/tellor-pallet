@@ -1521,20 +1521,15 @@ pub mod pallet {
 			Self::tally_votes(dispute_id, result)
 		}
 
-		/// Reports the result of a dispute.
+		/// Reports the execution of a vote.
 		///
 		/// - `dispute_id`: The identifier of the dispute.
-		/// - `result`: The result of the dispute.
 		#[pallet::call_index(16)]
-		pub fn report_vote_executed(
-			origin: OriginFor<T>,
-			dispute_id: DisputeId,
-			result: VoteResult,
-		) -> DispatchResult {
+		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote
-			Self::execute_vote(dispute_id, result)
+			Self::execute_vote(dispute_id)
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
