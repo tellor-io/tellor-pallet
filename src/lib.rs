@@ -538,7 +538,7 @@ pub mod pallet {
 				let timestamp = Self::now();
 				if timestamp >=
 					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL) &&
-					Pallet::<T>::_update_stake_amount().is_ok()
+					Pallet::<T>::do_update_stake_amount().is_ok()
 				{
 					<LastStakeAmountUpdate<T>>::set(timestamp)
 				}
@@ -637,7 +637,7 @@ pub mod pallet {
 				cumulative_reward - fee,
 				false,
 			)?;
-			Self::_add_staking_rewards(tips, fee)?;
+			Self::do_add_staking_rewards(tips, fee)?;
 			if Self::get_current_tip(query_id) == Zero::zero() {
 				let index = <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default();
 				if index != 0 {
@@ -704,7 +704,7 @@ pub mod pallet {
 					Error::<T>::InvalidClaimer
 				);
 				cumulative_reward
-					.saturating_accrue(Self::_get_reward_amount(feed_id, query_id, *timestamp)?);
+					.saturating_accrue(Self::do_get_reward_amount(feed_id, query_id, *timestamp)?);
 
 				if cumulative_reward >= balance {
 					ensure!(
@@ -765,7 +765,7 @@ pub mod pallet {
 				cumulative_reward - fee,
 				false,
 			)?;
-			Self::_add_staking_rewards(tips, fee)?;
+			Self::do_add_staking_rewards(tips, fee)?;
 			Self::deposit_event(Event::TipClaimed {
 				feed_id,
 				query_id,
@@ -788,7 +788,7 @@ pub mod pallet {
 			amount: BalanceOf<T>,
 		) -> DispatchResult {
 			let feed_funder = ensure_signed(origin)?;
-			Self::_fund_feed(feed_funder, feed_id, query_id, amount)
+			Self::do_fund_feed(feed_funder, feed_id, query_id, amount)
 		}
 
 		/// Initializes data feed parameters.
@@ -872,7 +872,7 @@ pub mod pallet {
 				feed_creator: feed_creator.clone(),
 			});
 			if amount > Zero::zero() {
-				Self::_fund_feed(feed_creator, feed_id, query_id, amount)?;
+				Self::do_fund_feed(feed_creator, feed_id, query_id, amount)?;
 			}
 			Ok(())
 		}
@@ -909,7 +909,7 @@ pub mod pallet {
 					},
 					Some(tips) => {
 						let timestamp_retrieved =
-							Self::_get_current_value(query_id).map_or(0, |v| v.1);
+							Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
 						match tips.last_mut() {
 							Some(last_tip) if timestamp_retrieved < last_tip.timestamp => {
 								last_tip.timestamp = Self::now().saturating_add(1u8.into());
@@ -955,7 +955,7 @@ pub mod pallet {
 		#[pallet::call_index(6)]
 		pub fn add_staking_rewards(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
 			let funder = ensure_signed(origin)?;
-			Self::_add_staking_rewards(&funder, amount)
+			Self::do_add_staking_rewards(&funder, amount)
 		}
 
 		/// Allows a reporter to submit a value to the oracle.
@@ -1090,7 +1090,7 @@ pub mod pallet {
 		#[pallet::call_index(8)]
 		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
 			ensure_signed(origin)?;
-			Self::_update_stake_amount()
+			Self::do_update_stake_amount()
 		}
 
 		/// Initialises a dispute/vote in the system.

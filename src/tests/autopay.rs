@@ -428,7 +428,7 @@ fn claim_tip() {
 }
 
 #[test]
-fn _get_reward_amount() {
+fn do_get_reward_amount() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id: H256 = keccak_256(query_data.as_ref()).into();
 	let feed_creator = 2;
