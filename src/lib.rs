@@ -384,7 +384,12 @@ pub mod pallet {
 		/// Emitted when an address casts their vote.
 		Voted { dispute_id: DisputeId, supports: Option<bool>, voter: AccountIdOf<T> },
 		/// Emitted when all casting for a vote is tallied.
-		VoteTallied { dispute_id: DisputeId, initiator: AccountIdOf<T>, reporter: AccountIdOf<T> },
+		VoteTallied {
+			dispute_id: DisputeId,
+			result: VoteResult,
+			initiator: AccountIdOf<T>,
+			reporter: AccountIdOf<T>,
+		},
 		/// Emitted when a vote is executed.
 		VoteExecuted { dispute_id: DisputeId, result: VoteResult },
 

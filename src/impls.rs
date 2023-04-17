@@ -1149,6 +1149,7 @@ impl<T: Config> Pallet<T> {
 		)?;
 		Self::deposit_event(Event::VoteTallied {
 			dispute_id,
+			result,
 			initiator,
 			reporter: <DisputeInfo<T>>::get(dispute_id)
 				.ok_or(Error::<T>::InvalidDispute)?
