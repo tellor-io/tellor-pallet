@@ -132,15 +132,15 @@ impl tellor::Config for Test {
 	type Price = u32;
 	type RegistrationOrigin = frame_system::EnsureRoot<AccountId>;
 	type Registry = ();
+	type StakeAmountCurrencyTarget = ();
 	type Staking = ();
 	type StakingOrigin = EnsureStaking;
 	type StakingTokenPriceQueryId = ();
 	type Time = Time;
 	type Token = Balances;
+	type UpdateStakeAmountInterval = ();
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
-	type StakeAmountCurrencyTarget = ();
-	type UpdateStakeAmountInterval = ();
 }
 pub struct TestSendXcm;
 impl tellor::traits::SendXcm for TestSendXcm {
@@ -703,7 +703,7 @@ mod governance {
 	#[test]
 	fn get_dispute_fee() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), None);
+			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), Some(0));
 		});
 	}
 
