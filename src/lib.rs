@@ -1182,13 +1182,16 @@ pub mod pallet {
 				Self::remove_value(query_id, timestamp)?;
 			} else {
 				let prev_id = vote_round.saturating_sub(1);
+				let prev_vote =
+					<VoteInfo<T>>::get(dispute_id, prev_id).ok_or(Error::<T>::InvalidVote)?;
 				ensure!(
-					Self::now() -
-						<VoteInfo<T>>::get(dispute_id, prev_id)
-							.ok_or(Error::<T>::InvalidVote)?
-							.tally_date < 1 * DAYS,
+					Self::now()
+						.checked_sub(prev_vote.tally_date)
+						.ok_or(ArithmeticError::Underflow)? <
+						1u64.checked_mul(DAYS).expect("cannot overflow based on values; qed"),
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
+				ensure!(!prev_vote.executed, Error::<T>::VoteAlreadyExecuted); // Ensure previous round not executed
 				vote.fee = vote.fee.saturating_mul(
 					<BalanceOf<T>>::from(2u8)
 						.saturating_pow(vote_round.saturating_sub(1).saturated_into()),
@@ -1502,11 +1505,27 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Reports the tally of a vote.
+		///
+		/// - `dispute_id`: The identifier of the dispute.
+		/// - `result`: The outcome of the vote, as determined by governance.
+		#[pallet::call_index(15)]
+		pub fn report_vote_tallied(
+			origin: OriginFor<T>,
+			dispute_id: DisputeId,
+			result: VoteResult,
+		) -> DispatchResult {
+			// ensure origin is governance controller contract
+			T::GovernanceOrigin::ensure_origin(origin)?;
+			// tally votes
+			Self::tally_votes(dispute_id, result)
+		}
+
 		/// Reports the result of a dispute.
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The result of the dispute.
-		#[pallet::call_index(15)]
+		#[pallet::call_index(16)]
 		pub fn report_vote_executed(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1519,7 +1538,7 @@ pub mod pallet {
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(16)]
+		#[pallet::call_index(17)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegistrationOrigin::ensure_origin(origin)?;
 			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);

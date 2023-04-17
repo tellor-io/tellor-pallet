@@ -1104,32 +1104,45 @@ impl<T: Config> Pallet<T> {
 	/// Tallies the votes and begins the challenge period.
 	/// # Arguments
 	/// * `dispute_id` - The dispute identifier.
-	/// * `vote_round` - The vote round.
-	pub(crate) fn tally_votes(dispute_id: DisputeId, vote_round: u8) -> DispatchResult {
-		// Ensure vote has not been executed and that vote has not been tallied
-		let initiator = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| match maybe {
-			None => Err(Error::<T>::InvalidDispute),
-			Some(vote) => {
-				ensure!(vote.tally_date == 0, Error::VoteAlreadyTallied);
-				ensure!(
-					dispute_id != DisputeId::default() &&
-						dispute_id != Keccak256::hash(&[]) &&
-						<DisputeInfo<T>>::contains_key(dispute_id),
-					Error::InvalidDispute
-				);
-				// Determine appropriate vote duration dispute round
-				// Vote time increases as rounds increase but only up to 6 days (withdrawal period)
-				// todo: safe math
-				ensure!(
-					Self::now() - vote.start_date >= vote.vote_round as Timestamp * DAYS ||
-						Self::now() - vote.start_date >= 6 * DAYS,
-					Error::VotingPeriodActive
-				);
-				// Note: remainder of tallying functionality takes place within governance controller contract
-				vote.tally_date = Self::now(); // Update time vote was tallied
-				Ok(vote.initiator.clone())
+	/// * `result` - The outcome of the vote, as determined by governance.
+	pub(super) fn tally_votes(dispute_id: DisputeId, result: VoteResult) -> DispatchResult {
+		// Get current vote round for dispute
+		let vote_round = <VoteRounds<T>>::get(dispute_id);
+		let initiator = <VoteInfo<T>>::try_mutate(
+			dispute_id,
+			vote_round,
+			|maybe| -> Result<AccountIdOf<T>, DispatchError> {
+				match maybe {
+					Some(vote) => {
+						// Ensure vote has not been executed and that vote has not been tallied
+						ensure!(!vote.executed, Error::<T>::VoteAlreadyExecuted);
+						ensure!(vote.tally_date == 0, Error::<T>::VoteAlreadyTallied);
+						// Determine appropriate vote duration dispute round
+						// Vote time increases as rounds increase but only up to 6 days (withdrawal period)
+						ensure!(
+							Self::now()
+								.checked_sub(vote.start_date)
+								.ok_or(ArithmeticError::Underflow)? >=
+								(vote.vote_round as Timestamp)
+									.checked_mul(DAYS)
+									.expect("cannot overflow based on types; qed") ||
+								Self::now()
+									.checked_sub(vote.start_date)
+									.ok_or(ArithmeticError::Underflow)? >= 6
+									.checked_mul(&DAYS)
+									.expect("specified values cannot overflow; qed"),
+							Error::<T>::VotingPeriodActive
+						);
+						// Note: main tallying functionality determining result takes place within
+						// governance controller contract
+						vote.result = Some(result);
+						vote.tally_date = Self::now(); // Update time vote was tallied
+						Ok(vote.initiator.clone())
+					},
+					None => Err(Error::<T>::InvalidDispute.into()),
+				}
 			},
-		})?;
+		)?;
 		Self::deposit_event(Event::VoteTallied {
 			dispute_id,
 			initiator,
