@@ -296,7 +296,7 @@ sp_api::decl_runtime_apis! {
 		/// Get the latest dispute fee.
 		/// # Returns
 		/// The latest dispute fee.
-		fn get_dispute_fee() -> Option<Balance>;
+		fn get_dispute_fee() -> Balance;
 
 		/// Returns the dispute identifiers for a reporter.
 		/// # Arguments

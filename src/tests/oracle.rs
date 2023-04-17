@@ -1304,7 +1304,7 @@ fn get_total_time_based_rewards_balance() {
 	todo!()
 }
 
-const REWARD_RATE_TARGET: u64 = 60 * 60 * 24 * 30; // 30 days
+const REWARD_RATE_TARGET: Balance = 60 * 60 * 24 * 30; // 30 days
 
 #[test]
 fn add_staking_rewards() {
@@ -1574,6 +1574,16 @@ fn get_data_before() {
 			Some((uint_value(150), timestamp_1))
 		);
 	});
+}
+
+#[test]
+fn update_dispute_fee() {
+	todo!()
+}
+
+#[test]
+fn update_dispute_fee_via_hook() {
+	todo!()
 }
 
 #[test]
@@ -2101,7 +2111,7 @@ fn update_stake_and_pay_rewards() {
 				assert_eq!(Tellor::time_of_last_allocation(), timestamp);
 				assert_eq!(Tellor::reward_rate(), expected_reward_rate);
 				let expected_accumulated_reward_per_share =
-					(timestamp - timestamp_0) * expected_reward_rate / 10;
+					(timestamp - timestamp_0) as Balance * expected_reward_rate / 10;
 				let expected_balance = U256ToBalance::convert(
 					U256::from(token(10)) * U256::from(expected_accumulated_reward_per_share) /
 						U256::from(token(1)),
@@ -2137,7 +2147,7 @@ fn update_stake_and_pay_rewards() {
 				// check conditions after updating rewards
 				assert_eq!(Tellor::time_of_last_allocation(), timestamp);
 				assert_eq!(Tellor::reward_rate(), expected_reward_rate);
-				let expected_accumulated_reward_per_share = ((timestamp - timestamp_1) *
+				let expected_accumulated_reward_per_share = ((timestamp - timestamp_1) as Balance *
 					expected_reward_rate / 10) +
 					expected_accumulated_reward_per_share;
 				assert_eq!(Balances::free_balance(1), expected_balance);
@@ -2172,7 +2182,7 @@ fn update_stake_and_pay_rewards() {
 			// check conditions after updating rewards
 			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
 			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
-			let expected_accumulated_reward_per_share = ((timestamp - timestamp_2) *
+			let expected_accumulated_reward_per_share = ((timestamp - timestamp_2) as Balance *
 				expected_reward_rate /
 				10) + expected_accumulated_reward_per_share;
 			let expected_balance = expected_balance +

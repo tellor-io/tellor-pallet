@@ -110,7 +110,7 @@ fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 
 fn token(amount: impl Into<f64>) -> Balance {
 	// test parachain token
-	(amount.into() * unit() as f64) as u64
+	(amount.into() * unit() as f64) as Balance
 }
 
 fn uint_value(value: impl Into<Uint>) -> ValueOf<Test> {

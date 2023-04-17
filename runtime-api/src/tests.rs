@@ -26,7 +26,7 @@ use frame_support::{
 	BoundedVec, PalletId,
 };
 use sp_api::mock_impl_runtime_apis;
-use sp_core::{ConstU32, H256, U256};
+use sp_core::{ConstU128, ConstU32, H256, U256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
@@ -43,7 +43,7 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 type AccountId = u64;
-type Balance = u64;
+type Balance = u128;
 type BlockNumber = u64;
 type MaxValueLength = ConstU32<4>;
 type StakeInfo = tellor::StakeInfo<Balance, <Test as tellor::Config>::MaxQueriesPerReporter>;
@@ -92,7 +92,7 @@ impl pallet_balances::Config for Test {
 	type Balance = Balance;
 	type DustRemoval = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ExistentialDeposit = ConstU64<1>;
+	type ExistentialDeposit = ConstU128<1>;
 	type AccountStore = System;
 	type WeightInfo = ();
 	type MaxLocks = ();
@@ -117,6 +117,7 @@ impl tellor::Config for Test {
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
+	type InitialTokenPrice = ();
 	type MaxClaimTimestamps = ();
 	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ();
@@ -139,6 +140,7 @@ impl tellor::Config for Test {
 	type StakingTokenPriceQueryId = ();
 	type Time = Time;
 	type Token = Balances;
+	type TokenPriceQueryId = ();
 	type UpdateStakeAmountInterval = ();
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
@@ -326,7 +328,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::did_vote(dispute_id, vote_round, voter)
 		}
 
-		fn get_dispute_fee() -> Option<Balance> {
+		fn get_dispute_fee() -> Balance {
 			tellor::Pallet::<Test>::get_dispute_fee()
 		}
 
@@ -706,7 +708,7 @@ mod governance {
 	#[test]
 	fn get_dispute_fee() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), Some(0));
+			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), 0);
 		});
 	}
 

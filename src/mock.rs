@@ -40,7 +40,7 @@ use std::{
 use xcm::latest::prelude::*;
 
 pub(crate) type AccountId = u128; // u64 is not enough to hold bytes used to generate sub accounts
-type Balance = u64;
+type Balance = u128;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -80,7 +80,7 @@ impl system::Config for Test {
 	type DbWeight = ();
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = pallet_balances::AccountData<u64>;
+	type AccountData = pallet_balances::AccountData<Balance>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -93,7 +93,7 @@ impl pallet_balances::Config for Test {
 	type Balance = Balance;
 	type DustRemoval = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ExistentialDeposit = ConstU64<1>;
+	type ExistentialDeposit = ConstU128<1>;
 	type AccountStore = System;
 	type WeightInfo = ();
 	type MaxLocks = ();
@@ -131,6 +131,7 @@ impl tellor::Config for Test {
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
+	type InitialTokenPrice = ConstU128<{ 5 * 10u128.pow(18) }>;
 	type MaxClaimTimestamps = ConstU32<10>;
 	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;
@@ -153,6 +154,7 @@ impl tellor::Config for Test {
 	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
 	type Time = Timestamp;
 	type Token = Balances;
+	type TokenPriceQueryId = ();
 	type UpdateStakeAmountInterval = ConstU64<{ 12 * HOURS }>;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;

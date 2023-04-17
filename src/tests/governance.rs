@@ -18,13 +18,11 @@ use super::*;
 use crate::{constants::REPORTING_LOCK, mock::AccountId, types::Tally, Config, VoteResult};
 use frame_support::{assert_noop, assert_ok, traits::Currency};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map};
-use sp_runtime::traits::{BadOrigin, Convert};
+use sp_runtime::traits::BadOrigin;
 
 type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
 type ParachainId = <Test as Config>::ParachainId;
 type VoteRounds = crate::pallet::VoteRounds<Test>;
-
-const PRICE: Balance = 5; // 1 TRB = 5 UNIT (uses static price for now)
 
 #[test]
 fn begin_dispute() {
@@ -111,12 +109,9 @@ fn begin_dispute() {
 			);
 
 			let balance_after_begin_dispute = Balances::free_balance(another_reporter);
-			assert!(
-				balance_before_begin_dispute -
-					balance_after_begin_dispute -
-					U256ToBalance::convert(
-						Tellor::convert(StakeAmount::<Test>::get()).unwrap() * PRICE
-					) / 10 == 0,
+			assert_eq!(
+				balance_before_begin_dispute - balance_after_begin_dispute - dispute_fee(),
+				0,
 				"dispute fee paid should be correct"
 			);
 
@@ -193,8 +188,8 @@ fn begin_dispute_by_non_reporter() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let another_reporter = 2;
-	let mut ext = new_test_ext();
 	let oracle_user = Address::random();
+	let mut ext = new_test_ext();
 
 	// Prerequisites
 	ext.execute_with(|| {
@@ -269,12 +264,9 @@ fn begin_dispute_by_non_reporter() {
 			);
 
 			let balance_after_begin_dispute = Balances::free_balance(another_reporter);
-			assert!(
-				balance_before_begin_dispute -
-					balance_after_begin_dispute -
-					U256ToBalance::convert(
-						Tellor::convert(StakeAmount::<Test>::get()).unwrap() * PRICE
-					) / 10 == 0,
+			assert_eq!(
+				balance_before_begin_dispute - balance_after_begin_dispute - dispute_fee(),
+				0,
 				"dispute fee paid should be correct"
 			);
 
@@ -498,11 +490,7 @@ fn execute_vote() {
 				1,
 				"number of vote rounds should be correct"
 			);
-			assert_eq!(
-				balance_1 - balance_2,
-				token(10) * PRICE,
-				"dispute fee paid should be correct"
-			); // uses static rate for now
+			assert_eq!(balance_1 - balance_2, dispute_fee(), "dispute fee paid should be correct");
 
 			assert_noop!(
 				Tellor::report_vote_executed(Origin::Governance.into(), H256::random()),
@@ -845,6 +833,19 @@ fn did_vote() {
 	});
 }
 
+fn dispute_fee() -> Balance {
+	token(100 / 10 * 5) // 10% of 100 TRB, * initial price of 5
+}
+
+#[test]
+fn get_dispute_fee() {
+	new_test_ext().execute_with(|| {
+		with_block(|| {
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee());
+		})
+	});
+}
+
 #[test]
 fn get_dispute_info() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
@@ -1176,7 +1177,7 @@ fn get_vote_info() {
 			assert_eq!(vote.vote_round, 1, "vote round should be correct");
 			assert_eq!(vote.start_date, disputed_time, "vote start date should be correct");
 			assert_eq!(vote.block_number, disputed_block, "vote block number should be correct");
-			assert_eq!(vote.fee, token(10) * PRICE, "vote fee should be correct"); // uses static rate for now
+			assert_eq!(vote.fee, dispute_fee(), "vote fee should be correct");
 			assert_eq!(vote.tally_date, tallied, "vote tally date should be correct");
 			assert_eq!(
 				vote.users,
