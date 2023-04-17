@@ -338,7 +338,7 @@ impl<T: Config> Pallet<T> {
 				const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
 
 				PRICE
-					.map(|price| U256::from(price))
+					.map(U256::from)
 					// Convert amount into local balance amount based on price
 					.and_then(|price| {
 						a.checked_mul(price).and_then(|a| a.checked_div(U256::from(UNIT)))
@@ -346,7 +346,7 @@ impl<T: Config> Pallet<T> {
 			})
 			// Convert to local number of decimals
 			.and_then(|a| Self::convert(a).ok())
-			.map(|a| U256ToBalance::<T>::convert(a))
+			.map(U256ToBalance::<T>::convert)
 	}
 
 	/// Returns information on a dispute for a given identifier.

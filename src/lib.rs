@@ -537,11 +537,10 @@ pub mod pallet {
 			if update_interval > Zero::zero() {
 				let timestamp = Self::now();
 				if timestamp >=
-					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL.into())
+					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL) &&
+					Pallet::<T>::_update_stake_amount().is_ok()
 				{
-					if let Ok(_) = Pallet::<T>::_update_stake_amount() {
-						<LastStakeAmountUpdate<T>>::set(timestamp)
-					}
+					<LastStakeAmountUpdate<T>>::set(timestamp)
 				}
 			}
 
