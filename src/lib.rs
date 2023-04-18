@@ -16,9 +16,10 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::constants::{DAYS, HOURS, REPORTING_LOCK, WEEKS};
+use crate::constants::REPORTING_LOCK;
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
 use codec::Encode;
+pub use constants::{DAYS, HOURS, MINUTES, WEEKS};
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
 	ensure,
