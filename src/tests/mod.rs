@@ -101,14 +101,14 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Tributes>, addre
 }
 
 // Configures the parachain for remote transact calls to controller contracts
-fn configure_parachain() {
+fn configure() {
 	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
-	assert_ok!(Tellor::register(
+	assert_ok!(Tellor::configure(
 		RuntimeOrigin::root(),
 		Box::new(MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000u128) }),
 		WeightLimit::Unlimited,
-		1000,
-		1000
+		u64::MAX,
+		u128::MAX
 	));
 }
 
@@ -156,6 +156,50 @@ fn xcm_transact(
 			},
 		]),
 	)]
+}
+
+#[test]
+fn configures() {
+	let fees = Box::new(MultiAsset {
+		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }),
+		fun: Fungible(300_000_000_000_000u128),
+	});
+	let weight_limit = WeightLimit::Limited(123456);
+	let require_weight_at_most = u64::MAX;
+	let gas_limit = u128::MAX;
+
+	new_test_ext().execute_with(|| {
+		with_block(|| {
+			for origin in
+				vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
+			{
+				assert_noop!(
+					Tellor::configure(origin, fees.clone(), WeightLimit::Unlimited, 0, 0),
+					BadOrigin
+				);
+			}
+
+			assert_ok!(Tellor::configure(
+				RuntimeOrigin::root(),
+				fees.clone(),
+				weight_limit.clone(),
+				require_weight_at_most,
+				gas_limit
+			));
+			assert_eq!(
+				Configuration::get().unwrap(),
+				Config {
+					xcm_config: XcmConfig {
+						fees: *fees.clone(),
+						weight_limit: weight_limit.clone(),
+						require_weight_at_most
+					},
+					gas_limit
+				}
+			);
+			System::assert_last_event(Event::Configured {}.into())
+		});
+	});
 }
 
 #[test]
@@ -211,45 +255,28 @@ fn encodes_spot_price() {
 }
 
 #[test]
-fn register() {
+fn registers() {
 	let fees = Box::new(MultiAsset {
 		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }),
 		fun: Fungible(300_000_000_000_000u128),
 	});
-	let weight_limit = WeightLimit::Limited(123456);
+	let weight_limit = WeightLimit::Unlimited;
 	let require_weight_at_most = u64::MAX;
 	let gas_limit = u128::MAX;
 	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| with_block(|| configure()));
 
 	ext.execute_with(|| {
 		with_block(|| {
 			for origin in
 				vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
 			{
-				assert_noop!(Tellor::register(origin, fees.clone(), Unlimited, 0, 0), BadOrigin);
+				assert_noop!(Tellor::register(origin), BadOrigin);
 			}
 
-			assert_ok!(Tellor::register(
-				RuntimeOrigin::root(),
-				fees.clone(),
-				weight_limit.clone(),
-				require_weight_at_most,
-				gas_limit
-			));
-			assert_eq!(StakeAmount::<Test>::get(), MINIMUM_STAKE_AMOUNT.into());
-			assert_eq!(
-				Configuration::get().unwrap(),
-				Config {
-					xcm_config: XcmConfig {
-						fees: *fees.clone(),
-						weight_limit: weight_limit.clone(),
-						require_weight_at_most
-					},
-					gas_limit
-				}
-			);
-			System::assert_has_event(Event::Configured {}.into());
-
+			assert_ok!(Tellor::register(RuntimeOrigin::root()));
 			assert_eq!(
 				sent_xcm(),
 				xcm_transact(
