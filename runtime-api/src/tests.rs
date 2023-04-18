@@ -779,3 +779,12 @@ fn state_call_encoding() {
 	call(ORACLE, "get_block_number_by_timestamp", &(query_id, timestamp).encode());
 	call(ORACLE, "get_current_value", &query_id.encode());
 }
+
+#[test]
+fn constants() {
+	// Ensures certain constants are publicly available for usage within runtime config
+	const MINUTES: Timestamp = tellor::MINUTES;
+	const HOURS: Timestamp = tellor::HOURS;
+	const DAYS: Timestamp = tellor::DAYS;
+	const WEEKS: Timestamp = tellor::WEEKS;
+}
