@@ -21,6 +21,7 @@ use sp_runtime::{
 	traits::{CheckedAdd, CheckedMul, Hash},
 	ArithmeticError,
 };
+use sp_std::cmp::Ordering;
 
 impl<T: Config> Pallet<T> {
 	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, DispatchError> {
@@ -47,20 +48,20 @@ impl<T: Config> Pallet<T> {
 		if amount == U256::zero() {
 			return Ok(amount)
 		}
-		if DECIMALS > decimals {
-			U256::from(10)
+		match DECIMALS.cmp(&decimals) {
+			Ordering::Greater => U256::from(10)
 				.checked_pow(U256::from(DECIMALS - decimals))
 				.ok_or_else(|| ArithmeticError::Overflow.into())
 				.map(|r| {
 					amount.checked_div(r).expect("result is non-zero, provided non-overflow; qed")
-				})
-		} else if decimals > DECIMALS {
-			U256::from(10)
+				}),
+			Ordering::Less => U256::from(10)
 				.checked_pow(U256::from(decimals - DECIMALS))
 				.ok_or_else(|| ArithmeticError::Overflow.into())
-				.and_then(|r| amount.checked_mul(r).ok_or_else(|| ArithmeticError::Overflow.into()))
-		} else {
-			Ok(amount)
+				.and_then(|r| {
+					amount.checked_mul(r).ok_or_else(|| ArithmeticError::Overflow.into())
+				}),
+			Ordering::Equal => Ok(amount),
 		}
 	}
 

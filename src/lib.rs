@@ -1332,13 +1332,11 @@ pub mod pallet {
 						});
 						staker.locked_balance = U256::zero();
 					}
-				} else {
-					if staked_balance == U256::zero() {
-						// if staked balance and locked balance equal 0, save current vote tally.
-						// voting participation used for calculating rewards
-						staker.start_vote_count = Self::get_vote_count();
-						staker.start_vote_tally = Self::get_vote_tally_by_address(&reporter);
-					}
+				} else if staked_balance == U256::zero() {
+					// if staked balance and locked balance equal 0, save current vote tally.
+					// voting participation used for calculating rewards
+					staker.start_vote_count = Self::get_vote_count();
+					staker.start_vote_tally = Self::get_vote_tally_by_address(&reporter);
 				}
 				Self::update_stake_and_pay_rewards(
 					(&reporter, &mut staker),
