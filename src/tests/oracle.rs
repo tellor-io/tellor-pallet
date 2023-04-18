@@ -18,7 +18,7 @@ use super::*;
 use crate::{
 	constants::REPORTING_LOCK,
 	types::{Nonce, QueryId, Timestamp},
-	Config,
+	Config, VoteResult,
 };
 use frame_support::{
 	assert_noop, assert_ok,
@@ -322,7 +322,11 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id, 1));
+			assert_ok!(Tellor::report_vote_tallied(
+				Origin::Governance.into(),
+				dispute_id,
+				VoteResult::Passed
+			));
 		});
 
 		// Report slash after tally dispute period
@@ -362,7 +366,11 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id, 1));
+			assert_ok!(Tellor::report_vote_tallied(
+				Origin::Governance.into(),
+				dispute_id,
+				VoteResult::Passed
+			));
 		});
 
 		// Report slash after tally dispute period
@@ -397,7 +405,11 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id, 1));
+			assert_ok!(Tellor::report_vote_tallied(
+				Origin::Governance.into(),
+				dispute_id,
+				VoteResult::Passed
+			));
 		});
 
 		// Report slash after tally dispute period
@@ -452,7 +464,11 @@ fn slash_reporter() {
 
 		// Tally votes after vote duration
 		with_block_after(86_400, || {
-			assert_ok!(Tellor::tally_votes(dispute_id, 1));
+			assert_ok!(Tellor::report_vote_tallied(
+				Origin::Governance.into(),
+				dispute_id,
+				VoteResult::Passed
+			));
 		});
 
 		// Report slash after tally dispute period
