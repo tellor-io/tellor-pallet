@@ -246,6 +246,51 @@ impl<T: Config> Pallet<T> {
 		Ok(reward_amount)
 	}
 
+	/// Sends any pending dispute votes due to the governance controller contract for tallying.
+	/// # Arguments
+	/// * `timestamp` - Data feed unique identifier.
+	/// * `max` - The maximum number of pending dispute votes to be sent.
+	pub(super) fn do_send_votes(timestamp: Timestamp, max: u8) -> DispatchResult {
+		let governance_contract = T::Governance::get();
+		const GAS_LIMIT: u64 = gas_limits::VOTE;
+		// Check for any pending votes to be sent to governance controller contract
+		let mut pending_votes: Vec<_> = <PendingVotes<T>>::iter()
+			.filter(|(_, (_, scheduled))| &timestamp >= scheduled)
+			.take(max.into())
+			.collect();
+		pending_votes.sort_by_key(|(_, (_, scheduled))| *scheduled);
+		for (dispute_id, (vote_round, _)) in pending_votes {
+			let _ = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
+				let vote = maybe.as_mut().ok_or(Error::<T>::InvalidVote)?;
+				ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
+				let message = xcm::transact::<T>(
+					xcm::ethereum_xcm::transact(
+						governance_contract.address,
+						contracts::governance::vote(
+							dispute_id.as_ref(),
+							vote.users.does_support,
+							vote.users.against,
+							vote.users.invalid_query,
+							vote.reporters.does_support,
+							vote.reporters.against,
+							vote.reporters.invalid_query,
+						)
+						.try_into()
+						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+						GAS_LIMIT,
+					),
+					GAS_LIMIT,
+				);
+				Self::send_xcm(governance_contract.para_id, message)?;
+				vote.sent = true;
+				<PendingVotes<T>>::remove(dispute_id);
+				Self::deposit_event(Event::VoteSent { dispute_id, vote_round });
+				Ok(())
+			});
+		}
+		Ok(())
+	}
+
 	// Updates the stake amount after retrieving the latest token price from oracle.
 	pub(super) fn do_update_stake_amount() -> DispatchResult {
 		let Some((value, _)) = Self::get_data_before(
