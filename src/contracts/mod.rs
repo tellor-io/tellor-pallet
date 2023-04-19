@@ -112,6 +112,14 @@ enum DynamicParameter<'a> {
 	Bytes(&'a [u8]),
 }
 
+pub(crate) mod gas_limits {
+	// Static gas limits, based on max gas from `forge test --gas-report` of contracts
+	pub(crate) const BEGIN_PARACHAIN_DISPUTE: u64 = 600_000;
+	pub(crate) const CONFIRM_STAKING_WITHDRAW_REQUEST: u64 = 60_000;
+	pub(crate) const DEREGISTER: u64 = 30_000;
+	pub(crate) const REGISTER: u64 = 95_000;
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
 	use super::Call;

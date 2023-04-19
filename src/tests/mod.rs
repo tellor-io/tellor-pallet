@@ -16,14 +16,14 @@
 
 use crate::{
 	constants::DECIMALS,
-	contracts::registry,
+	contracts::{gas_limits, registry},
 	mock,
 	mock::*,
 	types::{
 		AccountIdOf, Address, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp, Tributes,
 		ValueOf,
 	},
-	xcm::{ethereum_xcm, XcmConfig},
+	xcm::{ethereum_xcm, gas_to_weight, weigh, DbWeight, XcmConfig},
 	Event, Origin, StakeAmount,
 };
 use ethabi::{Bytes, Token, Uint};
@@ -137,21 +137,23 @@ fn unit() -> u128 {
 	10u128.pow(decimals.into())
 }
 
-fn xcm_transact(
-	call: DoubleEncoded<RuntimeCall>,
-	fees: Box<MultiAsset>,
-	weight_limit: WeightLimit,
-	require_weight_at_most: u64,
-) -> Vec<(MultiLocation, Xcm<()>)> {
+fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> Vec<(MultiLocation, Xcm<()>)> {
+	// Calculate weights and fees to construct xcm
+	let xt_weight = gas_to_weight(gas_limit) + DbWeight::get().reads(1);
+	let total_weight = weigh() + xt_weight;
+	let fees = MultiAsset {
+		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }), // Balances pallet for simplicity
+		fun: Fungible(total_weight.ref_time() as u128 * 50_000),
+	};
 	vec![(
 		MultiLocation { parents: 1, interior: X1(Parachain(EVM_PARA_ID)) },
 		Xcm(vec![
 			DescendOrigin(X1(PalletInstance(PALLET_INDEX))), // interior
-			WithdrawAsset((*fees.clone()).into()),
-			BuyExecution { fees: *fees, weight_limit },
+			WithdrawAsset(fees.clone().into()),
+			BuyExecution { fees, weight_limit: Limited(total_weight.ref_time()) },
 			Transact {
 				origin_type: OriginKind::SovereignAccount,
-				require_weight_at_most,
+				require_weight_at_most: xt_weight.ref_time(),
 				call: call.into(),
 			},
 		]),
@@ -256,13 +258,6 @@ fn encodes_spot_price() {
 
 #[test]
 fn registers() {
-	let fees = Box::new(MultiAsset {
-		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }),
-		fun: Fungible(300_000_000_000_000u128),
-	});
-	let weight_limit = WeightLimit::Unlimited;
-	let require_weight_at_most = u64::MAX;
-	let gas_limit = u128::MAX;
 	let mut ext = new_test_ext();
 
 	// Prerequisites
@@ -283,13 +278,10 @@ fn registers() {
 					ethereum_xcm::transact(
 						*REGISTRY,
 						registry::register(PARA_ID, PALLET_INDEX).try_into().unwrap(),
-						gas_limit,
-						None,
+						gas_limits::REGISTER
 					)
 					.into(),
-					fees,
-					weight_limit,
-					require_weight_at_most,
+					gas_limits::REGISTER
 				)
 			);
 			System::assert_last_event(

@@ -16,8 +16,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::constants::REPORTING_LOCK;
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
+use crate::{constants::REPORTING_LOCK, contracts::gas_limits};
 use codec::Encode;
 pub use constants::{DAYS, HOURS, MINUTES, WEEKS};
 use frame_support::{
@@ -204,7 +204,14 @@ pub mod pallet {
 		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
 		type ValueConverter: Convert<Vec<u8>, Result<Self::Price, DispatchError>>;
 
+		/// The sub-system used for sending XCM messages.
 		type Xcm: traits::SendXcm;
+
+		/// The asset to be used for fee payment for remote execution on the controller contract chain.
+		type XcmFeesAsset: Get<AssetId>;
+
+		/// The amount per weight unit in the asset used for fee payment for remote execution on the controller contract chain.
+		type XcmWeightToAsset: Get<u128>;
 	}
 
 	// AutoPay
@@ -597,18 +604,17 @@ pub mod pallet {
 		pub fn register(origin: OriginFor<T>) -> DispatchResult {
 			T::RegisterOrigin::ensure_origin(origin)?;
 			// Register with parachain registry contract
-			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotConfigured)?;
 			let registry_contract = T::Registry::get();
-			let message = xcm::transact(
+			const GAS_LIMIT: u64 = gas_limits::REGISTER;
+			let message = xcm::transact::<T>(
 				ethereum_xcm::transact(
 					registry_contract.address,
 					registry::register(T::ParachainId::get(), Pallet::<T>::index() as u8)
 						.try_into()
 						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					config.gas_limit,
-					None,
+					GAS_LIMIT,
 				),
-				config.xcm_config,
+				GAS_LIMIT,
 			);
 			Self::send_xcm(registry_contract.para_id, message)?;
 			Self::deposit_event(Event::RegistrationAttempted {
@@ -1234,12 +1240,10 @@ pub mod pallet {
 				.ok_or(Error::<T>::NotReporter)?
 				.address;
 
-			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotConfigured)?;
-
-			// todo: charge dispute initiator corresponding xcm fees
-
+			// Begin dispute with parachain governance contract
 			let governance_contract = T::Governance::get();
-			let message = xcm::transact(
+			const GAS_LIMIT: u64 = gas_limits::BEGIN_PARACHAIN_DISPUTE;
+			let message = xcm::transact::<T>(
 				ethereum_xcm::transact(
 					governance_contract.address,
 					governance::begin_parachain_dispute(
@@ -1252,10 +1256,9 @@ pub mod pallet {
 					)
 					.try_into()
 					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					config.gas_limit,
-					None,
+					GAS_LIMIT,
 				),
-				config.xcm_config,
+				GAS_LIMIT,
 			);
 			Self::send_xcm(governance_contract.para_id, message)?;
 			// todo: emit event such as GovernanceBeginDisputeAttempted?
@@ -1400,19 +1403,18 @@ pub mod pallet {
 			})?;
 			Self::deposit_event(Event::StakeWithdrawRequestReported { reporter, amount, address });
 
-			// Confirm staking withdraw request
+			// Confirm staking withdraw request with staking contract
 			let staking_contract = T::Staking::get();
-			let config = <Configuration<T>>::get().ok_or(Error::<T>::NotConfigured)?;
-			let message = xcm::transact(
+			const GAS_LIMIT: u64 = gas_limits::CONFIRM_STAKING_WITHDRAW_REQUEST;
+			let message = xcm::transact::<T>(
 				ethereum_xcm::transact(
 					staking_contract.address,
 					staking::confirm_parachain_stake_withdraw_request(address, amount)
 						.try_into()
 						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					config.gas_limit,
-					None,
+					GAS_LIMIT,
 				),
-				config.xcm_config,
+				GAS_LIMIT,
 			);
 			Self::send_xcm(staking_contract.para_id, message)?;
 			// todo: emit StakeWithRequestConfirmationSent event?
@@ -1551,18 +1553,17 @@ pub mod pallet {
 			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);
 
 			// Deregister from parachain registry contract
-			let config = <Configuration<T>>::take().ok_or(Error::<T>::NotConfigured)?;
 			let registry_contract = T::Registry::get();
-			let message = xcm::transact(
+			const GAS_LIMIT: u64 = gas_limits::DEREGISTER;
+			let message = xcm::transact::<T>(
 				ethereum_xcm::transact(
 					registry_contract.address,
 					registry::deregister()
 						.try_into()
 						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					config.gas_limit,
-					None,
+					GAS_LIMIT,
 				),
-				config.xcm_config,
+				GAS_LIMIT,
 			);
 			Self::send_xcm(registry_contract.para_id, message)?;
 			Self::deposit_event(Event::DeregistrationAttempted {

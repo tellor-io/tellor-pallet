@@ -103,13 +103,12 @@ pub(crate) fn transact(
 	contract_address: impl Into<H160>,
 	call_data: BoundedVec<u8, ConstU32<MAX_ETHEREUM_XCM_INPUT_SIZE>>,
 	gas_limit: impl Into<U256>,
-	value: Option<U256>,
 ) -> Vec<u8> {
 	EthereumXcm::Moonbase(EthereumXcmCall::Transact {
 		xcm_transaction: EthereumXcmTransaction::V2(EthereumXcmTransactionV2 {
 			gas_limit: gas_limit.into(),
 			action: TransactionAction::Call(contract_address.into()),
-			value: value.unwrap_or_default(),
+			value: U256::zero(), // not applicable
 			input: call_data,
 			access_list: None,
 		}),
@@ -127,7 +126,7 @@ pub(crate) mod tests {
 		let contract_address: H160 =
 			H160::from_slice(&from_hex("0xa72f549a1a12b9b49f30a7f3aeb1f4e96389c5d8").unwrap());
 		let evm_call_data = from_hex("0xd09de08a").unwrap().try_into().unwrap();
-		let call = transact(contract_address, evm_call_data, 71_000, None);
+		let call = transact(contract_address, evm_call_data, 71_000);
 		assert_eq!(from_hex("0x260001581501000000000000000000000000000000000000000000000000000000000000a72f549a1a12b9b49f30a7f3aeb1f4e96389c5d8000000000000000000000000000000000000000000000000000000000000000010d09de08a00").unwrap(),
                    call);
 	}
