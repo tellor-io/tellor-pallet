@@ -217,12 +217,12 @@ pub mod pallet {
 		StorageMap<_, Identity, QueryId, BoundedVec<FeedId, <T as Config>::MaxFeedsPerQuery>>;
 	#[pallet::storage]
 	pub(super) type DataFeeds<T> =
-		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, FeedId, FeedOf<T>>;
+		StorageDoubleMap<_, Identity, QueryId, Identity, FeedId, FeedOf<T>>;
 	#[pallet::storage]
 	pub(super) type FeedsWithFunding<T> =
 		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
-	pub(super) type QueryIdFromDataFeedId<T> = StorageMap<_, Blake2_128Concat, FeedId, QueryId>;
+	pub(super) type QueryIdFromDataFeedId<T> = StorageMap<_, Identity, FeedId, QueryId>;
 	#[pallet::storage]
 	pub(super) type QueryIdsWithFunding<T> =
 		StorageValue<_, BoundedVec<QueryId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
