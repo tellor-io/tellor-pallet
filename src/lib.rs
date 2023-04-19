@@ -289,18 +289,18 @@ pub mod pallet {
 	// Governance
 	#[pallet::storage]
 	pub(super) type DisputeIdsByReporter<T> =
-		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Blake2_128Concat, DisputeId, ()>;
+		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Identity, DisputeId, ()>;
 	#[pallet::storage]
-	pub(super) type DisputeInfo<T> = StorageMap<_, Blake2_128Concat, DisputeId, DisputeOf<T>>;
+	pub(super) type DisputeInfo<T> = StorageMap<_, Identity, DisputeId, DisputeOf<T>>;
 	#[pallet::storage]
 	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryId, u128>;
 	#[pallet::storage]
 	pub(super) type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
 	#[pallet::storage]
 	pub(super) type VoteInfo<T> =
-		StorageDoubleMap<_, Blake2_128Concat, DisputeId, Blake2_128Concat, u8, VoteOf<T>>;
+		StorageDoubleMap<_, Identity, DisputeId, Blake2_128Concat, u8, VoteOf<T>>;
 	#[pallet::storage]
-	pub(super) type VoteRounds<T> = StorageMap<_, Blake2_128Concat, DisputeId, u8, ValueQuery>;
+	pub(super) type VoteRounds<T> = StorageMap<_, Identity, DisputeId, u8, ValueQuery>;
 	#[pallet::storage]
 	pub(super) type VoteTallyByAddress<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
