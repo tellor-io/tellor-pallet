@@ -213,15 +213,11 @@ pub mod pallet {
 
 	// AutoPay
 	#[pallet::storage]
-	pub(super) type CurrentFeeds<T> = StorageMap<
-		_,
-		Blake2_128Concat,
-		QueryId,
-		BoundedVec<FeedId, <T as Config>::MaxFeedsPerQuery>,
-	>;
+	pub(super) type CurrentFeeds<T> =
+		StorageMap<_, Identity, QueryId, BoundedVec<FeedId, <T as Config>::MaxFeedsPerQuery>>;
 	#[pallet::storage]
 	pub(super) type DataFeeds<T> =
-		StorageDoubleMap<_, Blake2_128Concat, QueryId, Blake2_128Concat, FeedId, FeedOf<T>>;
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, FeedId, FeedOf<T>>;
 	#[pallet::storage]
 	pub(super) type FeedsWithFunding<T> =
 		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
@@ -232,14 +228,10 @@ pub mod pallet {
 		StorageValue<_, BoundedVec<QueryId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
 	#[pallet::storage]
 	#[pallet::getter(fn query_ids_with_funding_index)]
-	pub(super) type QueryIdsWithFundingIndex<T> = StorageMap<_, Blake2_128Concat, QueryId, u32>;
+	pub(super) type QueryIdsWithFundingIndex<T> = StorageMap<_, Identity, QueryId, u32>;
 	#[pallet::storage]
-	pub(super) type Tips<T> = StorageMap<
-		_,
-		Blake2_128Concat,
-		QueryId,
-		BoundedVec<TipOf<T>, <T as Config>::MaxTipsPerQuery>,
-	>;
+	pub(super) type Tips<T> =
+		StorageMap<_, Identity, QueryId, BoundedVec<TipOf<T>, <T as Config>::MaxTipsPerQuery>>;
 	#[pallet::storage]
 	pub(super) type UserTipsTotal<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, BalanceOf<T>, ValueQuery>;
@@ -253,7 +245,7 @@ pub mod pallet {
 	#[pallet::getter(fn last_stake_amount_update)]
 	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
 	#[pallet::storage]
-	pub(super) type Reports<T> = StorageMap<_, Blake2_128Concat, QueryId, ReportOf<T>>;
+	pub(super) type Reports<T> = StorageMap<_, Identity, QueryId, ReportOf<T>>;
 	/// Total staking rewards released per second.
 	#[pallet::storage]
 	#[pallet::getter(fn reward_rate)]
@@ -293,7 +285,7 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type DisputeInfo<T> = StorageMap<_, Identity, DisputeId, DisputeOf<T>>;
 	#[pallet::storage]
-	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Blake2_128Concat, QueryId, u128>;
+	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Identity, QueryId, u128>;
 	#[pallet::storage]
 	pub(super) type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
 	#[pallet::storage]
@@ -306,7 +298,7 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
 	// Query Data
 	#[pallet::storage]
-	pub(super) type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryId, QueryDataOf<T>>;
+	pub(super) type QueryData<T> = StorageMap<_, Identity, QueryId, QueryDataOf<T>>;
 
 	#[pallet::type_value]
 	pub fn MinimumStakeAmount<T: Config>() -> Tributes {
