@@ -72,7 +72,6 @@ impl system::Config for Test {
 	type BlockNumber = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	// todo: enforce AccountId = u128 in pallet config
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
@@ -128,7 +127,6 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Balance = Balance;
-	type ConfigureOrigin = system::EnsureRoot<AccountId>;
 	type Decimals = ConstU8<12>;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;

@@ -113,7 +113,6 @@ impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Balance = Balance;
-	type ConfigureOrigin = frame_system::EnsureRoot<AccountId>;
 	type Decimals = ();
 	type Fee = ();
 	type Governance = ();

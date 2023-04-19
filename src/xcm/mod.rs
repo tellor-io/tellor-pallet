@@ -164,13 +164,6 @@ pub(crate) fn weight_to_fee<T: Config>(weight: Weight) -> u128 {
 	(weight.ref_time() as u128).saturating_mul(T::XcmWeightToAsset::get())
 }
 
-#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-pub struct XcmConfig {
-	pub(crate) fees: MultiAsset,
-	pub(crate) weight_limit: WeightLimit,
-	pub(crate) require_weight_at_most: u64,
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;

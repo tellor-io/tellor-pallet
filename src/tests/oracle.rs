@@ -44,9 +44,6 @@ fn deposit_stake() {
 	let another_reporter = 2;
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L86
 	ext.execute_with(|| {
 		with_block(|| {
@@ -127,7 +124,6 @@ fn remove_value() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			configure();
 			super::deposit_stake(another_reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 		})
 	});
@@ -182,9 +178,6 @@ fn request_stake_withdraw() {
 	let amount = trb(1_000);
 	let address = Address::random();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L151
 	ext.execute_with(|| {
@@ -292,9 +285,6 @@ fn slash_reporter() {
 	let amount = trb(1_000);
 	let address = Address::random();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
 	ext.execute_with(|| {
@@ -660,9 +650,6 @@ fn withdraw_stake() {
 	let address = Address::random();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L323
 	ext.execute_with(|| {
 		with_block(|| {
@@ -1022,9 +1009,6 @@ fn get_staker_info() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L443
 	ext.execute_with(|| {
 		with_block(|| {
@@ -1175,9 +1159,6 @@ fn get_total_stake_amount() {
 	let address = Address::random();
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L491
 	ext.execute_with(|| {
 		with_block(|| {
@@ -1203,9 +1184,6 @@ fn get_total_stakers() {
 	let reporter = 1;
 	let address = Address::random();
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L502
 	ext.execute_with(|| {
@@ -1252,9 +1230,6 @@ fn is_in_dispute() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
 
 	ext.execute_with(|| {
 		with_block(|| {

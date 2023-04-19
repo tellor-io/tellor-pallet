@@ -36,10 +36,7 @@ fn begin_dispute() {
 
 	// Prerequisites
 	ext.execute_with(|| {
-		with_block(|| {
-			configure();
-			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random())
-		})
+		with_block(|| deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random()))
 	});
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L43
@@ -202,10 +199,7 @@ fn begin_dispute_by_non_reporter() {
 
 	// Prerequisites
 	ext.execute_with(|| {
-		with_block(|| {
-			configure();
-			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random())
-		})
+		with_block(|| deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random()))
 	});
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L43
@@ -357,8 +351,6 @@ fn begin_dispute_by_non_reporter() {
 fn begins_dispute_xcm() {
 	new_test_ext().execute_with(|| {
 		with_block(|| {
-			configure();
-
 			let reporter = 1;
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 
@@ -450,10 +442,7 @@ fn execute_vote() {
 
 	// Prerequisites
 	ext.execute_with(|| {
-		with_block(|| {
-			configure();
-			deposit_stake(dispute_reporter, MINIMUM_STAKE_AMOUNT, Address::random())
-		})
+		with_block(|| deposit_stake(dispute_reporter, MINIMUM_STAKE_AMOUNT, Address::random()))
 	});
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L85
@@ -639,9 +628,6 @@ fn tally_votes() {
 	let reporter = 1;
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L143
 	ext.execute_with(|| {
 		let dispute_id = with_block(|| {
@@ -718,9 +704,6 @@ fn vote() {
 	let reporter_1 = 1;
 	let reporter_2 = 2;
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L170
 	ext.execute_with(|| {
@@ -827,9 +810,6 @@ fn did_vote() {
 	let reporter = 1;
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L248
 	ext.execute_with(|| {
 		with_block(|| {
@@ -874,9 +854,6 @@ fn get_dispute_info() {
 	let reporter = 1;
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L260
 	ext.execute_with(|| {
 		with_block(|| {
@@ -920,10 +897,7 @@ fn get_disputes_by_reporter() {
 
 	// Prerequisites
 	ext.execute_with(|| {
-		with_block(|| {
-			configure();
-			deposit_stake(dispute_initiator, MINIMUM_STAKE_AMOUNT, Address::random())
-		})
+		with_block(|| deposit_stake(dispute_initiator, MINIMUM_STAKE_AMOUNT, Address::random()))
 	});
 
 	ext.execute_with(|| {
@@ -1004,9 +978,6 @@ fn get_open_disputes_on_id() {
 	let another_reporter = 2;
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L274
 	ext.execute_with(|| {
 		let timestamp = with_block(|| {
@@ -1083,9 +1054,6 @@ fn get_vote_count() {
 	let reporter = 1;
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L298
 	ext.execute_with(|| {
 		let dispute_id = with_block(|| {
@@ -1154,9 +1122,6 @@ fn get_vote_info() {
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L322
 	ext.execute_with(|| {
@@ -1241,9 +1206,6 @@ fn get_vote_rounds() {
 	let reporter = 1;
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L361
 	ext.execute_with(|| {
 		let (timestamp, dispute_id) = with_block(|| {
@@ -1296,9 +1258,6 @@ fn get_vote_tally_by_address() {
 	let reporter = 1;
 	let another_reporter = 2;
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L383
 	ext.execute_with(|| {
@@ -1377,9 +1336,6 @@ fn get_tips_by_address() {
 	let reporter = 2;
 	let mut ext = new_test_ext();
 
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L404
 	ext.execute_with(|| {
 		let dispute_id = with_block(|| {
@@ -1451,10 +1407,7 @@ fn invalid_dispute() {
 
 	// Prerequisites
 	ext.execute_with(|| {
-		with_block(|| {
-			configure();
-			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
-		})
+		with_block(|| deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random()))
 	});
 
 	ext.execute_with(|| {
@@ -1496,9 +1449,6 @@ fn slash_dispute_initiator() {
 	let reporter = 1;
 	let another_reporter = 2;
 	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
 
 	ext.execute_with(|| {
 		Balances::make_free_balance_be(&another_reporter, token(1_000));

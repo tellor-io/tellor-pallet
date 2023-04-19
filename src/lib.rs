@@ -98,9 +98,6 @@ pub mod pallet {
 		/// The units in which we record balances.
 		type Balance: Balance + From<u64> + Into<U256>;
 
-		/// Origin that handles configuration of the pallet.
-		type ConfigureOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
-
 		/// The number of decimals used by the balance unit.
 		#[pallet::constant]
 		type Decimals: Get<u8>;
@@ -312,9 +309,6 @@ pub mod pallet {
 	// Query Data
 	#[pallet::storage]
 	pub(super) type QueryData<T> = StorageMap<_, Blake2_128Concat, QueryId, QueryDataOf<T>>;
-	// Configuration
-	#[pallet::storage]
-	pub(super) type Configuration<T> = StorageValue<_, types::Configuration>;
 
 	#[pallet::type_value]
 	pub fn MinimumStakeAmount<T: Config>() -> Tributes {
@@ -409,8 +403,6 @@ pub mod pallet {
 		QueryDataStored { query_id: QueryId },
 
 		// Registration
-		/// Emitted when the pallet is (re-)configured.
-		Configured {},
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
 		/// Emitted when deregistration from the controller contracts is attempted.
@@ -525,9 +517,6 @@ pub mod pallet {
 		/// Time for voting has not elapsed.
 		VotingPeriodActive,
 
-		// Configuration
-		NotConfigured,
-
 		// XCM
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,
@@ -569,38 +558,8 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Configures the pallet.
-		///
-		/// - `fees`: The asset(s) to pay for cross-chain message fees.
-		/// - `weight_limit`: The maximum amount of weight to purchase for remote execution of messages.
-		/// - `require_weight_at_most`: The maximum weight of any remote call.
-		/// - `gas_limit`: Gas limit to be consumed by remote EVM execution.
-		#[pallet::call_index(0)]
-		pub fn configure(
-			origin: OriginFor<T>,
-			fees: Box<MultiAsset>,
-			weight_limit: WeightLimit,
-			require_weight_at_most: u64,
-			gas_limit: u128,
-		) -> DispatchResult {
-			T::ConfigureOrigin::ensure_origin(origin)?;
-
-			// Update configuration
-			let config = types::Configuration {
-				xcm_config: xcm::XcmConfig {
-					fees: *fees.clone(),
-					weight_limit: weight_limit.clone(),
-					require_weight_at_most,
-				},
-				gas_limit,
-			};
-			<Configuration<T>>::set(Some(config));
-			Self::deposit_event(Event::Configured {});
-			Ok(())
-		}
-
 		/// Registers the parachain with the Tellor controller contracts.
-		#[pallet::call_index(1)]
+		#[pallet::call_index(0)]
 		pub fn register(origin: OriginFor<T>) -> DispatchResult {
 			T::RegisterOrigin::ensure_origin(origin)?;
 			// Register with parachain registry contract
@@ -628,7 +587,7 @@ pub mod pallet {
 		///
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
-		#[pallet::call_index(2)]
+		#[pallet::call_index(1)]
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -699,7 +658,7 @@ pub mod pallet {
 		/// - `feed_id`: Unique feed identifier.
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
-		#[pallet::call_index(3)]
+		#[pallet::call_index(2)]
 		pub fn claim_tip(
 			origin: OriginFor<T>,
 			feed_id: FeedId,
@@ -800,7 +759,7 @@ pub mod pallet {
 		/// - `feed_id`: Unique feed identifier.
 		/// - `query_id`: Identifier of reported data type associated with feed.
 		/// - `amount`: Quantity of tokens to fund feed.
-		#[pallet::call_index(4)]
+		#[pallet::call_index(3)]
 		pub fn fund_feed(
 			origin: OriginFor<T>,
 			feed_id: FeedId,
@@ -822,7 +781,7 @@ pub mod pallet {
 		/// - `reward_increase_per_second`: Amount reward increases per second within a window (0 for flat reward).
 		/// - `query_data`: The data used by reporters to fulfil the query.
 		/// - `amount`: Optional initial amount to fund it with.
-		#[pallet::call_index(5)]
+		#[pallet::call_index(4)]
 		pub fn setup_data_feed(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -902,7 +861,7 @@ pub mod pallet {
 		/// - `query_id`: Identifier of tipped data.
 		/// - `amount`: Amount to tip.
 		/// - `query_data`: The data used by reporters to fulfil the query.
-		#[pallet::call_index(6)]
+		#[pallet::call_index(5)]
 		pub fn tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -972,7 +931,7 @@ pub mod pallet {
 		/// Funds the staking account with staking rewards.
 		///
 		/// - `amount`: Amount of tokens to fund staking account with.
-		#[pallet::call_index(7)]
+		#[pallet::call_index(6)]
 		pub fn add_staking_rewards(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
 			let funder = ensure_signed(origin)?;
 			Self::do_add_staking_rewards(&funder, amount)
@@ -984,7 +943,7 @@ pub mod pallet {
 		/// - `value`: Value the user submits to the oracle.
 		/// - `nonce`: The current value count for the query identifier.
 		/// - `query_data`: The data used to fulfil the data query.
-		#[pallet::call_index(8)]
+		#[pallet::call_index(7)]
 		pub fn submit_value(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1107,7 +1066,7 @@ pub mod pallet {
 		}
 
 		/// Updates the stake amount after retrieving the latest token price from oracle.
-		#[pallet::call_index(9)]
+		#[pallet::call_index(8)]
 		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
 			ensure_signed(origin)?;
 			Self::do_update_stake_amount()
@@ -1118,7 +1077,7 @@ pub mod pallet {
 		/// - `query_id`: Query identifier being disputed.
 		/// - `timestamp`: Timestamp being disputed.
 		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
-		#[pallet::call_index(10)]
+		#[pallet::call_index(9)]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1269,7 +1228,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `supports`: Whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
-		#[pallet::call_index(11)]
+		#[pallet::call_index(10)]
 		pub fn vote(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1325,7 +1284,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who deposited a stake.
 		/// - `amount`: The amount staked.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(12)]
+		#[pallet::call_index(11)]
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1375,7 +1334,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who requested a withdrawal.
 		/// - `amount`: The amount requested to withdraw.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(13)]
+		#[pallet::call_index(12)]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1426,7 +1385,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who withdrew a stake.
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(14)]
+		#[pallet::call_index(13)]
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1465,7 +1424,7 @@ pub mod pallet {
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
-		#[pallet::call_index(15)]
+		#[pallet::call_index(14)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1523,7 +1482,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The outcome of the vote, as determined by governance.
-		#[pallet::call_index(16)]
+		#[pallet::call_index(15)]
 		pub fn report_vote_tallied(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1538,7 +1497,7 @@ pub mod pallet {
 		/// Reports the execution of a vote.
 		///
 		/// - `dispute_id`: The identifier of the dispute.
-		#[pallet::call_index(17)]
+		#[pallet::call_index(16)]
 		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
@@ -1547,7 +1506,7 @@ pub mod pallet {
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(18)]
+		#[pallet::call_index(17)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegisterOrigin::ensure_origin(origin)?;
 			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);

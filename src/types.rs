@@ -244,12 +244,6 @@ pub(crate) mod governance {
 	}
 }
 
-#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-pub struct Configuration {
-	pub(crate) xcm_config: crate::xcm::XcmConfig,
-	pub(crate) gas_limit: u128,
-}
-
 pub(super) struct U256ToBalance<T>(PhantomData<T>);
 impl<T: Config> Convert<U256, BalanceOf<T>> for U256ToBalance<T> {
 	fn convert(a: U256) -> BalanceOf<T> {
