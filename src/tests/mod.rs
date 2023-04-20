@@ -16,14 +16,14 @@
 
 use crate::{
 	constants::DECIMALS,
-	contracts::registry,
+	contracts::{gas_limits, registry},
 	mock,
 	mock::*,
 	types::{
 		AccountIdOf, Address, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp, Tributes,
 		ValueOf,
 	},
-	xcm::{ethereum_xcm, XcmConfig},
+	xcm::{ethereum_xcm, gas_to_weight, weigh, DbWeight},
 	Event, Origin, StakeAmount,
 };
 use ethabi::{Bytes, Token, Uint};
@@ -44,8 +44,6 @@ mod governance;
 mod oracle;
 
 type Balance = <Test as crate::Config>::Balance;
-type Config = crate::types::Configuration;
-type Configuration = crate::pallet::Configuration<Test>;
 type Error = crate::Error<Test>;
 type U256ToBalance = crate::types::U256ToBalance<Test>;
 
@@ -100,18 +98,6 @@ fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Tributes>, addre
 	));
 }
 
-// Configures the parachain for remote transact calls to controller contracts
-fn configure() {
-	let self_reserve = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
-	assert_ok!(Tellor::configure(
-		RuntimeOrigin::root(),
-		Box::new(MultiAsset { id: Concrete(self_reserve), fun: Fungible(300_000_000_000_000u128) }),
-		WeightLimit::Unlimited,
-		u64::MAX,
-		u128::MAX
-	));
-}
-
 fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 	ethabi::encode(&[
 		Token::String("SpotPrice".to_string()),
@@ -137,69 +123,27 @@ fn unit() -> u128 {
 	10u128.pow(decimals.into())
 }
 
-fn xcm_transact(
-	call: DoubleEncoded<RuntimeCall>,
-	fees: Box<MultiAsset>,
-	weight_limit: WeightLimit,
-	require_weight_at_most: u64,
-) -> Vec<(MultiLocation, Xcm<()>)> {
+fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> Vec<(MultiLocation, Xcm<()>)> {
+	// Calculate weights and fees to construct xcm
+	let xt_weight = gas_to_weight(gas_limit) + DbWeight::get().reads(1);
+	let total_weight = weigh() + xt_weight;
+	let fees = MultiAsset {
+		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }), // Balances pallet for simplicity
+		fun: Fungible(total_weight.ref_time() as u128 * 50_000),
+	};
 	vec![(
 		MultiLocation { parents: 1, interior: X1(Parachain(EVM_PARA_ID)) },
 		Xcm(vec![
 			DescendOrigin(X1(PalletInstance(PALLET_INDEX))), // interior
-			WithdrawAsset((*fees.clone()).into()),
-			BuyExecution { fees: *fees, weight_limit },
+			WithdrawAsset(fees.clone().into()),
+			BuyExecution { fees, weight_limit: Limited(total_weight.ref_time()) },
 			Transact {
 				origin_type: OriginKind::SovereignAccount,
-				require_weight_at_most,
+				require_weight_at_most: xt_weight.ref_time(),
 				call: call.into(),
 			},
 		]),
 	)]
-}
-
-#[test]
-fn configures() {
-	let fees = Box::new(MultiAsset {
-		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }),
-		fun: Fungible(300_000_000_000_000u128),
-	});
-	let weight_limit = WeightLimit::Limited(123456);
-	let require_weight_at_most = u64::MAX;
-	let gas_limit = u128::MAX;
-
-	new_test_ext().execute_with(|| {
-		with_block(|| {
-			for origin in
-				vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
-			{
-				assert_noop!(
-					Tellor::configure(origin, fees.clone(), WeightLimit::Unlimited, 0, 0),
-					BadOrigin
-				);
-			}
-
-			assert_ok!(Tellor::configure(
-				RuntimeOrigin::root(),
-				fees.clone(),
-				weight_limit.clone(),
-				require_weight_at_most,
-				gas_limit
-			));
-			assert_eq!(
-				Configuration::get().unwrap(),
-				Config {
-					xcm_config: XcmConfig {
-						fees: *fees.clone(),
-						weight_limit: weight_limit.clone(),
-						require_weight_at_most
-					},
-					gas_limit
-				}
-			);
-			System::assert_last_event(Event::Configured {}.into())
-		});
-	});
 }
 
 #[test]
@@ -256,19 +200,7 @@ fn encodes_spot_price() {
 
 #[test]
 fn registers() {
-	let fees = Box::new(MultiAsset {
-		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }),
-		fun: Fungible(300_000_000_000_000u128),
-	});
-	let weight_limit = WeightLimit::Unlimited;
-	let require_weight_at_most = u64::MAX;
-	let gas_limit = u128::MAX;
-	let mut ext = new_test_ext();
-
-	// Prerequisites
-	ext.execute_with(|| with_block(|| configure()));
-
-	ext.execute_with(|| {
+	new_test_ext().execute_with(|| {
 		with_block(|| {
 			for origin in
 				vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
@@ -283,13 +215,10 @@ fn registers() {
 					ethereum_xcm::transact(
 						*REGISTRY,
 						registry::register(PARA_ID, PALLET_INDEX).try_into().unwrap(),
-						gas_limit,
-						None,
+						gas_limits::REGISTER
 					)
 					.into(),
-					fees,
-					weight_limit,
-					require_weight_at_most,
+					gas_limits::REGISTER
 				)
 			);
 			System::assert_last_event(

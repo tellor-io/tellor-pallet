@@ -107,12 +107,12 @@ impl pallet_timestamp::Config for Test {
 }
 parameter_types! {
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
+	pub const XcmFeesAsset: AssetId = AssetId::Abstract(vec![]);
 }
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Balance = Balance;
-	type ConfigureOrigin = frame_system::EnsureRoot<AccountId>;
 	type Decimals = ();
 	type Fee = ();
 	type Governance = ();
@@ -142,6 +142,8 @@ impl tellor::Config for Test {
 	type UpdateStakeAmountInterval = ();
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
+	type XcmFeesAsset = XcmFeesAsset;
+	type XcmWeightToAsset = ();
 }
 pub struct TestSendXcm;
 impl tellor::traits::SendXcm for TestSendXcm {

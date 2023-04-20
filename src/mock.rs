@@ -72,7 +72,6 @@ impl system::Config for Test {
 	type BlockNumber = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	// todo: enforce AccountId = u128 in pallet config
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
@@ -121,13 +120,13 @@ parameter_types! {
 	pub TellorGovernance: ContractLocation = (EVM_PARA_ID, *GOVERNANCE).into();
 	pub TellorStaking: ContractLocation = (EVM_PARA_ID, *STAKING).into();
 	pub StakingTokenPriceQueryId: H256 = H256([211,194,112,119,36,198,191,243,89,99,24,187,3,60,229,109,166,126,119,8,208,251,201,107,66,216,126,12,172,199,241,136]);
+	pub XcmFeesAsset : AssetId = AssetId::Concrete(PalletInstance(3).into()); // Balances pallet on EVM parachain
 }
 
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Balance = Balance;
-	type ConfigureOrigin = system::EnsureRoot<AccountId>;
 	type Decimals = ConstU8<12>;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
@@ -157,6 +156,8 @@ impl tellor::Config for Test {
 	type UpdateStakeAmountInterval = ConstU64<{ 12 * HOURS }>;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
+	type XcmFeesAsset = XcmFeesAsset;
+	type XcmWeightToAsset = ConstU128<50_000>; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
 }
 
 pub struct ValueConverter;

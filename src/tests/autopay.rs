@@ -46,7 +46,6 @@ fn claim_tip_ensures() {
 	// Prerequisites
 	let claimed = ext.execute_with(|| {
 		with_block(|| {
-			configure();
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 			deposit_stake(another_reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 
@@ -975,7 +974,6 @@ fn claim_onetime_tip() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			configure();
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 			deposit_stake(another_reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 		});
