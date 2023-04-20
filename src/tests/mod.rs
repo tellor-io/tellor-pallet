@@ -24,7 +24,7 @@ use crate::{
 		ValueOf,
 	},
 	xcm::{ethereum_xcm, gas_to_weight, weigh, DbWeight},
-	Event, Origin, StakeAmount,
+	Event, Origin,
 };
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{

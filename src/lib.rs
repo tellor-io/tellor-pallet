@@ -193,14 +193,14 @@ pub mod pallet {
 		#[pallet::constant]
 		type StakingTokenPriceQueryId: Get<QueryId>;
 
+		/// Staking token to local token 'SpotPrice' query identifier, used for updating dispute fee.
+		#[pallet::constant]
+		type StakingToLocalTokenPriceQueryId: Get<QueryId>;
+
 		/// The on-chain time provider.
 		type Time: UnixTime;
 
 		type Token: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
-
-		/// Staking token to local token 'SpotPrice' query identifier, used for updating dispute fee.
-		#[pallet::constant]
-		type TokenPriceQueryId: Get<QueryId>;
 
 		/// Frequency of stake amount updates.
 		#[pallet::constant]

@@ -1181,7 +1181,7 @@ impl<T: Config> Pallet<T> {
 	// Updates the dispute fee after retrieving the latest token price from oracle.
 	pub(super) fn update_dispute_fee() -> DispatchResult {
 		let Some((value, _)) = Self::get_data_before(
-			T::TokenPriceQueryId::get(),
+			T::StakingToLocalTokenPriceQueryId::get(),
 			Self::now().saturating_sub(12 * HOURS),
 		) else {
 			return Err(Error::<T>::InvalidPrice.into());
@@ -1194,9 +1194,17 @@ impl<T: Config> Pallet<T> {
 			token_price >= 10u128.pow(16).into() && token_price < 10u128.pow(24).into(),
 			Error::<T>::InvalidPrice
 		);
-		let dispute_fee = Self::calculate_dispute_fee(token_price)?;
-		<DisputeFee<T>>::set(dispute_fee);
-		Self::deposit_event(Event::NewDisputeFee { dispute_fee });
+		let new_dispute_fee = Self::calculate_dispute_fee(token_price)?;
+		let _ = <DisputeFee<T>>::try_mutate(|dispute_fee| {
+			// Only update and deposit event if value has changed
+			if new_dispute_fee != *dispute_fee {
+				*dispute_fee = new_dispute_fee;
+				Self::deposit_event(Event::NewDisputeFee { dispute_fee: new_dispute_fee });
+				Ok(())
+			} else {
+				Err(())
+			}
+		});
 		Ok(())
 	}
 

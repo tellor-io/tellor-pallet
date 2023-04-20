@@ -117,7 +117,7 @@ impl tellor::Config for Test {
 	type Fee = ();
 	type Governance = ();
 	type GovernanceOrigin = EnsureGovernance;
-	type InitialTokenPrice = ();
+	type InitialDisputeFee = ();
 	type MaxClaimTimestamps = ();
 	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ();
@@ -138,9 +138,9 @@ impl tellor::Config for Test {
 	type Staking = ();
 	type StakingOrigin = EnsureStaking;
 	type StakingTokenPriceQueryId = ();
+	type StakingToLocalTokenPriceQueryId = ();
 	type Time = Time;
 	type Token = Balances;
-	type TokenPriceQueryId = ();
 	type UpdateStakeAmountInterval = ();
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;

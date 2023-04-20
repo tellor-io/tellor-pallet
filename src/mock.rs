@@ -120,6 +120,7 @@ parameter_types! {
 	pub TellorGovernance: ContractLocation = (EVM_PARA_ID, *GOVERNANCE).into();
 	pub TellorStaking: ContractLocation = (EVM_PARA_ID, *STAKING).into();
 	pub StakingTokenPriceQueryId: H256 = H256([211,194,112,119,36,198,191,243,89,99,24,187,3,60,229,109,166,126,119,8,208,251,201,107,66,216,126,12,172,199,241,136]);
+	pub StakingToLocalTokenPriceQueryId: H256 = H256([252, 212, 53, 69, 139, 47, 79, 224, 14, 207, 98, 192, 81, 195, 123, 170, 138, 241, 23, 4, 53, 70, 22, 191, 191, 171, 11, 101, 130, 16, 61, 30]);
 	pub XcmFeesAsset : AssetId = AssetId::Concrete(PalletInstance(3).into()); // Balances pallet on EVM parachain
 }
 
@@ -131,7 +132,7 @@ impl tellor::Config for Test {
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
-	type InitialDisputeFee = ConstU128<{ 50 * 10u128.pow(12) }>;
+	type InitialDisputeFee = ConstU128<{ 50 * 10u128.pow(12) }>; // (100 TRB / 10) * 5, where TRB 1:5 OCP
 	type MaxClaimTimestamps = ConstU32<10>;
 	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;
@@ -152,9 +153,9 @@ impl tellor::Config for Test {
 	type Staking = TellorStaking;
 	type StakingOrigin = EnsureStaking;
 	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
+	type StakingToLocalTokenPriceQueryId = StakingToLocalTokenPriceQueryId;
 	type Time = Timestamp;
 	type Token = Balances;
-	type TokenPriceQueryId = ();
 	type UpdateStakeAmountInterval = ConstU64<{ 12 * HOURS }>;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
@@ -235,5 +236,7 @@ pub(crate) fn with_block_after<R>(time_in_secs: u64, execute: impl FnOnce() -> R
 			));
 		},
 	}
-	execute()
+	let result = execute();
+	System::reset_events(); // Reset events after block executed, ensuring we only receive events for current block
+	result
 }
