@@ -265,8 +265,6 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
-	#[pallet::storage]
-	pub(super) type StakerAddresses<T> = StorageMap<_, Blake2_128Concat, Address, AccountIdOf<T>>;
 	/// The time of last update to AccumulatedRewardPerShare.
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_allocation)]
