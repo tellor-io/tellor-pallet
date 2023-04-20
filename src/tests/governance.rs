@@ -142,7 +142,6 @@ fn begin_dispute() {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				reporter,
-				another_reporter,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
 		});
@@ -301,7 +300,6 @@ fn begin_dispute_by_non_reporter() {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				reporter,
-				another_reporter,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
 		});

@@ -364,7 +364,7 @@ pub mod pallet {
 		/// Emitted when a new staker is reported.
 		NewStakerReported { staker: AccountIdOf<T>, amount: Tributes, address: Address },
 		/// Emitted when a stake slash is reported.
-		SlashReported { reporter: AccountIdOf<T>, recipient: AccountIdOf<T>, amount: Tributes },
+		SlashReported { reporter: AccountIdOf<T>, amount: Tributes },
 		/// Emitted when a stake withdrawal is reported.
 		StakeWithdrawnReported { staker: AccountIdOf<T> },
 		/// Emitted when a stake withdrawal request is reported.
@@ -1420,13 +1420,11 @@ pub mod pallet {
 		/// Reports a slashing of a reporter, due to a passing vote.
 		///
 		/// - `reporter`: The address of the slashed reporter.
-		/// - `recipient`: The address of the recipient.
 		/// - `amount`: The slashed amount.
 		#[pallet::call_index(14)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
-			recipient: AccountIdOf<T>,
 			amount: Tributes,
 		) -> DispatchResult {
 			// ensure origin is governance controller contract
@@ -1472,7 +1470,7 @@ pub mod pallet {
 					},
 				}
 			})?;
-			Self::deposit_event(Event::SlashReported { reporter, recipient, amount });
+			Self::deposit_event(Event::SlashReported { reporter, amount });
 			Ok(())
 		}
 
