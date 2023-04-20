@@ -120,6 +120,8 @@ parameter_types! {
 	pub StakingTokenPriceQueryId: H256 = H256([211,194,112,119,36,198,191,243,89,99,24,187,3,60,229,109,166,126,119,8,208,251,201,107,66,216,126,12,172,199,241,136]);
 	pub StakingToLocalTokenPriceQueryId: H256 = H256([252, 212, 53, 69, 139, 47, 79, 224, 14, 207, 98, 192, 81, 195, 123, 170, 138, 241, 23, 4, 53, 70, 22, 191, 191, 171, 11, 101, 130, 16, 61, 30]);
 	pub XcmFeesAsset : AssetId = AssetId::Concrete(PalletInstance(3).into()); // Balances pallet on EVM parachain
+	pub RemoteXcmFeeLocation : MultiLocation = MultiLocation { parents: 0, interior: X1(PalletInstance(3)) };
+
 }
 
 impl tellor::Config for Test {
@@ -128,6 +130,7 @@ impl tellor::Config for Test {
 	type Asset = Balances;
 	type Balance = Balance;
 	type Decimals = ConstU8<12>;
+	type RemoteXCMWeightToFee = ConstU128<10000>;
 	type Fee = ConstU16<10>; // 1%
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
@@ -156,7 +159,8 @@ impl tellor::Config for Test {
 	type UpdateStakeAmountInterval = ConstU64<{ 12 * HOURS }>;
 	type Xcm = TestSendXcm;
 	type XcmFeesAsset = XcmFeesAsset;
-	type XcmWeightToAsset = ConstU128<50_000>; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
+	type XcmWeightToAsset = ConstU128<50_000>;
+	type RemoteXcmFeeLocation = RemoteXcmFeeLocation; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
 }
 
 thread_local! {
