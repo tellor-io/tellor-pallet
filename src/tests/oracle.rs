@@ -281,7 +281,6 @@ fn slash_reporter() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
 	let reporter = 1;
-	let recipient = 2;
 	let amount = trb(1_000);
 	let address = Address::random();
 	let mut ext = new_test_ext();
@@ -293,7 +292,6 @@ fn slash_reporter() {
 			assert_noop!(
 				Tellor::report_slash(
 					RuntimeOrigin::signed(reporter),
-					0,
 					0,
 					MINIMUM_STAKE_AMOUNT.into()
 				),
@@ -330,7 +328,6 @@ fn slash_reporter() {
 				Tellor::report_slash(
 					Origin::Governance.into(),
 					0,
-					0,
 					(MINIMUM_STAKE_AMOUNT + 1).into()
 				),
 				Error::InsufficientStake
@@ -338,7 +335,6 @@ fn slash_reporter() {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				reporter,
-				recipient,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
 
@@ -379,7 +375,6 @@ fn slash_reporter() {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				reporter,
-				recipient,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
 			assert_eq!(Tellor::time_of_last_allocation(), now());
@@ -418,7 +413,6 @@ fn slash_reporter() {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				reporter,
-				recipient,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
 			assert_eq!(Tellor::time_of_last_allocation(), now());
@@ -466,7 +460,6 @@ fn slash_reporter() {
 			assert_ok!(Tellor::report_slash(
 				Origin::Governance.into(),
 				reporter,
-				recipient,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
 			assert_eq!(Tellor::time_of_last_allocation(), now());
