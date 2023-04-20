@@ -2064,78 +2064,217 @@ fn update_dispute_fee() {
 }
 
 #[test]
-fn update_stake_amount_via_hook() {
-	let query_data: QueryDataOf<Test> = spot_price("trb", "gbp").try_into().unwrap();
-	let query_id = keccak_256(query_data.as_ref()).into();
-	println!("{:?}", query_id);
+fn update_stake_amount_and_dispute_fee_via_hook() {
+	let staking_token_price_query_data: QueryDataOf<Test> =
+		spot_price("trb", "gbp").try_into().unwrap();
+	let staking_token_price_query_id = keccak_256(staking_token_price_query_data.as_ref()).into();
+	let staking_to_local_token_query_data: QueryDataOf<Test> =
+		spot_price("trb", "ocp").try_into().unwrap();
+	let staking_to_local_token_query_id: QueryId =
+		keccak_256(staking_to_local_token_query_data.as_ref()).into();
 	let reporter = 1;
+	let dispute_fee = <Test as Config>::InitialDisputeFee::get();
 	let mut ext = new_test_ext();
 
-	let stake_amount_currency_target: u128 = StakeAmountCurrencyTarget::get();
-
-	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
+			Tellor::on_initialize(System::block_number());
+			// Setup
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
 				trb(10_000),
 				Address::random()
 			));
-		})
-	});
 
-	ext.execute_with(|| {
-		with_block(|| {
-			// Test no reported TRB price
-			assert_noop!(
-				Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)),
-				Error::InvalidStakingTokenPrice
-			);
-			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
-
-			// Add price
+			// Test updating when 12 hrs have NOT passed
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
-				query_id,
+				staking_token_price_query_id,
 				uint_value(PRICE_TRB * 2),
 				0,
-				query_data.clone()
+				staking_token_price_query_data.clone()
 			));
-
-			assert_eq!(Tellor::last_stake_amount_update(), 0);
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
 		});
 
 		// Test updating when 12 hrs have passed
 		with_block_after(60 * 60 * 12, || {
 			Tellor::on_initialize(System::block_number());
-			System::assert_last_event(
-				Event::NewStakeAmount { amount: MINIMUM_STAKE_AMOUNT.into() }.into(),
-			);
-			assert_eq!(Tellor::last_stake_amount_update(), Tellor::now());
+			// No trb:token price reported yet, so dispute fee cannot be calculated as part of stake amount update
 			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_to_local_token_query_id,
+				uint_value(PRICE_TRB_LOCAL),
+				0,
+				staking_to_local_token_query_data.clone()
+			));
+			// Requires waiting another 12 hours until reported price clears dispute period
+		});
+
+		// Test updating when 12 hrs have passed
+		let dispute_fee = with_block_after(60 * 60 * 12, || {
+			Tellor::on_initialize(System::block_number());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+			let dispute_fee = token(10 * 6); // 10% of 100 * PRICE_TRB_LOCAL
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
+			dispute_fee
+		});
+
+		// Test updating when multiple prices have been reported
+		with_block_after(60 * 60 * 1, || {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				uint_value((PRICE_TRB as f64 * 1.5) as u64),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 1, || {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				uint_value(PRICE_TRB * 2),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 1, || {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				uint_value(PRICE_TRB * 3),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 12, || {
+			Tellor::on_initialize(System::block_number());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
+		});
+
+		// Test bad TRB price encoding
+		let bad_price = b"Where's the beef?";
+		with_block(|| {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				bad_price.to_vec().try_into().unwrap(),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(86_400 / 2, || {
+			Tellor::on_initialize(System::block_number());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
+		});
+
+		// Test reported TRB price outside limits - high
+		let high_price = trb(1_000_001);
+		with_block(|| {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				uint_value(high_price),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(86_400 / 2, || {
+			Tellor::on_initialize(System::block_number());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
+		});
+
+		// Test reported TRB price outside limits - low
+		let low_price = trb(0.009);
+		with_block(|| {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				uint_value(low_price),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(86_400 / 2, || {
+			Tellor::on_initialize(System::block_number());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
+		});
+
+		// Test hook when multiple prices have been reported
+		with_block_after(60 * 60 * 1, || {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				uint_value(PRICE_TRB * 7),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 1, || {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				uint_value(PRICE_TRB * 8),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 1, || {
+			Tellor::on_initialize(System::block_number());
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				staking_token_price_query_id,
+				uint_value(PRICE_TRB * 9),
+				0,
+				staking_token_price_query_data.clone()
+			));
+		});
+		with_block_after(60 * 60 * 12, || {
+			Tellor::on_initialize(System::block_number());
+			assert_eq!(Tellor::get_stake_amount(), MINIMUM_STAKE_AMOUNT.into());
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
 		});
 
 		// Test with price that updates stake amount
 		let price = PRICE_TRB / 11;
 		with_block(|| {
+			Tellor::on_initialize(System::block_number());
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
-				query_id,
+				staking_token_price_query_id,
 				uint_value(price),
 				0,
-				query_data.clone()
+				staking_token_price_query_data.clone()
 			));
 		});
 		with_block_after(60 * 60 * 12, || {
 			Tellor::on_initialize(System::block_number());
+			let stake_amount_currency_target: u128 = StakeAmountCurrencyTarget::get();
 			let expected_stake_amount = (U256::from(stake_amount_currency_target) *
 				U256::from(10u128.pow(18))) /
 				U256::from(price);
-			System::assert_last_event(
-				Event::NewStakeAmount { amount: expected_stake_amount }.into(),
-			);
 			assert_eq!(Tellor::get_stake_amount(), expected_stake_amount);
+			// Dispute fee changes with stake amount
+			let dispute_fee =
+				U256ToBalance::convert(Tellor::convert(expected_stake_amount / 10).unwrap()) * 6; // TRB 1:6 OCP
+			assert_eq!(Tellor::get_dispute_fee(), dispute_fee);
 		});
 	});
 }

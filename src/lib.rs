@@ -552,18 +552,22 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(_n: T::BlockNumber) -> Weight {
+			let timestamp = Self::now();
+
 			// update stake amount/dispute fee
 			const MIN_INTERVAL: Timestamp = 12 * HOURS;
 			let update_interval = T::UpdateStakeAmountInterval::get();
 			if update_interval > Zero::zero() {
-				let timestamp = Self::now();
-				// todo: use storage transaction to ensure stake amount and dispute fee updated together
 				if timestamp >=
-					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL) &&
-					Pallet::<T>::do_update_stake_amount().is_ok() &&
-					Pallet::<T>::update_dispute_fee().is_ok()
+					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL)
 				{
-					<LastStakeAmountUpdate<T>>::set(timestamp);
+					// use storage layer (transaction) to ensure stake amount/dispute fee updated together
+					let _ = storage::with_storage_layer(|| -> Result<(), DispatchResult> {
+						Pallet::<T>::do_update_stake_amount()?;
+						Pallet::<T>::update_dispute_fee()?;
+						<LastStakeAmountUpdate<T>>::set(timestamp);
+						Ok(())
+					});
 				}
 			}
 
