@@ -64,7 +64,12 @@ pub mod pallet {
 		xcm::{self, ethereum_xcm},
 		*,
 	};
-	use crate::{contracts::staking, types::oracle::Report, xcm::ContractLocation, Tip};
+	use crate::{
+		contracts::{staking, Abi},
+		types::oracle::Report,
+		xcm::ContractLocation,
+		Tip,
+	};
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
@@ -786,17 +791,15 @@ pub mod pallet {
 		) -> DispatchResult {
 			let feed_creator = ensure_signed(origin)?;
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
-			let feed_id = Keccak256::hash(
-				&contracts::Abi::default()
-					.fixed_bytes(query_id.as_ref())
-					.uint(reward)
-					.uint(start_time.saturated_into::<u128>())
-					.uint(interval.saturated_into::<u128>())
-					.uint(window.saturated_into::<u128>())
-					.uint(price_threshold as u128)
-					.uint(reward_increase_per_second.into())
-					.encode(),
-			);
+			let feed_id = Keccak256::hash(&contracts::encode(&vec![
+				Abi::FixedBytes(query_id.0.into()),
+				Abi::Uint(reward.into()),
+				Abi::Uint(start_time.into()),
+				Abi::Uint(interval.into()),
+				Abi::Uint(window.into()),
+				Abi::Uint(price_threshold.into()),
+				Abi::Uint(reward_increase_per_second.into()),
+			]));
 			let feed = <DataFeeds<T>>::get(query_id, feed_id);
 			ensure!(feed.is_none(), Error::<T>::FeedAlreadyExists);
 			ensure!(reward > Zero::zero(), Error::<T>::InvalidReward);
@@ -1086,13 +1089,11 @@ pub mod pallet {
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
 				Error::<T>::NoValueExists
 			);
-			let dispute_id: DisputeId = Keccak256::hash(
-				&contracts::Abi::default()
-					.uint(T::ParachainId::get())
-					.fixed_bytes(query_id.as_ref())
-					.uint(timestamp.saturated_into::<u128>())
-					.encode(),
-			);
+			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&vec![
+				Abi::Uint(T::ParachainId::get().into()),
+				Abi::FixedBytes(query_id.0.into()),
+				Abi::Uint(timestamp.into()),
+			]));
 			// Push new vote round
 			let vote_round = <VoteRounds<T>>::try_mutate(
 				dispute_id,
@@ -1197,7 +1198,7 @@ pub mod pallet {
 					governance_contract.address,
 					governance::begin_parachain_dispute(
 						query_id.as_ref(),
-						timestamp.saturated_into::<u128>(),
+						timestamp,
 						&dispute.value,
 						disputed_reporter,
 						beneficiary,
