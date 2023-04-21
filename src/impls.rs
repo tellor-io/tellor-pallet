@@ -28,6 +28,26 @@ impl<T: Config> Pallet<T> {
 		T::ValueConverter::convert(value.into_inner())
 	}
 
+	/// Calculates the latest dispute fee based on the supplied price.
+	/// # Arguments
+	/// * `price` - The current staking token to local balance price.
+	/// # Returns
+	/// The latest dispute fee.
+	pub(super) fn calculate_dispute_fee(
+		price: impl Into<U256>,
+	) -> Result<BalanceOf<T>, DispatchError> {
+		Self::convert(
+			<StakeAmount<T>>::get()
+				.checked_div(10.into())
+				.expect("other is non-zero; qed")
+				.checked_mul(price.into())
+				.ok_or(ArithmeticError::Overflow)?
+				.checked_div(U256::from(10u128.pow(DECIMALS)))
+				.expect("other is non-zero; qed"),
+		)
+		.map(<U256ToBalance<T>>::convert)
+	}
+
 	/// Converts a stake amount to a local balance amount.
 	/// # Arguments
 	/// * `stake_amount` - The amount staked.
@@ -445,24 +465,8 @@ impl<T: Config> Pallet<T> {
 	/// Get the latest dispute fee.
 	/// # Returns
 	/// The latest dispute fee.
-	pub fn get_dispute_fee() -> Option<BalanceOf<T>> {
-		<StakeAmount<T>>::get()
-			.checked_div(U256::from(10))
-			.and_then(|a| {
-				// todo: use rate from oracle
-				const UNIT: u128 = 10u128.pow(DECIMALS);
-				const PRICE: Option<u128> = Some(5 * UNIT); // spot price query uses 18 decimal places as per data spec
-
-				PRICE
-					.map(U256::from)
-					// Convert amount into local balance amount based on price
-					.and_then(|price| {
-						a.checked_mul(price).and_then(|a| a.checked_div(U256::from(UNIT)))
-					})
-			})
-			// Convert to local number of decimals
-			.and_then(|a| Self::convert(a).ok())
-			.map(U256ToBalance::<T>::convert)
+	pub fn get_dispute_fee() -> BalanceOf<T> {
+		<DisputeFee<T>>::get()
 	}
 
 	/// Returns information on a dispute for a given identifier.
@@ -1172,6 +1176,36 @@ impl<T: Config> Pallet<T> {
 		10u128
 			.checked_pow(T::Decimals::get().into())
 			.ok_or_else(|| ArithmeticError::Overflow.into())
+	}
+
+	// Updates the dispute fee after retrieving the latest token price from oracle.
+	pub(super) fn update_dispute_fee() -> DispatchResult {
+		let Some((value, _)) = Self::get_data_before(
+			T::StakingToLocalTokenPriceQueryId::get(),
+			Self::now().saturating_sub(12 * HOURS),
+		) else {
+			return Err(Error::<T>::InvalidPrice.into());
+		};
+		let Ok(token_price) = T::ValueConverter::convert(value.into_inner()) else {
+			return Err(Error::<T>::InvalidPrice.into());
+		};
+		let token_price = token_price.into();
+		ensure!(
+			token_price >= 10u128.pow(16).into() && token_price < 10u128.pow(24).into(),
+			Error::<T>::InvalidPrice
+		);
+		let new_dispute_fee = Self::calculate_dispute_fee(token_price)?;
+		let _ = <DisputeFee<T>>::try_mutate(|dispute_fee| {
+			// Only update and deposit event if value has changed
+			if new_dispute_fee != *dispute_fee {
+				*dispute_fee = new_dispute_fee;
+				Self::deposit_event(Event::NewDisputeFee { dispute_fee: new_dispute_fee });
+				Ok(())
+			} else {
+				Err(())
+			}
+		});
+		Ok(())
 	}
 
 	/// Updates accumulated staking rewards per staked token.

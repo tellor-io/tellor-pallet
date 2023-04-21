@@ -2066,24 +2066,26 @@ fn get_reward_amount() {
 
 		// query rewards
 		let fee: u16 = Fee::get();
-		let mut expected_reward = token(1) + token(1) * (timestamp_1 - timestamp_0);
-		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
+		let mut expected_reward = token(1) + token(1) * (timestamp_1 - timestamp_0) as Balance;
+		expected_reward = expected_reward - (expected_reward * fee as u128 / (1_000)); // fee
 		let mut reward_sum = expected_reward;
 		assert_eq!(
 			Tellor::get_reward_amount(feed_id, query_id, vec![timestamp_1]),
 			expected_reward
 		);
 
-		expected_reward = token(1) + token(1) * (timestamp_2 - (timestamp_0 + INTERVAL * 1));
-		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
+		expected_reward =
+			token(1) + token(1) * (timestamp_2 - (timestamp_0 + INTERVAL * 1)) as Balance;
+		expected_reward = expected_reward - (expected_reward * fee as u128 / (1_000)); // fee
 		reward_sum += expected_reward;
 		assert_eq!(
 			Tellor::get_reward_amount(feed_id, query_id, vec![timestamp_2]),
 			expected_reward
 		);
 
-		expected_reward = token(1) + token(1) * (timestamp_3 - (timestamp_0 + INTERVAL * 2));
-		expected_reward = expected_reward - (expected_reward * fee as u64 / (1_000)); // fee
+		expected_reward =
+			token(1) + token(1) * (timestamp_3 - (timestamp_0 + INTERVAL * 2)) as Balance;
+		expected_reward = expected_reward - (expected_reward * fee as u128 / (1_000)); // fee
 		reward_sum += expected_reward;
 		assert_eq!(
 			Tellor::get_reward_amount(feed_id, query_id, vec![timestamp_3]),

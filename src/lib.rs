@@ -96,7 +96,7 @@ pub mod pallet {
 			+ Into<result::Result<Origin, <Self as Config>::RuntimeOrigin>>;
 
 		/// The units in which we record balances.
-		type Balance: Balance + From<u64> + Into<U256>;
+		type Balance: Balance + From<Timestamp> + From<u128> + Into<U256>;
 
 		/// The number of decimals used by the balance unit.
 		#[pallet::constant]
@@ -112,6 +112,10 @@ pub mod pallet {
 
 		/// Origin that handles dispute resolution (governance).
 		type GovernanceOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
+
+		/// Initial dispute fee.
+		#[pallet::constant]
+		type InitialDisputeFee: Get<BalanceOf<Self>>;
 
 		/// The maximum number of timestamps per claim.
 		#[pallet::constant]
@@ -189,6 +193,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type StakingTokenPriceQueryId: Get<QueryId>;
 
+		/// Staking token to local token 'SpotPrice' query identifier, used for updating dispute fee.
+		#[pallet::constant]
+		type StakingToLocalTokenPriceQueryId: Get<QueryId>;
+
 		/// The on-chain time provider.
 		type Time: UnixTime;
 
@@ -240,10 +248,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn accumulated_reward_per_share)]
 	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
-	/// Mapping of query identifiers to a report.
+	/// A timestamp at which the stake amount was last updated.
 	#[pallet::storage]
 	#[pallet::getter(fn last_stake_amount_update)]
 	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
+	/// Mapping of query identifiers to a report.
 	#[pallet::storage]
 	pub(super) type Reports<T> = StorageMap<_, Identity, QueryId, ReportOf<T>>;
 	/// Total staking rewards released per second.
@@ -279,26 +288,41 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type ToWithdraw<T> = StorageValue<_, Tributes, ValueQuery>;
 	// Governance
+	/// The latest dispute fee.
+	#[pallet::storage]
+	pub(super) type DisputeFee<T> = StorageValue<_, BalanceOf<T>, ValueQuery, InitialDisputeFee<T>>;
+	/// Mapping of reporter accounts to dispute identifiers.
 	#[pallet::storage]
 	pub(super) type DisputeIdsByReporter<T> =
 		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Identity, DisputeId, ()>;
+	/// Mapping of dispute identifiers to the details of the dispute.
 	#[pallet::storage]
 	pub(super) type DisputeInfo<T> = StorageMap<_, Identity, DisputeId, DisputeOf<T>>;
+	/// Mapping of a query identifier to the number of corresponding open disputes.
 	#[pallet::storage]
 	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Identity, QueryId, u128>;
+	/// Total number of votes initiated.
 	#[pallet::storage]
 	pub(super) type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
+	/// Mapping of dispute identifiers to the details of the vote round.
 	#[pallet::storage]
 	pub(super) type VoteInfo<T> =
 		StorageDoubleMap<_, Identity, DisputeId, Twox64Concat, u8, VoteOf<T>>;
+	/// Mapping of dispute identifiers to the number of vote rounds.
 	#[pallet::storage]
 	pub(super) type VoteRounds<T> = StorageMap<_, Identity, DisputeId, u8, ValueQuery>;
+	/// Mapping of addresses to the number of votes they have cast.
 	#[pallet::storage]
 	pub(super) type VoteTallyByAddress<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
 	// Query Data
 	#[pallet::storage]
 	pub(super) type QueryData<T> = StorageMap<_, Identity, QueryId, QueryDataOf<T>>;
+
+	#[pallet::type_value]
+	pub fn InitialDisputeFee<T: Config>() -> BalanceOf<T> {
+		T::InitialDisputeFee::get()
+	}
 
 	#[pallet::type_value]
 	pub fn MinimumStakeAmount<T: Config>() -> Tributes {
@@ -376,6 +400,8 @@ pub mod pallet {
 			timestamp: Timestamp,
 			reporter: AccountIdOf<T>,
 		},
+		/// Emitted when the dispute fee has changed.
+		NewDisputeFee { dispute_fee: BalanceOf<T> },
 		/// Emitted when an address casts their vote.
 		Voted { dispute_id: DisputeId, supports: Option<bool>, voter: AccountIdOf<T> },
 		/// Emitted when all casting for a vote is tallied.
@@ -456,6 +482,7 @@ pub mod pallet {
 		InsufficientStake,
 		/// Nonce must match the timestamp index.
 		InvalidNonce,
+		/// Invalid token price.
 		InvalidPrice,
 		/// Invalid staking token price.
 		InvalidStakingTokenPrice,
@@ -477,7 +504,6 @@ pub mod pallet {
 		// Governance
 		/// Voter has already voted.
 		AlreadyVoted,
-		DisputeFeeCalculationError,
 		/// Dispute must be started within reporting lock time.
 		DisputeReportingPeriodExpired,
 		/// New dispute round must be started within a day.
@@ -526,16 +552,22 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(_n: T::BlockNumber) -> Weight {
-			// Update stake amount
+			let timestamp = Self::now();
+
+			// update stake amount/dispute fee
 			const MIN_INTERVAL: Timestamp = 12 * HOURS;
 			let update_interval = T::UpdateStakeAmountInterval::get();
 			if update_interval > Zero::zero() {
-				let timestamp = Self::now();
 				if timestamp >=
-					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL) &&
-					Pallet::<T>::do_update_stake_amount().is_ok()
+					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL)
 				{
-					<LastStakeAmountUpdate<T>>::set(timestamp)
+					// use storage layer (transaction) to ensure stake amount/dispute fee updated together
+					let _ = storage::with_storage_layer(|| -> Result<(), DispatchResult> {
+						Pallet::<T>::do_update_stake_amount()?;
+						Pallet::<T>::update_dispute_fee()?;
+						<LastStakeAmountUpdate<T>>::set(timestamp);
+						Ok(())
+					});
 				}
 			}
 
@@ -1059,7 +1091,8 @@ pub mod pallet {
 		#[pallet::call_index(8)]
 		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
 			ensure_signed(origin)?;
-			Self::do_update_stake_amount()
+			Self::do_update_stake_amount()?;
+			Self::update_dispute_fee()
 		}
 
 		/// Initialises a dispute/vote in the system.
@@ -1109,7 +1142,7 @@ pub mod pallet {
 				vote_round,
 				start_date: Self::now(),
 				block_number: frame_system::Pallet::<T>::block_number(),
-				fee: Self::get_dispute_fee().ok_or(Error::<T>::DisputeFeeCalculationError)?,
+				fee: Self::get_dispute_fee(),
 				tally_date: 0,
 				users: Tally::default(),
 				reporters: Tally::default(),
