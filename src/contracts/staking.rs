@@ -20,8 +20,10 @@ pub(crate) fn confirm_parachain_stake_withdraw_request(
 	address: impl Into<H160>,
 	amount: impl Into<U256>,
 ) -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [116, 48, 87, 226];
-	Call::new(&FUNCTION).address(address.into()).uint(amount.into()).encode()
+	call(
+		&[116, 48, 87, 226],
+		encode(&vec![Token::Address(address.into()), Token::Uint(amount.into())]),
+	)
 }
 
 #[cfg(test)]

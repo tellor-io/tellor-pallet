@@ -17,13 +17,14 @@
 use super::*;
 
 pub(crate) fn register(para_id: ParaId, pallet_index: u8) -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [20, 1, 238, 43];
-	Call::new(&FUNCTION).uint(para_id).uint(pallet_index).encode()
+	call(
+		&[20, 1, 238, 43],
+		encode(&vec![Token::Uint(para_id.into()), Token::Uint(pallet_index.into())]),
+	)
 }
 
 pub(crate) fn deregister() -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [175, 245, 237, 177];
-	FUNCTION.to_vec()
+	[175, 245, 237, 177].to_vec()
 }
 
 #[cfg(test)]

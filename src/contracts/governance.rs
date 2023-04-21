@@ -24,16 +24,17 @@ pub(crate) fn begin_parachain_dispute(
 	dispute_initiator: H160,
 	slash_amount: impl Into<U256>,
 ) -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [29, 93, 54, 159];
-
-	Call::new(&FUNCTION)
-		.fixed_bytes(query_id)
-		.uint(timestamp)
-		.bytes(value)
-		.address(disputed_reporter)
-		.address(dispute_initiator)
-		.uint(slash_amount)
-		.encode()
+	call(
+		&[29, 93, 54, 159],
+		encode(&vec![
+			Token::FixedBytes(query_id.into()),
+			Token::Uint(timestamp.into()),
+			Token::Bytes(value.into()),
+			Token::Address(disputed_reporter),
+			Token::Address(dispute_initiator),
+			Token::Uint(slash_amount.into()),
+		]),
+	)
 }
 
 pub(crate) fn vote(
@@ -45,17 +46,18 @@ pub(crate) fn vote(
 	total_reports_against: impl Into<U256>,
 	total_reports_invalid: impl Into<U256>,
 ) -> Vec<u8> {
-	const FUNCTION: [u8; 4] = [61, 181, 167, 166];
-
-	Call::new(&FUNCTION)
-		.fixed_bytes(dispute_id)
-		.uint(total_tips_for)
-		.uint(total_tips_against)
-		.uint(total_tips_invalid)
-		.uint(total_reports_for)
-		.uint(total_reports_against)
-		.uint(total_reports_invalid)
-		.encode()
+	call(
+		&[61, 181, 167, 166],
+		encode(&vec![
+			Token::FixedBytes(dispute_id.into()),
+			Token::Uint(total_tips_for.into()),
+			Token::Uint(total_tips_against.into()),
+			Token::Uint(total_tips_invalid.into()),
+			Token::Uint(total_reports_for.into()),
+			Token::Uint(total_reports_against.into()),
+			Token::Uint(total_reports_invalid.into()),
+		]),
+	)
 }
 
 #[cfg(test)]
@@ -160,7 +162,7 @@ mod tests {
 		let para_id = 3000;
 		let query_id = keccak_256("my_query".as_bytes());
 		let timestamp = 1675711956967u64;
-		let dispute_id = keccak_256(&ethabi::encode(&vec![
+		let dispute_id = keccak_256(&encode(&vec![
 			Token::Uint(para_id.into()),
 			Token::FixedBytes(query_id.into()).into(),
 			Token::Uint(timestamp.into()),
