@@ -15,13 +15,21 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
-use crate::{constants::REPORTING_LOCK, mock::AccountId, types::Tally, Config, VoteResult};
-use frame_support::{assert_noop, assert_ok, traits::Currency};
+use crate::{
+	constants::REPORTING_LOCK, contracts, mock::AccountId, types::Tally, Config, VoteResult, HOURS,
+};
+use frame_support::{
+	assert_noop, assert_ok,
+	traits::{Currency, Hooks},
+};
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map};
 use sp_runtime::traits::BadOrigin;
+use std::collections::VecDeque;
 
 type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
 type ParachainId = <Test as Config>::ParachainId;
+type PendingVotes = crate::pallet::PendingVotes<Test>;
+type VoteInfo = crate::pallet::VoteInfo<Test>;
 type VoteRounds = crate::pallet::VoteRounds<Test>;
 
 #[test]
@@ -649,7 +657,7 @@ fn tally_votes() {
 				now(),
 				None
 			));
-			let dispute_id = super::dispute_id(PARA_ID, query_id, now());
+			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), dispute_id, Some(false)));
 			assert_noop!(
 				Tellor::report_vote_tallied(
@@ -722,7 +730,7 @@ fn vote() {
 				Error::InvalidVote
 			); // Can't vote on dispute does not exist
 
-			let dispute_id = super::dispute_id(PARA_ID, query_id, now());
+			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter_1), dispute_id, Some(true)));
 			assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter_2), dispute_id, Some(false)));
 			assert_noop!(
@@ -784,6 +792,232 @@ fn vote() {
 }
 
 #[test]
+fn send_votes() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let user = 1;
+	let reporter = 2;
+	let disputer = 3;
+	let mut ext = new_test_ext();
+
+	const DISPUTES: u8 = 6;
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+			Balances::make_free_balance_be(&user, token(10));
+			assert_ok!(Tellor::tip(
+				RuntimeOrigin::signed(user),
+				query_id,
+				token(1),
+				query_data.clone()
+			));
+			Balances::make_free_balance_be(&disputer, token(1_000));
+		})
+	});
+
+	ext.execute_with(|| {
+		// Create a series of disputes
+		let mut expected_pending_votes = VecDeque::new();
+		for _ in 1..=DISPUTES {
+			with_block_after(12 * HOURS, || {
+				assert_ok!(Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(100),
+					0,
+					query_data.clone(),
+				));
+				let timestamp = now();
+				assert_ok!(Tellor::begin_dispute(
+					RuntimeOrigin::signed(disputer),
+					query_id,
+					timestamp,
+					Some(Address::random())
+				));
+
+				let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+
+				assert_ok!(Tellor::vote(RuntimeOrigin::signed(user), dispute_id, Some(true)));
+				assert_ok!(Tellor::vote(RuntimeOrigin::signed(disputer), dispute_id, None)); // No effect as disputer is neither user or reporter
+				assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), dispute_id, Some(false)));
+
+				let vote_round = VoteRounds::get(dispute_id);
+				let vote_info = VoteInfo::get(dispute_id, vote_round).unwrap();
+				assert!(!vote_info.sent); // Ensure new vote round not sent
+				assert_eq!(
+					PendingVotes::get(dispute_id).unwrap(),
+					(vote_round, timestamp + 11 * HOURS)
+				); // Ensure vote scheduled
+				expected_pending_votes.push_back((
+					dispute_id,
+					vote_round,
+					(vote_info.users, vote_info.reporters),
+				));
+			});
+		}
+		assert_eq!(PendingVotes::iter().count(), DISPUTES as usize);
+
+		// Process pending votes in batches
+		for _ in 1..DISPUTES {
+			with_block_after(1 * HOURS, || {
+				assert_ok!(Tellor::send_votes(RuntimeOrigin::signed(reporter), 5));
+				let mut sent_xcm: VecDeque<_> = sent_xcm().into();
+				for e in System::events() {
+					let (dispute_id, vote_round, (tips, reports)) =
+						expected_pending_votes.pop_front().unwrap();
+					// Ensure votes sent to governance contract
+					assert_eq!(
+						sent_xcm.pop_front().unwrap(),
+						xcm_transact(
+							ethereum_xcm::transact(
+								*GOVERNANCE,
+								contracts::governance::vote(
+									dispute_id.as_ref(),
+									tips.does_support,
+									tips.against,
+									tips.invalid_query,
+									reports.does_support,
+									reports.against,
+									reports.invalid_query
+								)
+								.try_into()
+								.unwrap(),
+								gas_limits::VOTE
+							)
+							.into(),
+							gas_limits::VOTE
+						)
+					);
+					assert!(VoteInfo::get(dispute_id, vote_round).unwrap().sent); // Ensure sent
+					assert!(!PendingVotes::contains_key(dispute_id)); // Ensure 'dequeued'
+					assert_eq!(e.event, Event::VoteSent { dispute_id, vote_round }.into()); // Ensure event emitted
+					assert_noop!(
+						Tellor::vote(RuntimeOrigin::signed(0), dispute_id, None),
+						Error::VoteAlreadySent
+					); // Ensure no more votes can be cast
+				}
+			});
+		}
+
+		assert_eq!(PendingVotes::iter().count(), 1);
+		assert_eq!(expected_pending_votes.len(), 1);
+	});
+}
+
+#[test]
+fn send_votes_via_hook() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let user = 1;
+	let reporter = 2;
+	let disputer = 3;
+	let mut ext = new_test_ext();
+
+	const DISPUTES: u8 = 10;
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+			Balances::make_free_balance_be(&user, token(10));
+			assert_ok!(Tellor::tip(
+				RuntimeOrigin::signed(user),
+				query_id,
+				token(1),
+				query_data.clone()
+			));
+			Balances::make_free_balance_be(&disputer, token(1_000));
+		})
+	});
+
+	ext.execute_with(|| {
+		// Create a series of disputes
+		let mut expected_pending_votes = VecDeque::new();
+		for _ in 1..=DISPUTES {
+			with_block_after(12 * HOURS, || {
+				assert_ok!(Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(100),
+					0,
+					query_data.clone(),
+				));
+				let timestamp = now();
+				assert_ok!(Tellor::begin_dispute(
+					RuntimeOrigin::signed(disputer),
+					query_id,
+					timestamp,
+					Some(Address::random())
+				));
+
+				let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+
+				assert_ok!(Tellor::vote(RuntimeOrigin::signed(user), dispute_id, Some(true)));
+				assert_ok!(Tellor::vote(RuntimeOrigin::signed(disputer), dispute_id, None)); // No effect as disputer is neither user or reporter
+				assert_ok!(Tellor::vote(RuntimeOrigin::signed(reporter), dispute_id, Some(false)));
+
+				let vote_round = VoteRounds::get(dispute_id);
+				let vote_info = VoteInfo::get(dispute_id, vote_round).unwrap();
+				assert!(!vote_info.sent); // Ensure new vote round not sent
+				assert_eq!(
+					PendingVotes::get(dispute_id).unwrap(),
+					(vote_round, timestamp + 11 * HOURS)
+				); // Ensure vote scheduled
+				expected_pending_votes.push_back((
+					dispute_id,
+					vote_round,
+					(vote_info.users, vote_info.reporters),
+				));
+			});
+		}
+
+		// Process pending votes in batches
+		while PendingVotes::iter().count() > 0 {
+			with_block_after(12 * HOURS, || {
+				Tellor::on_initialize(System::block_number());
+				let mut sent_xcm: VecDeque<_> = sent_xcm().into();
+				for e in System::events() {
+					let (dispute_id, vote_round, (tips, reports)) =
+						expected_pending_votes.pop_front().unwrap();
+					// Ensure votes sent to governance contract
+					assert_eq!(
+						sent_xcm.pop_front().unwrap(),
+						xcm_transact(
+							ethereum_xcm::transact(
+								*GOVERNANCE,
+								contracts::governance::vote(
+									dispute_id.as_ref(),
+									tips.does_support,
+									tips.against,
+									tips.invalid_query,
+									reports.does_support,
+									reports.against,
+									reports.invalid_query
+								)
+								.try_into()
+								.unwrap(),
+								gas_limits::VOTE
+							)
+							.into(),
+							gas_limits::VOTE
+						)
+					);
+					assert!(VoteInfo::get(dispute_id, vote_round).unwrap().sent); // Ensure sent
+					assert!(!PendingVotes::contains_key(dispute_id)); // Ensure 'dequeued'
+					assert_eq!(e.event, Event::VoteSent { dispute_id, vote_round }.into()); // Ensure event emitted
+					assert_noop!(
+						Tellor::vote(RuntimeOrigin::signed(0), dispute_id, None),
+						Error::VoteAlreadySent
+					); // Ensure no more votes can be cast
+				}
+			});
+		}
+	});
+}
+
+#[test]
 #[ignore]
 fn vote_on_multiple_disputes() {
 	todo!()
@@ -819,7 +1053,7 @@ fn did_vote() {
 				now(),
 				None
 			));
-			let dispute_id = super::dispute_id(PARA_ID, query_id, now());
+			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert!(
 				!Tellor::did_vote(dispute_id, 1, reporter),
 				"voter's voted status should be correct"

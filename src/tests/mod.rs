@@ -123,7 +123,7 @@ fn unit() -> u128 {
 	10u128.pow(decimals.into())
 }
 
-fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> Vec<(MultiLocation, Xcm<()>)> {
+fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> (MultiLocation, Xcm<()>) {
 	// Calculate weights and fees to construct xcm
 	let xt_weight = gas_to_weight(gas_limit) + DbWeight::get().reads(1);
 	let total_weight = weigh() + xt_weight;
@@ -131,7 +131,7 @@ fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> Vec<(MultiL
 		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }), // Balances pallet for simplicity
 		fun: Fungible(total_weight.ref_time() as u128 * 50_000),
 	};
-	vec![(
+	(
 		MultiLocation { parents: 1, interior: X1(Parachain(EVM_PARA_ID)) },
 		Xcm(vec![
 			DescendOrigin(X1(PalletInstance(PALLET_INDEX))), // interior
@@ -143,7 +143,7 @@ fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> Vec<(MultiL
 				call: call.into(),
 			},
 		]),
-	)]
+	)
 }
 
 #[test]
@@ -211,7 +211,7 @@ fn registers() {
 			assert_ok!(Tellor::register(RuntimeOrigin::root()));
 			assert_eq!(
 				sent_xcm(),
-				xcm_transact(
+				vec![xcm_transact(
 					ethereum_xcm::transact(
 						*REGISTRY,
 						registry::register(PARA_ID, PALLET_INDEX).try_into().unwrap(),
@@ -219,7 +219,7 @@ fn registers() {
 					)
 					.into(),
 					gas_limits::REGISTER
-				)
+				)]
 			);
 			System::assert_last_event(
 				Event::RegistrationAttempted {

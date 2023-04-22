@@ -109,7 +109,7 @@ impl pallet_timestamp::Config for Test {
 }
 
 pub(crate) static REGISTRY: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
-static GOVERNANCE: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
+pub(crate) static GOVERNANCE: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 
 parameter_types! {
@@ -237,6 +237,8 @@ pub(crate) fn with_block_after<R>(time_in_secs: u64, execute: impl FnOnce() -> R
 		},
 	}
 	let result = execute();
-	System::reset_events(); // Reset events after block executed, ensuring we only receive events for current block
+	// Reset events after block executed, ensuring we only receive events for current block
+	System::reset_events();
+	SENT_XCM.with(|q| q.borrow_mut().clear());
 	result
 }

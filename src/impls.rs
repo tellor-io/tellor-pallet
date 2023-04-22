@@ -256,10 +256,9 @@ impl<T: Config> Pallet<T> {
 		// Check for any pending votes to be sent to governance controller contract
 		let mut pending_votes: Vec<_> = <PendingVotes<T>>::iter()
 			.filter(|(_, (_, scheduled))| &timestamp >= scheduled)
-			.take(max.into())
 			.collect();
 		pending_votes.sort_by_key(|(_, (_, scheduled))| *scheduled);
-		for (dispute_id, (vote_round, _)) in pending_votes {
+		for (dispute_id, (vote_round, _)) in pending_votes.into_iter().take(max.into()) {
 			let _ = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
 				let vote = maybe.as_mut().ok_or(Error::<T>::InvalidVote)?;
 				ensure!(!vote.sent, Error::<T>::VoteAlreadySent);

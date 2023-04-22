@@ -1316,7 +1316,7 @@ pub mod pallet {
 		///
 		/// - `max_votes`: The maximum number of votes to be sent.
 		#[pallet::call_index(11)]
-		pub fn send_vote(origin: OriginFor<T>, max_votes: u8) -> DispatchResult {
+		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResult {
 			ensure_signed(origin)?;
 			Self::do_send_votes(Self::now(), max_votes)
 		}
