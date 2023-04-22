@@ -83,7 +83,10 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
-	use sp_runtime::{traits::SaturatedConversion, ArithmeticError};
+	use sp_runtime::{
+		traits::{CheckedSub, SaturatedConversion},
+		ArithmeticError,
+	};
 	use sp_std::{prelude::*, result};
 
 	#[pallet::pallet]
@@ -641,8 +644,7 @@ pub mod pallet {
 			T::Asset::transfer(
 				tips,
 				&reporter,
-				// todo: safe math
-				cumulative_reward - fee,
+				cumulative_reward.checked_sub(&fee).ok_or(ArithmeticError::Underflow)?,
 				false,
 			)?;
 			Self::do_add_staking_rewards(tips, fee)?;
@@ -653,7 +655,6 @@ pub mod pallet {
 					// Replace unfunded feed in array with last element
 					<QueryIdsWithFunding<T>>::try_mutate(
 						|query_ids_with_funding| -> DispatchResult {
-							// todo: safe math
 							let qid =
 								*query_ids_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
 							query_ids_with_funding
@@ -664,8 +665,10 @@ pub mod pallet {
 								query_ids_with_funding.get(idx).ok_or(Error::<T>::InvalidIndex)?;
 							<QueryIdsWithFundingIndex<T>>::set(
 								query_id_last_funded,
-								// todo: safe math
-								Some((idx + 1).saturated_into()),
+								Some(
+									(idx.checked_add(1).ok_or(ArithmeticError::Overflow)?)
+										.saturated_into(),
+								),
 							);
 							<QueryIdsWithFundingIndex<T>>::remove(query_id);
 							query_ids_with_funding.pop();
@@ -723,8 +726,11 @@ pub mod pallet {
 					// Adjust currently funded feeds
 					<FeedsWithFunding<T>>::try_mutate(|feeds_with_funding| -> DispatchResult {
 						if feeds_with_funding.len() > 1 {
-							// todo: safe math
-							let index = feed.details.feeds_with_funding_index - 1;
+							let index = feed
+								.details
+								.feeds_with_funding_index
+								.checked_sub(1)
+								.ok_or(ArithmeticError::Underflow)?;
 							// Replace unfunded feed in array with last element
 							let fid = *feeds_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
 							feeds_with_funding
@@ -737,16 +743,18 @@ pub mod pallet {
 							match <QueryIdFromDataFeedId<T>>::get(feed_id_last_funded) {
 								None => todo!(),
 								Some(query_id_last_funded) => {
-									<DataFeeds<T>>::mutate(
+									<DataFeeds<T>>::try_mutate(
 										query_id_last_funded,
 										feed_id_last_funded,
-										|f| {
+										|f| -> DispatchResult {
 											if let Some(f) = f {
-												// todo: safe math
-												f.details.feeds_with_funding_index = index + 1
+												f.details.feeds_with_funding_index = index
+													.checked_add(1)
+													.ok_or(ArithmeticError::Overflow)?
 											}
+											Ok(())
 										},
-									);
+									)?;
 								},
 							}
 						}
@@ -769,8 +777,7 @@ pub mod pallet {
 			T::Asset::transfer(
 				tips,
 				&reporter,
-				// todo: safe math
-				cumulative_reward - fee,
+				cumulative_reward.checked_sub(&fee).ok_or(ArithmeticError::Underflow)?,
 				false,
 			)?;
 			Self::do_add_staking_rewards(tips, fee)?;
@@ -1388,8 +1395,10 @@ pub mod pallet {
 					Some(staker) => {
 						ensure!(address == staker.address, Error::<T>::InvalidAddress);
 						ensure!(staker.staked_balance >= amount, Error::<T>::InsufficientStake);
-						// todo: safe math
-						let stake_amount = staker.staked_balance - amount;
+						let stake_amount = staker
+							.staked_balance
+							.checked_sub(amount)
+							.ok_or(ArithmeticError::Underflow)?;
 						Self::update_stake_and_pay_rewards((&reporter, staker), stake_amount)?;
 						staker.start_date = Self::now();
 						staker.locked_balance = staker.locked_balance.saturating_add(amount);

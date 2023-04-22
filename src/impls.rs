@@ -18,7 +18,7 @@ use super::*;
 use crate::constants::DECIMALS;
 use frame_support::traits::fungible::Inspect;
 use sp_runtime::{
-	traits::{CheckedAdd, CheckedMul, Hash},
+	traits::{CheckedAdd, CheckedMul, CheckedSub, Hash},
 	ArithmeticError,
 };
 use sp_std::cmp::Ordering;
@@ -680,7 +680,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 		claimer: &AccountIdOf<T>,
-	) -> Result<BalanceOf<T>, Error<T>> {
+	) -> Result<BalanceOf<T>, DispatchError> {
 		ensure!(
 			Self::now().saturating_sub(timestamp) > 12 * HOURS,
 			Error::<T>::ClaimBufferNotPassed
@@ -691,9 +691,9 @@ impl<T: Config> Pallet<T> {
 				.map_or(false, |reporter| claimer == &reporter),
 			Error::<T>::InvalidClaimer
 		);
-		<Tips<T>>::try_mutate(query_id, |maybe_tips| {
+		<Tips<T>>::try_mutate(query_id, |maybe_tips| -> Result<BalanceOf<T>, DispatchError> {
 			match maybe_tips {
-				None => Err(Error::<T>::NoTipsSubmitted),
+				None => Err(Error::<T>::NoTipsSubmitted.into()),
 				Some(tips) => {
 					let mut min = 0;
 					let mut max = tips.len();
@@ -757,11 +757,12 @@ impl<T: Config> Pallet<T> {
 								let min_backup_tip =
 									tips.get(min_backup).ok_or(Error::<T>::InvalidIndex)?;
 								let min_tip = tips.get(min).ok_or(Error::<T>::InvalidIndex)?;
-								// todo: safe math
 								tip_amount = min_backup_tip
 									.cumulative_tips
-									.saturating_sub(min_tip.cumulative_tips)
-									.saturating_add(min_tip.amount);
+									.checked_sub(&min_tip.cumulative_tips)
+									.ok_or(ArithmeticError::Underflow)?
+									.checked_add(&min_tip.amount)
+									.ok_or(ArithmeticError::Overflow)?;
 							}
 						}
 					}
