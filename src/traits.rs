@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{QueryId, Timestamp};
+use crate::types::{Price, QueryId, Timestamp};
 use sp_std::vec::Vec;
 use xcm::latest::prelude::*;
 
@@ -28,7 +28,7 @@ pub trait SendXcm {
 }
 
 /// This trait helps pallets read data from Tellor
-pub trait UsingTellor<AccountId, Price> {
+pub trait UsingTellor<AccountId> {
 	/// Retrieves the next value for the query identifier after the specified timestamp.
 	/// # Arguments
 	/// * `query_id` - The query identifier to look up the value for.
