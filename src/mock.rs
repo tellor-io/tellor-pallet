@@ -127,6 +127,7 @@ parameter_types! {
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeOrigin = RuntimeOrigin;
+	type Asset = Balances;
 	type Balance = Balance;
 	type Decimals = ConstU8<12>;
 	type Fee = ConstU16<10>; // 1%
@@ -155,7 +156,6 @@ impl tellor::Config for Test {
 	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
 	type StakingToLocalTokenPriceQueryId = StakingToLocalTokenPriceQueryId;
 	type Time = Timestamp;
-	type Token = Balances;
 	type UpdateStakeAmountInterval = ConstU64<{ 12 * HOURS }>;
 	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;

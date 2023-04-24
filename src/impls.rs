@@ -115,9 +115,9 @@ impl<T: Config> Pallet<T> {
 		amount: BalanceOf<T>,
 	) -> DispatchResult {
 		let staking_rewards = Self::staking_rewards();
-		T::Token::transfer(source, &staking_rewards, amount, false)?;
+		T::Asset::transfer(source, &staking_rewards, amount, false)?;
 		Self::update_rewards()?;
-		let staking_rewards_balance = T::Token::balance(&staking_rewards).into();
+		let staking_rewards_balance = T::Asset::balance(&staking_rewards).into();
 		// update reward rate = real staking rewards balance / 30 days
 		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::get())?;
 		<RewardRate<T>>::set(U256ToBalance::<T>::convert(
@@ -157,7 +157,7 @@ impl<T: Config> Pallet<T> {
 
 		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 		feed.details.balance.saturating_accrue(amount);
-		T::Token::transfer(&feed_funder, &Self::tips(), amount, true)?;
+		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
 		// Add to array of feeds with funding
 		if feed.details.feeds_with_funding_index == 0 && feed.details.balance > Zero::zero() {
 			let index = <FeedsWithFunding<T>>::try_mutate(
@@ -340,7 +340,7 @@ impl<T: Config> Pallet<T> {
 								// If vote failed, transfer the dispute fee to disputed reporter
 								VoteResult::Failed => &dispute.disputed_reporter,
 							};
-							T::Token::transfer(dispute_fees, dest, dispute_fee, false)?;
+							T::Asset::transfer(dispute_fees, dest, dispute_fee, false)?;
 						}
 						Ok(result)
 					},
@@ -1242,7 +1242,7 @@ impl<T: Config> Pallet<T> {
 		.ok_or(ArithmeticError::DivisionByZero)?
 		.checked_sub(total_reward_debt)
 		.ok_or(ArithmeticError::Underflow)?;
-		let staking_rewards_balance = T::Token::balance(&Self::staking_rewards()).into();
+		let staking_rewards_balance = T::Asset::balance(&Self::staking_rewards()).into();
 		if accumulated_reward >= staking_rewards_balance {
 			// if staking rewards run out, calculate remaining reward per staked token and set
 			// RewardRate to 0
@@ -1321,7 +1321,7 @@ impl<T: Config> Pallet<T> {
 					pending_reward = temp_pending_reward;
 				}
 			}
-			T::Token::transfer(&staking_rewards, staker, pending_reward, true)?;
+			T::Asset::transfer(&staking_rewards, staker, pending_reward, true)?;
 			<TotalRewardDebt<T>>::mutate(|debt| {
 				*debt = debt.saturating_sub(stake_info.reward_debt)
 			});
@@ -1366,7 +1366,7 @@ impl<T: Config> Pallet<T> {
 		<RewardRate<T>>::try_mutate(|reward_rate| -> DispatchResult {
 			if *reward_rate == Zero::zero() {
 				*reward_rate = U256ToBalance::<T>::convert(
-					T::Token::balance(&staking_rewards)
+					T::Asset::balance(&staking_rewards)
 						.into()
 						.checked_sub(
 							accumulated_reward_per_share
