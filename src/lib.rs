@@ -110,13 +110,12 @@ pub mod pallet {
 		#[pallet::constant]
 		type Decimals: Get<u8>;
 
-		/// The value which will be used to convert weight to fee.
-		#[pallet::constant]
-		type RemoteXCMWeightToFee: Get<u128>;
-
 		/// Percentage, 1000 is 100%, 50 is 5%, etc
 		#[pallet::constant]
 		type Fee: Get<u16>;
+
+		/// The (interior) fee location to be used by controller contracts for XCM execution on this parachain.
+		type FeeLocation: Get<Junctions>;
 
 		/// The location of the governance controller contract.
 		#[pallet::constant]
@@ -214,6 +213,11 @@ pub mod pallet {
 		#[pallet::constant]
 		type UpdateStakeAmountInterval: Get<Timestamp>;
 
+		/// The value to convert weight to fee, used by sent to controller contracts to
+		/// calculate fees required for XCM execution on this parachain.
+		#[pallet::constant]
+		type WeightToFee: Get<u128>;
+
 		/// The sub-system used for sending XCM messages.
 		type Xcm: traits::SendXcm;
 
@@ -221,10 +225,8 @@ pub mod pallet {
 		type XcmFeesAsset: Get<AssetId>;
 
 		/// The amount per weight unit in the asset used for fee payment for remote execution on the controller contract chain.
+		#[pallet::constant]
 		type XcmWeightToAsset: Get<u128>;
-
-		/// The asset location to be used in remote chain for setting the currency type.
-		type RemoteXcmFeeLocation: Get<MultiLocation>;
 	}
 
 	// AutoPay
@@ -550,6 +552,7 @@ pub mod pallet {
 		VotingPeriodActive,
 
 		// XCM
+		JunctionOverflow,
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,
 		Unreachable,
@@ -608,11 +611,12 @@ pub mod pallet {
 					registry::register(
 						T::ParachainId::get(),
 						Pallet::<T>::index() as u8,
-						T::RemoteXCMWeightToFee::get(),
+						T::WeightToFee::get(),
 						T::Decimals::get(),
-						T::RemoteXcmFeeLocation::get().encode())
-						.try_into()
-						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
+						<xcm::FeeLocation<T>>::get()?,
+					)
+					.try_into()
+					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,

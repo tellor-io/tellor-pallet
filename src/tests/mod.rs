@@ -38,7 +38,6 @@ use sp_runtime::{
 };
 use std::convert::Into;
 use xcm::{latest::prelude::*, DoubleEncoded};
-use codec::Encode;
 
 mod autopay;
 mod governance;
@@ -215,10 +214,15 @@ fn registers() {
 				vec![xcm_transact(
 					ethereum_xcm::transact(
 						*REGISTRY,
-						registry::register(PARA_ID, PALLET_INDEX,
-										   <Test as crate::Config>::RemoteXCMWeightToFee::get(),
-										   <Test as crate::Config>::Decimals::get(),
-										   <Test as crate::Config>::RemoteXcmFeeLocation::get().encode()).try_into().unwrap(),
+						registry::register(
+							PARA_ID,
+							PALLET_INDEX,
+							<Test as crate::Config>::WeightToFee::get(),
+							<Test as crate::Config>::Decimals::get(),
+							crate::xcm::FeeLocation::<Test>::get().unwrap()
+						)
+						.try_into()
+						.unwrap(),
 						gas_limits::REGISTER
 					)
 					.into(),

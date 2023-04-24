@@ -164,10 +164,34 @@ pub(crate) fn weight_to_fee<T: Config>(weight: Weight) -> u128 {
 	(weight.ref_time() as u128).saturating_mul(T::XcmWeightToAsset::get())
 }
 
+pub(super) struct FeeLocation<T>(PhantomData<T>);
+impl<T: Config> FeeLocation<T> {
+	pub(super) fn get() -> Result<MultiLocation, DispatchError> {
+		// Convert interior fee location to multilocation as used by registry contract on controller chain
+		let dest = MultiLocation::new(1, X1(Parachain(T::Registry::get().para_id)));
+		Self::convert(T::FeeLocation::get(), &dest, T::ParachainId::get())
+	}
+
+	fn convert(
+		interior: Junctions,
+		dest: &MultiLocation,
+		para_id: ParaId,
+	) -> Result<MultiLocation, DispatchError> {
+		let mut interior = interior.into();
+		interior
+			.reanchor(dest, &MultiLocation::new(1, X1(Parachain(para_id))))
+			.map_err(|_| Error::<T>::JunctionOverflow)?;
+		Ok(interior)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{mock::Test, types::Address};
+	use crate::{
+		mock::{Test, EVM_PARA_ID},
+		types::Address,
+	};
 	use codec::Encode;
 	use sp_core::blake2_256;
 	use std::borrow::Borrow;
@@ -197,6 +221,34 @@ mod tests {
 		let mut account_id = [0u8; 20];
 		account_id.copy_from_slice(&hash[0..20]);
 		println!("{:?}", account_id)
+	}
+
+	#[test]
+	fn converts_fee_location() {
+		let dest = MultiLocation::new(1, X1(Parachain(EVM_PARA_ID)));
+
+		assert_eq!(
+			FeeLocation::<Test>::convert(Here, &dest, PARA_ID).unwrap(),
+			MultiLocation::new(1, X1(Parachain(PARA_ID)))
+		);
+		assert_eq!(
+			FeeLocation::<Test>::convert(X1(PalletInstance(3)), &dest, PARA_ID).unwrap(),
+			MultiLocation::new(1, X2(Parachain(PARA_ID), PalletInstance(3)))
+		);
+		assert_eq!(
+			FeeLocation::<Test>::convert(X2(PalletInstance(50), GeneralIndex(7)), &dest, PARA_ID)
+				.unwrap(),
+			MultiLocation::new(1, X3(Parachain(PARA_ID), PalletInstance(50), GeneralIndex(7)))
+		);
+	}
+
+	#[test]
+	fn fee_location() {
+		use crate::mock::PARA_ID;
+		assert_eq!(
+			FeeLocation::<Test>::get().unwrap(),
+			MultiLocation::new(1, X1(Parachain(PARA_ID)))
+		);
 	}
 
 	#[test]
@@ -249,6 +301,6 @@ mod tests {
 	#[test]
 	fn weight_to_fee() {
 		const WEIGHT_FEE: u128 = 50_000;
-		assert_eq!(super::weight_to_fee::<crate::mock::Test>(Weight::from_ref_time(1)), WEIGHT_FEE);
+		assert_eq!(super::weight_to_fee::<Test>(Weight::from_ref_time(1)), WEIGHT_FEE);
 	}
 }
