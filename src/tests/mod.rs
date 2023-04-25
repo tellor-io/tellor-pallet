@@ -218,7 +218,6 @@ fn registers() {
 							PARA_ID,
 							PALLET_INDEX,
 							<Test as crate::Config>::WeightToFee::get(),
-							<Test as crate::Config>::Decimals::get(),
 							crate::xcm::FeeLocation::<Test>::get().unwrap()
 						)
 						.try_into()

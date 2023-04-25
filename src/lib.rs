@@ -612,7 +612,6 @@ pub mod pallet {
 						T::ParachainId::get(),
 						Pallet::<T>::index() as u8,
 						T::WeightToFee::get(),
-						T::Decimals::get(),
 						<xcm::FeeLocation<T>>::get()?,
 					)
 					.try_into()

@@ -23,16 +23,14 @@ pub(crate) fn register(
 	para_id: ParaId,
 	pallet_index: u8,
 	weight_to_fee: u128,
-	decimals: u8,
 	fee_location: MultiLocation,
 ) -> Vec<u8> {
 	call(
-		&[160, 223, 109, 227],
+		&[116, 99, 167, 98],
 		encode(&[
 			Token::Uint(para_id.into()),
 			Token::Uint(pallet_index.into()),
 			Token::Uint(weight_to_fee.into()),
-			Token::Uint(decimals.into()),
 			Token::Tuple(vec![
 				Token::Uint(fee_location.parents.into()),
 				Token::Array(
@@ -127,7 +125,6 @@ mod tests {
 				param("_paraId", ParamType::Uint(32)),
 				param("_palletIndex", ParamType::Uint(8)),
 				param("_weightToFee", ParamType::Uint(256)),
-				param("_decimals", ParamType::Uint(8)),
 				param(
 					"_feeLocation",
 					ParamType::Tuple(vec![
@@ -155,7 +152,6 @@ mod tests {
 		let para_id = 3000;
 		let pallet_index = 3;
 		let weight_to_fee = 10_000;
-		let decimals = 12;
 		let fee_location = MultiLocation::new(1, X1(Parachain(3000))); // fee location for execution on this parachain, from context of evm parachain
 
 		assert_eq!(
@@ -164,14 +160,13 @@ mod tests {
 					Token::Uint(para_id.into()),
 					Token::Uint(pallet_index.into()),
 					Token::Uint(weight_to_fee.into()),
-					Token::Uint(decimals.into()),
 					Token::Tuple(vec![
 						Token::Uint(1.into()),
 						Token::Array(vec![Token::Bytes(encode_junction(Parachain(3000)))])
 					])
 				])
 				.unwrap()[..],
-			super::register(para_id, pallet_index, weight_to_fee, decimals, fee_location)[..]
+			super::register(para_id, pallet_index, weight_to_fee, fee_location)[..]
 		)
 	}
 
