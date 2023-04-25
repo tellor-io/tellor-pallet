@@ -569,16 +569,16 @@ pub mod pallet {
 
 			// update stake amount/dispute fee
 			let interval = T::UpdateStakeAmountInterval::get();
-			if interval > Zero::zero() {
-				if timestamp >= <LastStakeAmountUpdate<T>>::get() + interval.max(12 * HOURS) {
-					// use storage layer (transaction) to ensure stake amount/dispute fee updated together
-					let _ = storage::with_storage_layer(|| -> Result<(), DispatchResult> {
-						Pallet::<T>::do_update_stake_amount()?;
-						Pallet::<T>::update_dispute_fee()?;
-						<LastStakeAmountUpdate<T>>::set(timestamp);
-						Ok(())
-					});
-				}
+			if interval > Zero::zero() &&
+				timestamp >= <LastStakeAmountUpdate<T>>::get() + interval.max(12 * HOURS)
+			{
+				// use storage layer (transaction) to ensure stake amount/dispute fee updated together
+				let _ = storage::with_storage_layer(|| -> Result<(), DispatchResult> {
+					Pallet::<T>::do_update_stake_amount()?;
+					Pallet::<T>::update_dispute_fee()?;
+					<LastStakeAmountUpdate<T>>::set(timestamp);
+					Ok(())
+				});
 			}
 
 			// Check for any pending votes due to be sent to governance controller contract for tallying
@@ -1128,7 +1128,7 @@ pub mod pallet {
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
 				Error::<T>::NoValueExists
 			);
-			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&vec![
+			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&[
 				Abi::Uint(T::ParachainId::get().into()),
 				Abi::FixedBytes(query_id.0.into()),
 				Abi::Uint(timestamp.into()),
