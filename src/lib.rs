@@ -307,6 +307,9 @@ pub mod pallet {
 	/// Mapping of a query identifier to the number of corresponding open disputes.
 	#[pallet::storage]
 	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Identity, QueryId, u128>;
+	/// Any pending votes which are queued to be sent to the governance controller contract for tallying.
+	#[pallet::storage]
+	pub(super) type PendingVotes<T> = StorageMap<_, Identity, DisputeId, (u8, Timestamp)>;
 	/// Total number of votes initiated.
 	#[pallet::storage]
 	pub(super) type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
@@ -410,6 +413,8 @@ pub mod pallet {
 		NewDisputeFee { dispute_fee: BalanceOf<T> },
 		/// Emitted when an address casts their vote.
 		Voted { dispute_id: DisputeId, supports: Option<bool>, voter: AccountIdOf<T> },
+		/// Emitted when a vote is sent to the governance controller contract for tallying.
+		VoteSent { dispute_id: DisputeId, vote_round: u8 },
 		/// Emitted when all casting for a vote is tallied.
 		VoteTallied {
 			dispute_id: DisputeId,
@@ -532,6 +537,8 @@ pub mod pallet {
 		TallyDisputePeriodActive,
 		/// Vote has already been executed.
 		VoteAlreadyExecuted,
+		/// Vote has already been sent.
+		VoteAlreadySent,
 		/// Vote has already been tallied.
 		VoteAlreadyTallied,
 		/// Vote must be tallied.
@@ -561,23 +568,21 @@ pub mod pallet {
 			let timestamp = Self::now();
 
 			// update stake amount/dispute fee
-			const MIN_INTERVAL: Timestamp = 12 * HOURS;
-			let update_interval = T::UpdateStakeAmountInterval::get();
-			if update_interval > Zero::zero() {
-				if timestamp >=
-					<LastStakeAmountUpdate<T>>::get() + update_interval.max(MIN_INTERVAL)
-				{
-					// use storage layer (transaction) to ensure stake amount/dispute fee updated together
-					let _ = storage::with_storage_layer(|| -> Result<(), DispatchResult> {
-						Pallet::<T>::do_update_stake_amount()?;
-						Pallet::<T>::update_dispute_fee()?;
-						<LastStakeAmountUpdate<T>>::set(timestamp);
-						Ok(())
-					});
-				}
+			let interval = T::UpdateStakeAmountInterval::get();
+			if interval > Zero::zero() &&
+				timestamp >= <LastStakeAmountUpdate<T>>::get() + interval.max(12 * HOURS)
+			{
+				// use storage layer (transaction) to ensure stake amount/dispute fee updated together
+				let _ = storage::with_storage_layer(|| -> Result<(), DispatchResult> {
+					Pallet::<T>::do_update_stake_amount()?;
+					Pallet::<T>::update_dispute_fee()?;
+					<LastStakeAmountUpdate<T>>::set(timestamp);
+					Ok(())
+				});
 			}
 
-			// todo: check for any pending votes to be tallied and sent to governance controller contract
+			// Check for any pending votes due to be sent to governance controller contract for tallying
+			let _ = <Pallet<T>>::do_send_votes(timestamp, 3);
 
 			// todo: calculate actual weight
 			Weight::zero()
@@ -1123,7 +1128,7 @@ pub mod pallet {
 				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
 				Error::<T>::NoValueExists
 			);
-			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&vec![
+			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&[
 				Abi::Uint(T::ParachainId::get().into()),
 				Abi::FixedBytes(query_id.0.into()),
 				Abi::Uint(timestamp.into()),
@@ -1148,6 +1153,7 @@ pub mod pallet {
 				tally_date: 0,
 				users: Tally::default(),
 				reporters: Tally::default(),
+				sent: false,
 				executed: false,
 				result: None,
 				initiator: dispute_initiator.clone(),
@@ -1210,6 +1216,7 @@ pub mod pallet {
 			<VoteCount<T>>::mutate(|count| count.saturating_inc());
 			let dispute_fee = vote.fee;
 			T::Asset::transfer(&dispute_initiator, &Self::dispute_fees(), dispute_fee, false)?;
+			<PendingVotes<T>>::insert(dispute_id, (vote_round, vote.start_date + (11 * HOURS)));
 			<VoteInfo<T>>::insert(dispute_id, vote_round, vote);
 			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {
@@ -1274,6 +1281,7 @@ pub mod pallet {
 					Some(vote) => {
 						ensure!(vote.tally_date == 0, Error::<T>::VoteAlreadyTallied);
 						ensure!(!vote.voted.contains_key(&voter), Error::<T>::AlreadyVoted);
+						ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
 						// Update voting status and increment total queries for support, invalid, or against based on vote
 						vote.voted
 							.try_insert(voter.clone(), true)
@@ -1304,12 +1312,21 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Sends any pending dispute votes due to the governance controller contract for tallying.
+		///
+		/// - `max_votes`: The maximum number of votes to be sent.
+		#[pallet::call_index(11)]
+		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResult {
+			ensure_signed(origin)?;
+			Self::do_send_votes(Self::now(), max_votes)
+		}
+
 		/// Reports a stake deposited by a reporter.
 		///
 		/// - `reporter`: The reporter who deposited a stake.
 		/// - `amount`: The amount staked.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(11)]
+		#[pallet::call_index(12)]
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1359,7 +1376,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who requested a withdrawal.
 		/// - `amount`: The amount requested to withdraw.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(12)]
+		#[pallet::call_index(13)]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1410,7 +1427,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who withdrew a stake.
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(13)]
+		#[pallet::call_index(14)]
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1448,7 +1465,7 @@ pub mod pallet {
 		///
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `amount`: The slashed amount.
-		#[pallet::call_index(14)]
+		#[pallet::call_index(15)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1505,7 +1522,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The outcome of the vote, as determined by governance.
-		#[pallet::call_index(15)]
+		#[pallet::call_index(16)]
 		pub fn report_vote_tallied(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1520,7 +1537,7 @@ pub mod pallet {
 		/// Reports the execution of a vote.
 		///
 		/// - `dispute_id`: The identifier of the dispute.
-		#[pallet::call_index(16)]
+		#[pallet::call_index(17)]
 		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
@@ -1529,7 +1546,7 @@ pub mod pallet {
 		}
 
 		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(17)]
+		#[pallet::call_index(18)]
 		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
 			T::RegisterOrigin::ensure_origin(origin)?;
 			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);

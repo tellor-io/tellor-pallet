@@ -225,6 +225,8 @@ pub(crate) mod governance {
 		pub users: Tally<Balance>,
 		/// Vote tally of reporters.
 		pub reporters: Tally<u128>,
+		/// Whether the vote was sent to be tallied.
+		pub sent: bool,
 		/// Whether the vote was executed.
 		pub executed: bool,
 		/// Result after votes were tallied.

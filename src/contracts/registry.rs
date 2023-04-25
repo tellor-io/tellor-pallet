@@ -19,7 +19,7 @@ use super::*;
 pub(crate) fn register(para_id: ParaId, pallet_index: u8) -> Vec<u8> {
 	call(
 		&[20, 1, 238, 43],
-		encode(&vec![Token::Uint(para_id.into()), Token::Uint(pallet_index.into())]),
+		encode(&[Token::Uint(para_id.into()), Token::Uint(pallet_index.into())]),
 	)
 }
 
