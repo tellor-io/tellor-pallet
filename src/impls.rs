@@ -206,10 +206,12 @@ impl<T: Config> Pallet<T> {
 			Self::get_data_before(query_id, timestamp).unwrap_or_default();
 		let mut price_change = 0; // price change from last value to current value
 		if feed.details.price_threshold != 0 {
+			// v1 is value retrieved at supplied timestamp
 			let v1 = BytesToU256::convert(
 				value_retrieved.expect("value retrieved checked above; qed").into_inner(),
 			)
 			.ok_or(Error::<T>::ValueConversionError)?;
+			// v2 is latest value retrieved BEFORE supplied timestamp
 			let v2 = BytesToU256::convert(value_retrieved_before.into_inner())
 				.ok_or(Error::<T>::ValueConversionError)?;
 			if v2 == U256::zero() {
