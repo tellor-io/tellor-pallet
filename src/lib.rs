@@ -100,6 +100,9 @@ pub mod pallet {
 		type RuntimeOrigin: From<<Self as frame_system::Config>::RuntimeOrigin>
 			+ Into<result::Result<Origin, <Self as Config>::RuntimeOrigin>>;
 
+		/// The fungible asset used for tips, dispute fees and staking rewards.
+		type Asset: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
+
 		/// The units in which we record balances.
 		type Balance: Balance + From<Timestamp> + From<u128> + Into<U256>;
 
@@ -204,8 +207,6 @@ pub mod pallet {
 
 		/// The on-chain time provider.
 		type Time: UnixTime;
-
-		type Token: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
 
 		/// Frequency of stake amount updates.
 		#[pallet::constant]
@@ -636,7 +637,7 @@ pub mod pallet {
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
 			let tips = &Self::tips();
-			T::Token::transfer(
+			T::Asset::transfer(
 				tips,
 				&reporter,
 				// todo: safe math
@@ -764,7 +765,7 @@ pub mod pallet {
 				.checked_div(&1000u16.into())
 				.ok_or(Error::<T>::FeeCalculationError)?;
 			let tips = &Self::tips();
-			T::Token::transfer(
+			T::Asset::transfer(
 				tips,
 				&reporter,
 				// todo: safe math
@@ -947,7 +948,7 @@ pub mod pallet {
 				)?;
 				<QueryIdsWithFundingIndex<T>>::set(query_id, Some(len));
 			}
-			T::Token::transfer(&tipper, &Self::tips(), amount, true)?;
+			T::Asset::transfer(&tipper, &Self::tips(), amount, true)?;
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
 			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
 			Ok(())
@@ -1208,7 +1209,7 @@ pub mod pallet {
 			}
 			<VoteCount<T>>::mutate(|count| count.saturating_inc());
 			let dispute_fee = vote.fee;
-			T::Token::transfer(&dispute_initiator, &Self::dispute_fees(), dispute_fee, false)?;
+			T::Asset::transfer(&dispute_initiator, &Self::dispute_fees(), dispute_fee, false)?;
 			<VoteInfo<T>>::insert(dispute_id, vote_round, vote);
 			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {
