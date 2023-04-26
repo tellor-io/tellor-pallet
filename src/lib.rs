@@ -73,7 +73,7 @@ pub mod pallet {
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
-		sp_runtime::traits::{AtLeast32BitUnsigned, Hash},
+		sp_runtime::traits::Hash,
 		traits::{
 			fungible::{Inspect, Transfer},
 			tokens::Balance,
@@ -177,8 +177,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
 
-		type Price: AtLeast32BitUnsigned + Copy + Default + Into<U256>;
-
 		/// Origin that manages registration and deregistration from the controller contracts.
 		type RegisterOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
@@ -211,9 +209,6 @@ pub mod pallet {
 		/// Frequency of stake amount updates.
 		#[pallet::constant]
 		type UpdateStakeAmountInterval: Get<Timestamp>;
-
-		/// Conversion from submitted value (bytes) to a price for price threshold evaluation.
-		type ValueConverter: Convert<Vec<u8>, Result<Self::Price, DispatchError>>;
 
 		/// The sub-system used for sending XCM messages.
 		type Xcm: traits::SendXcm;
@@ -481,6 +476,7 @@ pub mod pallet {
 		TipAlreadyClaimed,
 		/// Tip earned by previous submission.
 		TipAlreadyEarned,
+		/// An error occurred converting an oracle value.
 		ValueConversionError,
 		/// Value disputed.
 		ValueDisputed,

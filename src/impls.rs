@@ -24,10 +24,6 @@ use sp_runtime::{
 use sp_std::cmp::Ordering;
 
 impl<T: Config> Pallet<T> {
-	pub(super) fn bytes_to_price(value: ValueOf<T>) -> Result<T::Price, DispatchError> {
-		T::ValueConverter::convert(value.into_inner())
-	}
-
 	/// Calculates the latest dispute fee based on the supplied price.
 	/// # Arguments
 	/// * `price` - The current staking token to local balance price.
@@ -210,19 +206,24 @@ impl<T: Config> Pallet<T> {
 			Self::get_data_before(query_id, timestamp).unwrap_or_default();
 		let mut price_change = 0; // price change from last value to current value
 		if feed.details.price_threshold != 0 {
-			let v1 =
-				Self::bytes_to_price(value_retrieved.expect("value retrieved checked above; qed"))?;
-			let v2 = Self::bytes_to_price(value_retrieved_before)?;
-			if v2 == Zero::zero() {
+			// v1 is value retrieved at supplied timestamp
+			let v1 = BytesToU256::convert(
+				value_retrieved.expect("value retrieved checked above; qed").into_inner(),
+			)
+			.ok_or(Error::<T>::ValueConversionError)?;
+			// v2 is latest value retrieved BEFORE supplied timestamp
+			let v2 = BytesToU256::convert(value_retrieved_before.into_inner())
+				.ok_or(Error::<T>::ValueConversionError)?;
+			if v2 == U256::zero() {
 				price_change = 10_000;
 			} else if v1 >= v2 {
-				price_change = (T::Price::from(10_000u16).saturating_mul(v1.saturating_sub(v2)))
-					.checked_div(&v2)
+				price_change = (U256::from(10_000).saturating_mul(v1.saturating_sub(v2)))
+					.checked_div(v2)
 					.expect("v2 checked against zero above; qed")
 					.saturated_into();
 			} else {
-				price_change = (T::Price::from(10_000u16).saturating_mul(v2.saturating_sub(v1)))
-					.checked_div(&v2)
+				price_change = (U256::from(10_000u16).saturating_mul(v2.saturating_sub(v1)))
+					.checked_div(v2)
 					.expect("v2 checked against zero above; qed")
 					.saturated_into();
 			}
@@ -298,10 +299,9 @@ impl<T: Config> Pallet<T> {
 		) else {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
-		let Ok(staking_token_price) = T::ValueConverter::convert(value.into_inner()) else {
+		let Some(staking_token_price) = BytesToU256::convert(value.into_inner()) else {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
-		let staking_token_price = staking_token_price.into();
 		ensure!(
 			staking_token_price >= 10u128.pow(16).into() &&
 				staking_token_price < 10u128.pow(24).into(),
@@ -1230,10 +1230,9 @@ impl<T: Config> Pallet<T> {
 		) else {
 			return Err(Error::<T>::InvalidPrice.into());
 		};
-		let Ok(token_price) = T::ValueConverter::convert(value.into_inner()) else {
+		let Some(token_price) = BytesToU256::convert(value.into_inner()) else {
 			return Err(Error::<T>::InvalidPrice.into());
 		};
-		let token_price = token_price.into();
 		ensure!(
 			token_price >= 10u128.pow(16).into() && token_price < 10u128.pow(24).into(),
 			Error::<T>::InvalidPrice
@@ -1432,7 +1431,7 @@ impl<T: Config> Pallet<T> {
 	}
 }
 
-impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>> for Pallet<T> {
+impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 	fn get_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<(Vec<u8>, Timestamp)> {
 		Self::get_index_for_data_after(query_id, timestamp)
 			.and_then(|index| Self::get_timestamp_by_query_id_and_index(query_id, index))
@@ -1489,7 +1488,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>, PriceOf<T>> for Pallet<T> {
 		Self::retrieve_data(query_id, timestamp).map(|v| v.into_inner())
 	}
 
-	fn value_to_price(value: Vec<u8>) -> Option<PriceOf<T>> {
-		T::ValueConverter::convert(value).ok()
+	fn value_to_price(value: Vec<u8>) -> Option<Price> {
+		BytesToU256::convert(value)
 	}
 }

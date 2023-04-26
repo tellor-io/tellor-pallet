@@ -24,6 +24,7 @@ use sp_runtime::{
 	traits::{Convert, Zero},
 	SaturatedConversion,
 };
+use sp_std::vec::Vec;
 
 pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 /// Address of a reporter on controller chain.
@@ -40,7 +41,7 @@ pub(crate) type FeedOf<T> = autopay::Feed<BalanceOf<T>, <T as Config>::MaxReward
 pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<BalanceOf<T>>;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
-pub(crate) type PriceOf<T> = <T as Config>::Price;
+pub(crate) type Price = U256;
 pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLength>;
 pub type QueryId = H256;
 pub(crate) type ReportOf<T> =
@@ -250,5 +251,13 @@ pub(super) struct U256ToBalance<T>(PhantomData<T>);
 impl<T: Config> Convert<U256, BalanceOf<T>> for U256ToBalance<T> {
 	fn convert(a: U256) -> BalanceOf<T> {
 		a.saturated_into::<u128>().saturated_into()
+	}
+}
+
+pub struct BytesToU256;
+impl Convert<Vec<u8>, Option<U256>> for BytesToU256 {
+	fn convert(a: Vec<u8>) -> Option<U256> {
+		let a: Option<[u8; 32]> = a.try_into().ok();
+		a.map(|a| a.into())
 	}
 }

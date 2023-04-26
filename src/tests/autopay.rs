@@ -17,7 +17,7 @@
 use super::*;
 use crate::{
 	constants::REPORTING_LOCK,
-	types::{FeedDetailsOf, FeedId, QueryDataOf, QueryId, Timestamp, TipOf},
+	types::{BytesToU256, FeedDetailsOf, FeedId, QueryDataOf, QueryId, Timestamp, TipOf},
 	Config,
 };
 use frame_support::{
@@ -25,11 +25,9 @@ use frame_support::{
 	traits::{fungible::Inspect, Currency, Get},
 };
 use sp_core::{bounded::BoundedVec, bounded_vec, keccak_256};
-use sp_runtime::traits::BadOrigin;
+use sp_runtime::traits::{BadOrigin, Convert};
 
 type Fee = <Test as Config>::Fee;
-type Pallet = crate::Pallet<Test>;
-type Price = <Test as Config>::Price;
 
 #[test]
 fn claim_tip_ensures() {
@@ -790,7 +788,7 @@ fn get_reward_claimed_status() {
 	ext.execute_with(|| {
 		with_block(|| {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
-			timestamp = super::now();
+			timestamp = now();
 			Balances::make_free_balance_be(&feed_creator, token(3));
 			feed_id = create_feed(
 				feed_creator,
@@ -2129,25 +2127,30 @@ fn get_reward_amount() {
 }
 
 #[test]
-fn bytes_to_price() {
-	fn uint_to_bytes32(value: impl Into<Uint>) -> Bytes {
+fn bytes_to_uint() {
+	fn uint_to_bytes(value: impl Into<Uint>) -> Bytes {
 		ethabi::encode(&vec![Token::Uint(value.into())])
 	}
 
-	let x: Vec<(Bytes, Price)> = vec![
-		(uint_to_bytes32(1), 1),
-		(uint_to_bytes32(2), 2),
-		(uint_to_bytes32(300000000000000u64), 300000000000000),
-		(uint_to_bytes32(300000000000001u64), 300000000000001),
-		(uint_to_bytes32(1u128), 1),
-		(uint_to_bytes32(u128::MAX), u128::MAX),
+	let x: Vec<(Bytes, U256)> = vec![
+		(uint_to_bytes(1), 1.into()),
+		(uint_to_bytes(2), 2.into()),
+		(uint_to_bytes(300000000000000u64), U256::from(300000000000000u64)),
+		(uint_to_bytes(300000000000001u64), U256::from(300000000000001u64)),
+		(uint_to_bytes(1u128), 1.into()),
+		(uint_to_bytes(u128::MAX), u128::MAX.into()),
+		(uint_to_bytes(U256::MAX), U256::MAX),
 	];
 	for (source, expected) in x {
 		println!("{:?}", source);
 		let source: ValueOf<Test> = source.try_into().unwrap();
-		let amount = Pallet::bytes_to_price(source.try_into().unwrap()).unwrap();
+		let amount = BytesToU256::convert(source.try_into().unwrap()).unwrap();
 		assert_eq!(amount, expected);
 	}
+
+	assert_eq!(BytesToU256::convert([0u8; 32].to_vec()).unwrap(), U256::zero());
+	assert_eq!(BytesToU256::convert([0u8; 31].to_vec()), None);
+	assert_eq!(BytesToU256::convert([0u8; 33].to_vec()), None);
 }
 
 #[test]

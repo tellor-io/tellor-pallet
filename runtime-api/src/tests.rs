@@ -132,7 +132,6 @@ impl tellor::Config for Test {
 	type MinimumStakeAmount = ();
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
-	type Price = u32;
 	type RegisterOrigin = frame_system::EnsureRoot<AccountId>;
 	type Registry = ();
 	type StakeAmountCurrencyTarget = ();
@@ -142,7 +141,6 @@ impl tellor::Config for Test {
 	type StakingToLocalTokenPriceQueryId = ();
 	type Time = Time;
 	type UpdateStakeAmountInterval = ();
-	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
 	type XcmFeesAsset = XcmFeesAsset;
 	type XcmWeightToAsset = ();
@@ -154,13 +152,6 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		_dest: impl Into<MultiLocation>,
 		_message: Xcm<()>,
 	) -> Result<(), SendError> {
-		todo!()
-	}
-}
-
-pub struct ValueConverter;
-impl Convert<Vec<u8>, Result<u32, sp_runtime::DispatchError>> for ValueConverter {
-	fn convert(a: Vec<u8>) -> Result<u32, sp_runtime::DispatchError> {
 		todo!()
 	}
 }

@@ -19,7 +19,7 @@ pub(crate) use ethabi::{encode, Token};
 use sp_core::{H160, U256};
 use sp_std::{vec, vec::Vec};
 
-pub(crate) type Abi = ethabi::Token;
+pub(crate) type Abi = Token;
 
 pub(crate) mod governance;
 pub(crate) mod registry;

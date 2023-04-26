@@ -17,7 +17,6 @@
 use crate as tellor;
 use crate::{
 	constants::HOURS, types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
-	Error::ValueConversionError,
 };
 use frame_support::{
 	assert_ok, log, parameter_types,
@@ -29,8 +28,7 @@ use once_cell::sync::Lazy;
 use sp_core::{ConstU128, ConstU32, ConstU8, H256};
 use sp_runtime::{
 	testing::Header,
-	traits::{BlakeTwo256, Convert, IdentityLookup},
-	DispatchError,
+	traits::{BlakeTwo256, IdentityLookup},
 };
 use sp_std::cell::RefCell;
 use std::{
@@ -142,12 +140,11 @@ impl tellor::Config for Test {
 	type MaxRewardClaims = ConstU32<10>;
 	type MaxTimestamps = ConstU32<100>;
 	type MaxTipsPerQuery = ConstU32<10>;
-	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so ValueConverter needs to handle conversion to price for threshold checks
+	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so value conversion needs to handle conversion to price for threshold checks
 	type MaxVotes = ConstU32<10>;
 	type MinimumStakeAmount = MinimumStakeAmount;
 	type PalletId = TellorPalletId;
 	type ParachainId = ParachainId;
-	type Price = u128;
 	type RegisterOrigin = system::EnsureRoot<AccountId>;
 	type Registry = TellorRegistry;
 	type StakeAmountCurrencyTarget = ConstU128<{ 500 * 10u128.pow(18) }>;
@@ -157,21 +154,9 @@ impl tellor::Config for Test {
 	type StakingToLocalTokenPriceQueryId = StakingToLocalTokenPriceQueryId;
 	type Time = Timestamp;
 	type UpdateStakeAmountInterval = ConstU64<{ 12 * HOURS }>;
-	type ValueConverter = ValueConverter;
 	type Xcm = TestSendXcm;
 	type XcmFeesAsset = XcmFeesAsset;
 	type XcmWeightToAsset = ConstU128<50_000>; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
-}
-
-pub struct ValueConverter;
-impl Convert<Vec<u8>, Result<u128, DispatchError>> for ValueConverter {
-	fn convert(a: Vec<u8>) -> Result<u128, DispatchError> {
-		// Should be more advanced depending on chain config
-		match a[16..].try_into() {
-			Ok(v) => Ok(u128::from_be_bytes(v)),
-			Err(_) => Err(ValueConversionError::<Test>.into()),
-		}
-	}
 }
 
 thread_local! {
