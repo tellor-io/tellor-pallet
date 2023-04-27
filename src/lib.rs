@@ -441,7 +441,6 @@ pub mod pallet {
 		ClaimBufferNotPassed,
 		/// Timestamp too old to claim tip.
 		ClaimPeriodExpired,
-		FeeCalculationError,
 		/// Feed must not be set up already.
 		FeedAlreadyExists,
 		/// No funds available for this feed or insufficient balance for all submitted timestamps.
@@ -640,8 +639,8 @@ pub mod pallet {
 			let fee = (cumulative_reward
 				.checked_mul(&T::Fee::get().into())
 				.ok_or(ArithmeticError::Overflow)?)
-			.checked_div(&1000u16.into())
-			.ok_or(Error::<T>::FeeCalculationError)?;
+			.checked_div(&1_000u16.into())
+			.expect("other is non-zero; qed");
 			let tips = &Self::tips();
 			T::Asset::transfer(
 				tips,
@@ -777,8 +776,8 @@ pub mod pallet {
 			let fee = (cumulative_reward
 				.checked_mul(&T::Fee::get().into())
 				.ok_or(ArithmeticError::Overflow)?)
-			.checked_div(&1000u16.into())
-			.ok_or(Error::<T>::FeeCalculationError)?;
+			.checked_div(&1_000u16.into())
+			.expect("other is non-zero; qed");
 			let tips = &Self::tips();
 			T::Asset::transfer(
 				tips,
