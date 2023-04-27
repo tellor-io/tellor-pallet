@@ -214,7 +214,14 @@ fn registers() {
 				vec![xcm_transact(
 					ethereum_xcm::transact(
 						*REGISTRY,
-						registry::register(PARA_ID, PALLET_INDEX).try_into().unwrap(),
+						registry::register(
+							PARA_ID,
+							PALLET_INDEX,
+							<Test as crate::Config>::WeightToFee::get(),
+							crate::xcm::FeeLocation::<Test>::get().unwrap()
+						)
+						.try_into()
+						.unwrap(),
 						gas_limits::REGISTER
 					)
 					.into(),
