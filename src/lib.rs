@@ -367,6 +367,10 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type QueryData<T> = StorageMap<_, Identity, QueryId, QueryDataOf<T>>;
 
+	#[pallet::storage]
+	#[cfg(feature = "runtime-benchmarks")]
+	pub type NowOffset<T: Config> = StorageValue<_, u64, ValueQuery>;
+
 	#[pallet::type_value]
 	pub fn InitialDisputeFee<T: Config>() -> BalanceOf<T> {
 		T::InitialDisputeFee::get()
