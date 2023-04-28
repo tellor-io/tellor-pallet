@@ -27,7 +27,7 @@ use frame_support::{
 use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, Get, U256};
 use sp_runtime::{
 	traits::{BadOrigin, Convert},
-	SaturatedConversion, Saturating,
+	Saturating,
 };
 
 type BoundedReportsSubmittedByQueryId =
@@ -2371,7 +2371,7 @@ fn update_rewards() {
 				unit / (100 * unit);
 			assert_eq!(
 				Tellor::accumulated_reward_per_share(),
-				expected_accumulated_reward_per_share.saturated_into::<Balance>()
+				expected_accumulated_reward_per_share
 			);
 			(timestamp, expected_accumulated_reward_per_share)
 		});
@@ -2395,7 +2395,7 @@ fn update_rewards() {
 					(100 * unit));
 			assert_eq!(
 				Tellor::accumulated_reward_per_share(),
-				expected_accumulated_reward_per_share.saturated_into::<Balance>()
+				expected_accumulated_reward_per_share
 			);
 			// todo:
 			// let expected_staking_rewards_balance = U256ToBalance::convert(

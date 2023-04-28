@@ -29,7 +29,7 @@ pub use pallet::*;
 use sp_core::Get;
 use sp_runtime::{
 	traits::{AccountIdConversion, CheckedDiv, Convert, Zero},
-	SaturatedConversion, Saturating,
+	Saturating,
 };
 use sp_std::vec::Vec;
 pub use traits::{SendXcm, UsingTellor};
@@ -73,7 +73,7 @@ pub mod pallet {
 	use ::xcm::latest::prelude::*;
 	use frame_support::{
 		pallet_prelude::*,
-		sp_runtime::traits::Hash,
+		sp_runtime::traits::{CheckedAdd, CheckedMul, Hash},
 		traits::{
 			fungible::{Inspect, Transfer},
 			tokens::Balance,
@@ -83,7 +83,10 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::{bounded::BoundedBTreeMap, U256};
-	use sp_runtime::{traits::SaturatedConversion, ArithmeticError};
+	use sp_runtime::{
+		traits::{CheckedConversion, CheckedSub},
+		ArithmeticError,
+	};
 	use sp_std::{prelude::*, result};
 
 	#[pallet::pallet]
@@ -447,7 +450,6 @@ pub mod pallet {
 		ClaimBufferNotPassed,
 		/// Timestamp too old to claim tip.
 		ClaimPeriodExpired,
-		FeeCalculationError,
 		/// Feed must not be set up already.
 		FeedAlreadyExists,
 		/// No funds available for this feed or insufficient balance for all submitted timestamps.
@@ -651,15 +653,16 @@ pub mod pallet {
 					query_id, timestamp, &reporter,
 				)?);
 			}
-			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
-				.checked_div(&1000u16.into())
-				.ok_or(Error::<T>::FeeCalculationError)?;
+			let fee = (cumulative_reward
+				.checked_mul(&T::Fee::get().into())
+				.ok_or(ArithmeticError::Overflow)?)
+			.checked_div(&1_000u16.into())
+			.expect("other is non-zero; qed");
 			let tips = &Self::tips();
 			T::Asset::transfer(
 				tips,
 				&reporter,
-				// todo: safe math
-				cumulative_reward - fee,
+				cumulative_reward.checked_sub(&fee).ok_or(ArithmeticError::Underflow)?,
 				false,
 			)?;
 			Self::do_add_staking_rewards(tips, fee)?;
@@ -670,7 +673,6 @@ pub mod pallet {
 					// Replace unfunded feed in array with last element
 					<QueryIdsWithFunding<T>>::try_mutate(
 						|query_ids_with_funding| -> DispatchResult {
-							// todo: safe math
 							let qid =
 								*query_ids_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
 							query_ids_with_funding
@@ -681,8 +683,11 @@ pub mod pallet {
 								query_ids_with_funding.get(idx).ok_or(Error::<T>::InvalidIndex)?;
 							<QueryIdsWithFundingIndex<T>>::set(
 								query_id_last_funded,
-								// todo: safe math
-								Some((idx + 1).saturated_into()),
+								Some(
+									(idx.checked_add(1).ok_or(ArithmeticError::Overflow)?)
+										.checked_into()
+										.ok_or(ArithmeticError::Overflow)?,
+								),
 							);
 							<QueryIdsWithFundingIndex<T>>::remove(query_id);
 							query_ids_with_funding.pop();
@@ -721,7 +726,8 @@ pub mod pallet {
 			let mut cumulative_reward = BalanceOf::<T>::zero();
 			for timestamp in &timestamps {
 				ensure!(
-					Self::now().saturating_sub(*timestamp) > 12 * HOURS,
+					Self::now().checked_sub(*timestamp).ok_or(ArithmeticError::Underflow)? >
+						12 * HOURS,
 					Error::<T>::ClaimBufferNotPassed
 				);
 				ensure!(
@@ -741,8 +747,11 @@ pub mod pallet {
 					// Adjust currently funded feeds
 					<FeedsWithFunding<T>>::try_mutate(|feeds_with_funding| -> DispatchResult {
 						if feeds_with_funding.len() > 1 {
-							// todo: safe math
-							let index = feed.details.feeds_with_funding_index - 1;
+							let index = feed
+								.details
+								.feeds_with_funding_index
+								.checked_sub(1)
+								.ok_or(ArithmeticError::Underflow)?;
 							// Replace unfunded feed in array with last element
 							let fid = *feeds_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
 							feeds_with_funding
@@ -755,16 +764,18 @@ pub mod pallet {
 							match <QueryIdFromDataFeedId<T>>::get(feed_id_last_funded) {
 								None => todo!(),
 								Some(query_id_last_funded) => {
-									<DataFeeds<T>>::mutate(
+									<DataFeeds<T>>::try_mutate(
 										query_id_last_funded,
 										feed_id_last_funded,
-										|f| {
+										|f| -> DispatchResult {
 											if let Some(f) = f {
-												// todo: safe math
-												f.details.feeds_with_funding_index = index + 1
+												f.details.feeds_with_funding_index = index
+													.checked_add(1)
+													.ok_or(ArithmeticError::Overflow)?
 											}
+											Ok(())
 										},
-									);
+									)?;
 								},
 							}
 						}
@@ -780,15 +791,16 @@ pub mod pallet {
 
 			feed.details.balance.saturating_reduce(cumulative_reward);
 			<DataFeeds<T>>::set(query_id, feed_id, Some(feed));
-			let fee = (cumulative_reward.saturating_mul(T::Fee::get().into()))
-				.checked_div(&1000u16.into())
-				.ok_or(Error::<T>::FeeCalculationError)?;
+			let fee = (cumulative_reward
+				.checked_mul(&T::Fee::get().into())
+				.ok_or(ArithmeticError::Overflow)?)
+			.checked_div(&1_000u16.into())
+			.expect("other is non-zero; qed");
 			let tips = &Self::tips();
 			T::Asset::transfer(
 				tips,
 				&reporter,
-				// todo: safe math
-				cumulative_reward - fee,
+				cumulative_reward.checked_sub(&fee).ok_or(ArithmeticError::Underflow)?,
 				false,
 			)?;
 			Self::do_add_staking_rewards(tips, fee)?;
@@ -926,7 +938,9 @@ pub mod pallet {
 						*maybe_tips = Some(
 							BoundedVec::try_from(vec![TipOf::<T> {
 								amount,
-								timestamp: Self::now().saturating_add(1u8.into()),
+								timestamp: Self::now()
+									.checked_add(1u8.into())
+									.ok_or(ArithmeticError::Overflow)?,
 								cumulative_tips: amount,
 							}])
 							.map_err(|_| Error::<T>::MaxTipsReached)?,
@@ -939,7 +953,9 @@ pub mod pallet {
 							Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
 						match tips.last_mut() {
 							Some(last_tip) if timestamp_retrieved < last_tip.timestamp => {
-								last_tip.timestamp = Self::now().saturating_add(1u8.into());
+								last_tip.timestamp = Self::now()
+									.checked_add(1u8.into())
+									.ok_or(ArithmeticError::Overflow)?;
 								last_tip.amount.saturating_accrue(amount);
 								last_tip.cumulative_tips.saturating_accrue(amount);
 							},
@@ -948,8 +964,12 @@ pub mod pallet {
 									tips.last().map_or(Zero::zero(), |t| t.cumulative_tips);
 								tips.try_push(Tip {
 									amount,
-									timestamp: Self::now().saturating_add(1u8.into()),
-									cumulative_tips: cumulative_tips.saturating_add(amount),
+									timestamp: Self::now()
+										.checked_add(1u8.into())
+										.ok_or(ArithmeticError::Overflow)?,
+									cumulative_tips: cumulative_tips
+										.checked_add(&amount)
+										.ok_or(ArithmeticError::Overflow)?,
 								})
 								.map_err(|_| Error::<T>::MaxTipsReached)?;
 							},
@@ -1010,10 +1030,7 @@ pub mod pallet {
 			);
 			let report = <Reports<T>>::get(query_id);
 			ensure!(
-				nonce ==
-					report
-						.as_ref()
-						.map_or(Nonce::zero(), |r| r.timestamps.len().saturated_into::<Nonce>()) ||
+				nonce == report.as_ref().map_or(Nonce::zero(), |r| r.timestamps.len() as Nonce) ||
 					nonce == 0, // todo: query || nonce == 0 check
 				Error::<T>::InvalidNonce
 			);
@@ -1026,19 +1043,23 @@ pub mod pallet {
 			// Require reporter to abide by given reporting lock
 			let timestamp = Self::now();
 			ensure!(
-				// todo: refactor to remove saturated_into()
-				(timestamp.saturating_sub(staker.reporter_last_timestamp))
-					.saturated_into::<u128>()
-					.saturating_mul(1_000) >
-					((REPORTING_LOCK as u128).saturating_mul(1_000))
-						.checked_div(
-							staker
-								.staked_balance
-								.checked_div(<StakeAmount<T>>::get())
-								.ok_or(ArithmeticError::DivisionByZero)?
-								.saturated_into::<u128>()
-						)
-						.ok_or(ArithmeticError::DivisionByZero)?,
+				U256::from(
+					timestamp
+						.checked_sub(staker.reporter_last_timestamp)
+						.ok_or(ArithmeticError::Underflow)?
+				)
+				.checked_mul(1_000.into())
+				.ok_or(ArithmeticError::Overflow)? >
+					(U256::from(REPORTING_LOCK)
+						.checked_mul(1_000.into())
+						.ok_or(ArithmeticError::Overflow)?)
+					.checked_div(
+						staker
+							.staked_balance
+							.checked_div(<StakeAmount<T>>::get())
+							.ok_or(ArithmeticError::DivisionByZero)?
+					)
+					.ok_or(ArithmeticError::DivisionByZero)?,
 				Error::<T>::ReporterTimeLocked
 			);
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
@@ -1055,7 +1076,14 @@ pub mod pallet {
 			let mut report = report.unwrap_or_else(Report::new);
 			report
 				.timestamp_index
-				.try_insert(timestamp, report.timestamps.len().saturated_into::<u32>())
+				.try_insert(
+					timestamp,
+					report
+						.timestamps
+						.len()
+						.checked_into::<u32>()
+						.ok_or(ArithmeticError::Overflow)?,
+				)
 				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
 			report
 				.timestamps
@@ -1100,7 +1128,8 @@ pub mod pallet {
 						.get(&query_id)
 						.copied()
 						.unwrap_or_default()
-						.saturating_add(1),
+						.checked_add(1)
+						.ok_or(ArithmeticError::Overflow)?,
 				)
 				.map_err(|_| Error::<T>::MaxQueriesReached)?;
 			<StakerDetails<T>>::insert(&reporter, staker);
@@ -1192,27 +1221,39 @@ pub mod pallet {
 			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 			if vote_round == 1 {
 				ensure!(
-					Self::now().saturating_sub(timestamp) < REPORTING_LOCK,
+					Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? <
+						REPORTING_LOCK,
 					Error::<T>::DisputeReportingPeriodExpired
 				);
-				<OpenDisputesOnId<T>>::mutate(query_id, |open_disputes| {
-					*open_disputes =
-						Some(open_disputes.take().unwrap_or_default().saturating_add(1));
-				});
+				<OpenDisputesOnId<T>>::try_mutate(query_id, |open_disputes| -> DispatchResult {
+					*open_disputes = Some(
+						open_disputes
+							.take()
+							.unwrap_or_default()
+							.checked_add(1)
+							.ok_or(ArithmeticError::Overflow)?,
+					);
+					Ok(())
+				})?;
 				// calculate dispute fee based on number of open disputes on query id
-				vote.fee = vote.fee.saturating_mul(
-					<BalanceOf<T>>::from(2u8).saturating_pow(
-						<OpenDisputesOnId<T>>::get(query_id)
-							.ok_or(Error::<T>::InvalidIndex)?
-							.saturating_sub(1)
-							.saturated_into(),
-					),
-				);
+				vote.fee = vote
+					.fee
+					.checked_mul(
+						&<BalanceOf<T>>::from(2u8).saturating_pow(
+							<OpenDisputesOnId<T>>::get(query_id)
+								.ok_or(Error::<T>::InvalidIndex)?
+								.checked_sub(1)
+								.ok_or(ArithmeticError::Underflow)?
+								.checked_into()
+								.ok_or(ArithmeticError::Overflow)?,
+						),
+					)
+					.ok_or(ArithmeticError::Overflow)?;
 				dispute.value =
 					Self::retrieve_data(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
 				Self::remove_value(query_id, timestamp)?;
 			} else {
-				let prev_id = vote_round.saturating_sub(1);
+				let prev_id = vote_round.checked_sub(1).ok_or(ArithmeticError::Underflow)?;
 				let prev_vote =
 					<VoteInfo<T>>::get(dispute_id, prev_id).ok_or(Error::<T>::InvalidVote)?;
 				ensure!(
@@ -1223,10 +1264,12 @@ pub mod pallet {
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
 				ensure!(!prev_vote.executed, Error::<T>::VoteAlreadyExecuted); // Ensure previous round not executed
-				vote.fee = vote.fee.saturating_mul(
-					<BalanceOf<T>>::from(2u8)
-						.saturating_pow(vote_round.saturating_sub(1).saturated_into()),
-				);
+				vote.fee = vote
+					.fee
+					.checked_mul(&<BalanceOf<T>>::from(2u8).saturating_pow(
+						vote_round.checked_sub(1).ok_or(ArithmeticError::Underflow)?.into(),
+					))
+					.ok_or(ArithmeticError::Overflow)?;
 				dispute.value =
 					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
 			}
@@ -1367,13 +1410,23 @@ pub mod pallet {
 				if locked_balance > U256::zero() {
 					if locked_balance >= amount {
 						// if staker's locked balance covers full amount, use that
-						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
-						<ToWithdraw<T>>::mutate(|locked| *locked = locked.saturating_sub(amount));
+						staker.locked_balance = staker
+							.locked_balance
+							.checked_sub(amount)
+							.ok_or(ArithmeticError::Underflow)?;
+						<ToWithdraw<T>>::try_mutate(|locked| -> DispatchResult {
+							*locked =
+								locked.checked_sub(amount).ok_or(ArithmeticError::Underflow)?;
+							Ok(())
+						})?;
 					} else {
 						// otherwise, stake the whole locked balance
-						<ToWithdraw<T>>::mutate(|locked| {
-							*locked = locked.saturating_sub(staker.locked_balance)
-						});
+						<ToWithdraw<T>>::try_mutate(|locked| -> DispatchResult {
+							*locked = locked
+								.checked_sub(staker.locked_balance)
+								.ok_or(ArithmeticError::Underflow)?;
+							Ok(())
+						})?;
 						staker.locked_balance = U256::zero();
 					}
 				} else if staked_balance == U256::zero() {
@@ -1416,12 +1469,21 @@ pub mod pallet {
 					Some(staker) => {
 						ensure!(address == staker.address, Error::<T>::InvalidAddress);
 						ensure!(staker.staked_balance >= amount, Error::<T>::InsufficientStake);
-						// todo: safe math
-						let stake_amount = staker.staked_balance - amount;
+						let stake_amount = staker
+							.staked_balance
+							.checked_sub(amount)
+							.ok_or(ArithmeticError::Underflow)?;
 						Self::update_stake_and_pay_rewards((&reporter, staker), stake_amount)?;
 						staker.start_date = Self::now();
-						staker.locked_balance = staker.locked_balance.saturating_add(amount);
-						<ToWithdraw<T>>::mutate(|locked| *locked = locked.saturating_add(amount));
+						staker.locked_balance = staker
+							.locked_balance
+							.checked_add(amount)
+							.ok_or(ArithmeticError::Overflow)?;
+						<ToWithdraw<T>>::try_mutate(|locked| -> DispatchResult {
+							*locked =
+								locked.checked_add(amount).ok_or(ArithmeticError::Overflow)?;
+							Ok(())
+						})?;
 						Ok(())
 					},
 				}
@@ -1471,13 +1533,22 @@ pub mod pallet {
 							Error::<T>::NoWithdrawalRequested
 						);
 						ensure!(
-							Self::now().saturating_sub(staker.start_date) >= 7 * DAYS,
+							Self::now()
+								.checked_sub(staker.start_date)
+								.ok_or(ArithmeticError::Underflow)? >=
+								7 * DAYS,
 							Error::<T>::WithdrawalPeriodPending
 						);
-						<ToWithdraw<T>>::mutate(|locked| {
-							*locked = locked.saturating_sub(staker.locked_balance)
-						});
-						staker.locked_balance = staker.locked_balance.saturating_sub(amount);
+						<ToWithdraw<T>>::try_mutate(|locked| -> DispatchResult {
+							*locked = locked
+								.checked_sub(staker.locked_balance)
+								.ok_or(ArithmeticError::Underflow)?;
+							Ok(())
+						})?;
+						staker.locked_balance = staker
+							.locked_balance
+							.checked_sub(amount)
+							.ok_or(ArithmeticError::Underflow)?;
 						Ok(())
 					},
 				}
@@ -1507,32 +1578,55 @@ pub mod pallet {
 						let staked_balance = staker.staked_balance;
 						let locked_balance = staker.locked_balance;
 						ensure!(
-							staked_balance.saturating_add(locked_balance) > U256::zero(),
+							staked_balance
+								.checked_add(locked_balance)
+								.ok_or(ArithmeticError::Overflow)? >
+								U256::zero(),
 							Error::<T>::InsufficientStake
 						);
 						if locked_balance >= amount {
 							// if locked balance is at least stakeAmount, slash from locked balance
-							staker.locked_balance = staker.locked_balance.saturating_sub(amount);
-							<ToWithdraw<T>>::mutate(|locked| {
-								*locked = locked.saturating_sub(amount)
-							});
-						} else if locked_balance.saturating_add(staked_balance) >= amount {
+							staker.locked_balance = staker
+								.locked_balance
+								.checked_sub(amount)
+								.ok_or(ArithmeticError::Underflow)?;
+							<ToWithdraw<T>>::try_mutate(|locked| -> DispatchResult {
+								*locked =
+									locked.checked_sub(amount).ok_or(ArithmeticError::Underflow)?;
+								Ok(())
+							})?;
+						} else if locked_balance
+							.checked_add(staked_balance)
+							.ok_or(ArithmeticError::Overflow)? >=
+							amount
+						{
 							// if locked balance + staked balance is at least stake amount,
 							// slash from locked balance and slash remainder from staked balance
 							Self::update_stake_and_pay_rewards(
 								(&reporter, staker),
 								staked_balance
-									.saturating_sub(amount.saturating_sub(locked_balance)),
+									.checked_sub(
+										amount
+											.checked_sub(locked_balance)
+											.ok_or(ArithmeticError::Underflow)?,
+									)
+									.ok_or(ArithmeticError::Underflow)?,
 							)?;
-							<ToWithdraw<T>>::mutate(|locked| {
-								*locked = locked.saturating_sub(locked_balance)
-							});
+							<ToWithdraw<T>>::try_mutate(|locked| -> DispatchResult {
+								*locked = locked
+									.checked_sub(locked_balance)
+									.ok_or(ArithmeticError::Underflow)?;
+								Ok(())
+							})?;
 							staker.locked_balance = U256::zero();
 						} else {
 							// if sum(locked balance + staked balance) is less than stakeAmount, slash sum
-							<ToWithdraw<T>>::mutate(|locked| {
-								*locked = locked.saturating_sub(locked_balance)
-							});
+							<ToWithdraw<T>>::try_mutate(|locked| -> DispatchResult {
+								*locked = locked
+									.checked_sub(locked_balance)
+									.ok_or(ArithmeticError::Underflow)?;
+								Ok(())
+							})?;
 							Self::update_stake_and_pay_rewards((&reporter, staker), U256::zero())?;
 							staker.locked_balance = U256::zero();
 						}

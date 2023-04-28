@@ -18,8 +18,8 @@ use super::*;
 use crate::constants::DECIMALS;
 use frame_support::traits::fungible::Inspect;
 use sp_runtime::{
-	traits::{CheckedAdd, CheckedMul, Hash},
-	ArithmeticError,
+	traits::{CheckedAdd, CheckedConversion, CheckedMul, CheckedSub, Hash},
+	ArithmeticError, SaturatedConversion,
 };
 use sp_std::cmp::Ordering;
 
@@ -162,7 +162,8 @@ impl<T: Config> Pallet<T> {
 					Ok(feeds_with_funding.len())
 				},
 			)?;
-			feed.details.feeds_with_funding_index = index.saturated_into::<u32>();
+			feed.details.feeds_with_funding_index =
+				index.checked_into().ok_or(ArithmeticError::Overflow)?;
 		}
 		let feed_details = feed.details.clone();
 		<DataFeeds<T>>::insert(query_id, feed_id, feed);
@@ -189,17 +190,26 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Result<BalanceOf<T>, DispatchError> {
-		ensure!(Self::now().saturating_sub(timestamp) < 4 * WEEKS, Error::<T>::ClaimPeriodExpired);
+		ensure!(
+			Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? < 4 * WEEKS,
+			Error::<T>::ClaimPeriodExpired
+		);
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
 		ensure!(
 			!feed.reward_claimed.get(&timestamp).unwrap_or(&false),
 			Error::<T>::TipAlreadyClaimed
 		);
-		let n = (timestamp.saturating_sub(feed.details.start_time))
-			.checked_div(feed.details.interval)
-			.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
-		let c = feed.details.start_time.saturating_add(feed.details.interval.saturating_mul(n)); // finds start timestamp c of interval n
+		let n = (timestamp
+			.checked_sub(feed.details.start_time)
+			.ok_or(ArithmeticError::Underflow)?)
+		.checked_div(feed.details.interval)
+		.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
+		let c = feed
+			.details
+			.start_time
+			.checked_add(feed.details.interval.checked_mul(n).ok_or(ArithmeticError::Overflow)?)
+			.ok_or(ArithmeticError::Overflow)?; // finds start timestamp c of interval n
 		let value_retrieved = Self::retrieve_data(query_id, timestamp);
 		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
 		let (value_retrieved_before, timestamp_before) =
@@ -217,25 +227,32 @@ impl<T: Config> Pallet<T> {
 			if v2 == U256::zero() {
 				price_change = 10_000;
 			} else if v1 >= v2 {
-				price_change = (U256::from(10_000).saturating_mul(v1.saturating_sub(v2)))
-					.checked_div(v2)
-					.expect("v2 checked against zero above; qed")
-					.saturated_into();
+				price_change = (U256::from(10_000)
+					.checked_mul(v1.checked_sub(v2).ok_or(ArithmeticError::Underflow)?)
+					.ok_or(ArithmeticError::Overflow)?)
+				.checked_div(v2)
+				.expect("v2 checked against zero above; qed")
+				.saturated_into();
 			} else {
-				price_change = (U256::from(10_000u16).saturating_mul(v2.saturating_sub(v1)))
-					.checked_div(v2)
-					.expect("v2 checked against zero above; qed")
-					.saturated_into();
+				price_change = (U256::from(10_000)
+					.checked_mul(v2.checked_sub(v1).ok_or(ArithmeticError::Underflow)?)
+					.ok_or(ArithmeticError::Overflow)?)
+				.checked_div(v2)
+				.expect("v2 checked against zero above; qed")
+				.saturated_into();
 			}
 		}
 		let mut reward_amount = feed.details.reward;
-		let time_diff = timestamp.saturating_sub(c); // time difference between report timestamp and start of interval
+		let time_diff = timestamp.checked_sub(c).ok_or(ArithmeticError::Underflow)?; // time difference between report timestamp and start of interval
 
 		// ensure either report is first within a valid window, or price change threshold is met
 		if time_diff < feed.details.window && timestamp_before < c {
 			// add time based rewards if applicable
 			reward_amount.saturating_accrue(
-				feed.details.reward_increase_per_second.saturating_mul(time_diff.into()),
+				feed.details
+					.reward_increase_per_second
+					.checked_mul(&time_diff.into())
+					.ok_or(ArithmeticError::Overflow)?,
 			);
 		} else {
 			ensure!(price_change > feed.details.price_threshold, Error::<T>::PriceThresholdNotMet);
@@ -295,7 +312,7 @@ impl<T: Config> Pallet<T> {
 	pub(super) fn do_update_stake_amount() -> DispatchResult {
 		let Some((value, _)) = Self::get_data_before(
 			T::StakingTokenPriceQueryId::get(),
-			Self::now().saturating_sub(12 * HOURS),
+			Self::now().checked_sub(12 * HOURS).ok_or(ArithmeticError::Underflow)?,
 		) else {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
@@ -353,7 +370,10 @@ impl<T: Config> Pallet<T> {
 						let result = vote.result.ok_or(Error::<T>::VoteNotTallied)?;
 						// Ensure that time has to be passed after the vote is tallied (86,400 = 24 * 60 * 60 for seconds in a day)
 						ensure!(
-							Self::now().saturating_sub(vote.tally_date) >= 1 * DAYS,
+							Self::now()
+								.checked_sub(vote.tally_date)
+								.ok_or(ArithmeticError::Underflow)? >=
+								1 * DAYS,
 							Error::<T>::TallyDisputePeriodActive
 						);
 						vote.executed = true;
@@ -590,7 +610,7 @@ impl<T: Config> Pallet<T> {
 		if count > 0 {
 			let mut middle;
 			let mut start = 0;
-			let mut end = count.saturating_sub(1);
+			let mut end = count.checked_sub(1).expect("count greater than zero; qed");
 			let mut time;
 			// Checking Boundaries to short-circuit the algorithm
 			time = Self::get_timestamp_by_query_id_and_index(query_id, start)?;
@@ -680,9 +700,9 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 		claimer: &AccountIdOf<T>,
-	) -> Result<BalanceOf<T>, Error<T>> {
+	) -> Result<BalanceOf<T>, DispatchError> {
 		ensure!(
-			Self::now().saturating_sub(timestamp) > 12 * HOURS,
+			Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? > 12 * HOURS,
 			Error::<T>::ClaimBufferNotPassed
 		);
 		ensure!(!Self::is_in_dispute(query_id, timestamp), Error::<T>::ValueDisputed);
@@ -691,15 +711,17 @@ impl<T: Config> Pallet<T> {
 				.map_or(false, |reporter| claimer == &reporter),
 			Error::<T>::InvalidClaimer
 		);
-		<Tips<T>>::try_mutate(query_id, |maybe_tips| {
+		<Tips<T>>::try_mutate(query_id, |maybe_tips| -> Result<BalanceOf<T>, DispatchError> {
 			match maybe_tips {
-				None => Err(Error::<T>::NoTipsSubmitted),
+				None => Err(Error::<T>::NoTipsSubmitted.into()),
 				Some(tips) => {
 					let mut min = 0;
 					let mut max = tips.len();
 					let mut mid;
-					while max.saturating_sub(min) > 1 {
-						mid = (max.saturating_add(min)).saturating_div(2);
+					while max.checked_sub(min).ok_or(ArithmeticError::Underflow)? > 1 {
+						mid = (max.checked_add(min).ok_or(ArithmeticError::Overflow)?)
+							.checked_div(2)
+							.expect("divisor is non-zero");
 						if tips.get(mid).map_or(0, |t| t.timestamp) > timestamp {
 							max = mid;
 						} else {
@@ -722,15 +744,18 @@ impl<T: Config> Pallet<T> {
 					// check whether eligible for previous tips in array due to disputes
 					let index_now = Self::get_index_for_data_before(
 						query_id,
-						timestamp.saturating_add(1u8.into()),
+						timestamp.checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?,
 					);
 					let index_before = Self::get_index_for_data_before(
 						query_id,
-						timestamp_before.saturating_add(1u8.into()),
+						timestamp_before
+							.checked_add(1u8.into())
+							.ok_or(ArithmeticError::Overflow)?,
 					);
 					if index_now
 						.unwrap_or_default()
-						.saturating_sub(index_before.unwrap_or_default()) >
+						.checked_sub(index_before.unwrap_or_default())
+						.ok_or(ArithmeticError::Underflow)? >
 						1 || index_before.is_none()
 					{
 						if index_before.is_none() {
@@ -742,8 +767,10 @@ impl<T: Config> Pallet<T> {
 							max = min;
 							min = 0;
 							let mut mid;
-							while max.saturating_sub(min) > 1 {
-								mid = (max.saturating_add(min)).saturating_div(2);
+							while max.checked_sub(min).ok_or(ArithmeticError::Underflow)? > 1 {
+								mid = (max.checked_add(min).ok_or(ArithmeticError::Overflow)?)
+									.checked_div(2)
+									.expect("divisor is non-zero");
 								if tips.get(mid).ok_or(Error::<T>::InvalidIndex)?.timestamp >
 									timestamp_before
 								{
@@ -757,11 +784,12 @@ impl<T: Config> Pallet<T> {
 								let min_backup_tip =
 									tips.get(min_backup).ok_or(Error::<T>::InvalidIndex)?;
 								let min_tip = tips.get(min).ok_or(Error::<T>::InvalidIndex)?;
-								// todo: safe math
 								tip_amount = min_backup_tip
 									.cumulative_tips
-									.saturating_sub(min_tip.cumulative_tips)
-									.saturating_add(min_tip.amount);
+									.checked_sub(&min_tip.cumulative_tips)
+									.ok_or(ArithmeticError::Underflow)?
+									.checked_add(&min_tip.amount)
+									.ok_or(ArithmeticError::Overflow)?;
 							}
 						}
 					}
@@ -1226,7 +1254,7 @@ impl<T: Config> Pallet<T> {
 	pub(super) fn update_dispute_fee() -> DispatchResult {
 		let Some((value, _)) = Self::get_data_before(
 			T::StakingToLocalTokenPriceQueryId::get(),
-			Self::now().saturating_sub(12 * HOURS),
+			Self::now().checked_sub(12 * HOURS).ok_or(ArithmeticError::Underflow)?,
 		) else {
 			return Err(Error::<T>::InvalidPrice.into());
 		};
@@ -1346,8 +1374,9 @@ impl<T: Config> Pallet<T> {
 					.ok_or(ArithmeticError::Underflow)?,
 			);
 			// get staker voting participation rate
-			let number_of_votes =
-				Self::get_vote_count().saturating_sub(stake_info.start_vote_count);
+			let number_of_votes = Self::get_vote_count()
+				.checked_sub(stake_info.start_vote_count)
+				.ok_or(ArithmeticError::Underflow)?;
 			if number_of_votes > 0 {
 				// staking reward = pending reward * voting participation rate
 				let vote_tally = Self::get_vote_tally_by_address(staker);
@@ -1355,22 +1384,28 @@ impl<T: Config> Pallet<T> {
 					.checked_mul(
 						&(vote_tally
 							.checked_sub(stake_info.start_vote_tally)
-							.ok_or(ArithmeticError::Underflow)?)
-						.saturated_into(),
+							.ok_or(ArithmeticError::Underflow)?
+							.into()),
 					)
-					.ok_or(ArithmeticError::Overflow)?) /
-					number_of_votes.saturated_into();
+					.ok_or(ArithmeticError::Overflow)?)
+				.checked_div(&number_of_votes.into())
+				.ok_or(ArithmeticError::DivisionByZero)?;
 				if temp_pending_reward < pending_reward {
 					pending_reward = temp_pending_reward;
 				}
 			}
 			T::Asset::transfer(&staking_rewards, staker, pending_reward, true)?;
-			<TotalRewardDebt<T>>::mutate(|debt| {
-				*debt = debt.saturating_sub(stake_info.reward_debt)
-			});
-			<TotalStakeAmount<T>>::mutate(|total| {
-				*total = total.saturating_sub(stake_info.staked_balance)
-			});
+			<TotalRewardDebt<T>>::try_mutate(|debt| -> DispatchResult {
+				*debt =
+					debt.checked_sub(&stake_info.reward_debt).ok_or(ArithmeticError::Underflow)?;
+				Ok(())
+			})?;
+			<TotalStakeAmount<T>>::try_mutate(|total| -> DispatchResult {
+				*total = total
+					.checked_sub(stake_info.staked_balance)
+					.ok_or(ArithmeticError::Underflow)?;
+				Ok(())
+			})?;
 		}
 		stake_info.staked_balance = new_staked_balance;
 		// Update total stakers
@@ -1397,14 +1432,20 @@ impl<T: Config> Pallet<T> {
 				.checked_div(unit)
 				.ok_or(ArithmeticError::DivisionByZero)?,
 		);
-		let total_reward_debt = <TotalRewardDebt<T>>::mutate(|debt| {
-			*debt = debt.saturating_add(stake_info.reward_debt);
-			*debt
-		});
-		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::mutate(|total| {
-			*total = total.saturating_add(stake_info.staked_balance);
-			*total
-		}))?;
+		let total_reward_debt =
+			<TotalRewardDebt<T>>::mutate(|debt| -> Result<BalanceOf<T>, DispatchError> {
+				*debt =
+					debt.checked_add(&stake_info.reward_debt).ok_or(ArithmeticError::Overflow)?;
+				Ok(*debt)
+			})?;
+		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::mutate(
+			|total| -> Result<Tributes, DispatchError> {
+				*total = total
+					.checked_add(stake_info.staked_balance)
+					.ok_or(ArithmeticError::Overflow)?;
+				Ok(*total)
+			},
+		)?)?;
 		// update reward rate if staking rewards are available given staker's updated parameters
 		<RewardRate<T>>::try_mutate(|reward_rate| -> DispatchResult {
 			if *reward_rate == Zero::zero() {
