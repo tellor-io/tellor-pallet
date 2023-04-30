@@ -16,6 +16,43 @@
 
 use super::*;
 use crate::{constants::REPORTING_LOCK, UsingTellor};
+use sp_core::bytes::from_hex;
+
+#[test]
+#[ignore]
+fn retrieve_data() {
+	todo!()
+}
+
+#[test]
+#[ignore]
+fn get_new_value_count_by_query_id() {
+	todo!()
+}
+
+#[test]
+#[ignore]
+fn get_timestamp_by_query_id_and_index() {
+	todo!()
+}
+
+#[test]
+#[ignore]
+fn get_index_for_data_before() {
+	todo!()
+}
+
+#[test]
+#[ignore]
+fn get_data_before() {
+	todo!()
+}
+
+#[test]
+#[ignore]
+fn is_in_dispute() {
+	todo!()
+}
 
 #[test]
 fn get_index_for_data_after() {
@@ -66,6 +103,12 @@ fn get_index_for_data_after() {
 			assert_eq!(Tellor::get_index_for_data_after(query_id, timestamp), None);
 		});
 	});
+}
+
+#[test]
+#[ignore]
+fn get_data_after() {
+	todo!()
 }
 
 #[test]
@@ -298,4 +341,41 @@ fn get_multiple_values_before() {
 			vec![(uint_value(180).into_inner(), timestamp_4)]
 		);
 	});
+}
+
+#[test]
+fn bytes_to_uint() {
+	// Based on https://github.com/tellor-io/usingtellor/blob/cfc56240e0f753f452d2f376b5ab126fa95222ad/test/functionTests-UsingTellor.js#L332
+	assert_eq!(Tellor::bytes_to_uint(1u8.to_be_bytes().to_vec()).unwrap(), 1.into());
+	assert_eq!(Tellor::bytes_to_uint(2u32.to_be_bytes().to_vec()).unwrap(), 2.into());
+	assert_eq!(
+		Tellor::bytes_to_uint(300000000000000u64.to_be_bytes().to_vec()).unwrap(),
+		300000000000000u64.into()
+	);
+	assert_eq!(
+		Tellor::bytes_to_uint(300000000000001u64.to_be_bytes().to_vec()).unwrap(),
+		300000000000001u64.into()
+	);
+	assert_eq!(
+		Tellor::bytes_to_uint(ethabi::encode(&[Token::Uint(1.into())]).try_into().unwrap())
+			.unwrap(),
+		1.into()
+	);
+	assert_eq!(
+		Tellor::bytes_to_uint(
+			ethabi::encode(&[Token::Uint(21010191828172717718232237237237128u128.into())])
+				.try_into()
+				.unwrap()
+		)
+		.unwrap(),
+		21010191828172717718232237237237128u128.into()
+	);
+	assert_eq!(Tellor::bytes_to_uint(from_hex("0x01").unwrap()).unwrap(), 1.into());
+	assert_eq!(Tellor::bytes_to_uint(from_hex("0x10").unwrap()).unwrap(), 16.into());
+}
+
+#[test]
+#[ignore]
+fn get_reporter_by_timestamp() {
+	todo!()
 }

@@ -2149,8 +2149,9 @@ fn bytes_to_uint() {
 	}
 
 	assert_eq!(BytesToU256::convert([0u8; 32].to_vec()).unwrap(), U256::zero());
-	assert_eq!(BytesToU256::convert([0u8; 31].to_vec()), None);
-	assert_eq!(BytesToU256::convert([0u8; 33].to_vec()), None);
+	assert_eq!(BytesToU256::convert([0u8; 31].to_vec()).unwrap(), U256::zero());
+	assert_eq!(BytesToU256::convert([0u8; 33].to_vec()).unwrap(), U256::zero());
+	assert_eq!(BytesToU256::convert([255u8; 33].to_vec()), None);
 }
 
 #[test]
