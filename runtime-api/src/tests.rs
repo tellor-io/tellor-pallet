@@ -155,7 +155,7 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		_dest: impl Into<MultiLocation>,
 		_message: Xcm<()>,
 	) -> Result<(), SendError> {
-		todo!()
+		unimplemented!("not required for runtime api tests")
 	}
 }
 
