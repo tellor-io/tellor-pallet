@@ -42,6 +42,7 @@ use xcm::{latest::prelude::*, DoubleEncoded};
 mod autopay;
 mod governance;
 mod oracle;
+mod using_tellor;
 
 type Balance = <Test as crate::Config>::Balance;
 type Error = crate::Error<Test>;

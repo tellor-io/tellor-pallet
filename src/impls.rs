@@ -1490,8 +1490,78 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		Self::get_data_before(query_id, timestamp).map(|(v, t)| (v.into_inner(), t))
 	}
 
-	fn get_index_for_data_after(_query_id: QueryId, _timestamp: Timestamp) -> Option<usize> {
-		todo!()
+	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
+		let mut count = Self::get_new_value_count_by_query_id(query_id);
+		if count == 0 {
+			return None
+		}
+		count.saturating_dec();
+		let mut search = true; // perform binary search
+		let mut middle = 0;
+		let mut start = 0;
+		let mut end = count;
+		// checking boundaries to short-circuit the algorithm
+		let mut timestamp_retrieved =
+			Self::get_timestamp_by_query_id_and_index(query_id, end).unwrap_or_default();
+		if timestamp_retrieved <= timestamp {
+			return None
+		}
+		timestamp_retrieved =
+			Self::get_timestamp_by_query_id_and_index(query_id, start).unwrap_or_default();
+		if timestamp_retrieved > timestamp {
+			// candidate found, check for disputes
+			search = false;
+		}
+		// since the value is within our boundaries, do a binary search
+		while search {
+			middle = (end.saturating_add(start)).checked_div(2).expect("divisor is non-zero; qed");
+			timestamp_retrieved =
+				Self::get_timestamp_by_query_id_and_index(query_id, middle).unwrap_or_default();
+			if timestamp_retrieved > timestamp {
+				// get immediate previous value
+				let previous_time =
+					Self::get_timestamp_by_query_id_and_index(query_id, middle.saturating_sub(1))
+						.unwrap_or_default();
+				if previous_time <= timestamp {
+					// candidate found, check for disputes
+					search = false;
+				} else {
+					// look from start to middle -1(prev value)
+					end = middle.saturating_sub(1);
+				}
+			} else {
+				// get immediate next value
+				let next_time =
+					Self::get_timestamp_by_query_id_and_index(query_id, middle.saturating_add(1))
+						.unwrap_or_default();
+				if next_time > timestamp {
+					// candidate found, check for disputes
+					search = false;
+					middle.saturating_inc();
+					timestamp_retrieved = next_time;
+				} else {
+					// look from middle + 1(next value) to end
+					start = middle.saturating_add(1);
+				}
+			}
+		}
+		// candidate found, check for disputed values
+		if !Self::is_in_dispute(query_id, timestamp_retrieved) {
+			// timestamp_retrieved is correct
+			return Some(middle)
+		} else {
+			// iterate forward until we find a non-disputed value
+			while Self::is_in_dispute(query_id, timestamp_retrieved) && middle < count {
+				middle.saturating_inc();
+				timestamp_retrieved =
+					Self::get_timestamp_by_query_id_and_index(query_id, middle).unwrap_or_default();
+			}
+			if middle == count && Self::is_in_dispute(query_id, timestamp_retrieved) {
+				return None
+			}
+			// timestamp_retrieved is correct
+			return Some(middle)
+		}
 	}
 
 	fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
