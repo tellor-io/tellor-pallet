@@ -762,7 +762,7 @@ pub mod pallet {
 								.get(index as usize)
 								.ok_or(Error::<T>::InvalidIndex)?;
 							match <QueryIdFromDataFeedId<T>>::get(feed_id_last_funded) {
-								None => todo!(),
+								None => return Err(Error::<T>::InvalidIndex.into()),
 								Some(query_id_last_funded) => {
 									<DataFeeds<T>>::try_mutate(
 										query_id_last_funded,
