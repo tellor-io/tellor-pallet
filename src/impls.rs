@@ -465,9 +465,8 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The latest submitted value for the given identifier.
 	pub fn get_current_value(query_id: QueryId) -> Option<ValueOf<T>> {
-		// todo: implement properly
 		<Reports<T>>::get(query_id)
-			.and_then(|r| r.value_by_timestamp.last_key_value().map(|kv| kv.1.clone()))
+			.and_then(|r| r.value_by_timestamp.last_key_value().map(|(_, value)| value.clone()))
 	}
 
 	/// Allows the user to get the latest value for the query identifier specified.
