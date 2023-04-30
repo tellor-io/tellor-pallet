@@ -16,6 +16,7 @@
 
 use super::*;
 use crate::{constants::REPORTING_LOCK, UsingTellor};
+use frame_support::traits::Currency;
 use sp_core::bytes::from_hex;
 
 #[test]
@@ -49,9 +50,77 @@ fn get_data_before() {
 }
 
 #[test]
-#[ignore]
 fn is_in_dispute() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let another_reporter = 2;
+
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+			deposit_stake(another_reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+		})
+	});
+
+	// Based on https://github.com/tellor-io/usingtellor/blob/cfc56240e0f753f452d2f376b5ab126fa95222ad/test/functionTests-UsingTellor.js#L92
+	ext.execute_with(|| {
+		let timestamp_1 = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(150),
+				0,
+				query_data.clone(),
+			));
+			now()
+		});
+		let timestamp_2 = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				uint_value(160),
+				1,
+				query_data.clone(),
+			));
+			now()
+		});
+
+		with_block(|| {
+			assert_eq!(Tellor::is_in_dispute(query_id, timestamp_1), false);
+			Balances::make_free_balance_be(&another_reporter, token(1000));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				timestamp_1,
+				None
+			));
+			assert!(Tellor::is_in_dispute(query_id, timestamp_1));
+			assert_noop!(
+				Tellor::begin_dispute(
+					RuntimeOrigin::signed(another_reporter),
+					query_id,
+					timestamp_1,
+					None
+				),
+				Error::DisputeRoundReportingPeriodExpired
+			);
+			assert!(Tellor::is_in_dispute(query_id, timestamp_1));
+
+			assert_eq!(Tellor::is_in_dispute(query_id, timestamp_2), false);
+			Balances::make_free_balance_be(&reporter, token(1000));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				timestamp_2,
+				None
+			));
+			assert!(Tellor::is_in_dispute(query_id, timestamp_2));
+		});
+	});
 }
 
 #[test]
