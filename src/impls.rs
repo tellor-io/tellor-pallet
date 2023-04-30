@@ -628,11 +628,11 @@ impl<T: Config> Pallet<T> {
 			}
 			// Since the value is within our boundaries, do a binary search
 			loop {
-				// todo: safe math
-				middle = (end - start) / 2 + 1 + start;
+				middle =
+					(end.checked_sub(start)?).checked_div(2)?.checked_add(1)?.checked_add(start)?;
 				time = Self::get_timestamp_by_query_id_and_index(query_id, middle)?;
 				if time < timestamp {
-					//get immediate next value
+					// get immediate next value
 					let next_time =
 						Self::get_timestamp_by_query_id_and_index(query_id, middle + 1)?;
 					if next_time >= timestamp {
@@ -648,21 +648,22 @@ impl<T: Config> Pallet<T> {
 							if middle == 0 && Self::is_in_dispute(query_id, time) {
 								return None
 							}
-							// _time is correct
+							// time is correct
 							Some(middle)
 						}
 					} else {
-						//look from middle + 1(next value) to end
-						start = middle + 1;
+						// look from middle + 1(next value) to end
+						start = middle.checked_add(1)?;
 					}
 				} else {
-					// todo: safe math
-					let mut previous_time =
-						Self::get_timestamp_by_query_id_and_index(query_id, middle - 1)?;
+					let mut previous_time = Self::get_timestamp_by_query_id_and_index(
+						query_id,
+						middle.checked_sub(1)?,
+					)?;
 					if previous_time < timestamp {
 						return if !Self::is_in_dispute(query_id, previous_time) {
-							// _prevTime is correct
-							Some(middle - 1)
+							// previous_time is correct
+							Some(middle.checked_sub(1)?)
 						} else {
 							// iterate backwards until we find a non-disputed value
 							middle.saturating_dec();
@@ -674,13 +675,12 @@ impl<T: Config> Pallet<T> {
 							if middle == 0 && Self::is_in_dispute(query_id, previous_time) {
 								return None
 							}
-							// _prevTime is correct
+							// previous_time is correct
 							Some(middle)
 						}
 					} else {
-						//look from start to middle -1(prev value)
-						// todo: safe math
-						end = middle - 1;
+						// look from start to middle -1(prev value)
+						end = middle.checked_sub(1)?;
 					}
 				}
 			}
