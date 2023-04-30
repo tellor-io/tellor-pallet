@@ -1130,7 +1130,6 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
 	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
-		// todo: rename once remove_value dispatchable removed
 		<Reports<T>>::mutate(query_id, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidTimestamp),
 			Some(report) => {
