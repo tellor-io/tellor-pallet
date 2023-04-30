@@ -350,7 +350,8 @@ fn begins_dispute_xcm() {
 	new_test_ext().execute_with(|| {
 		with_block(|| {
 			let reporter = 1;
-			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+			let reporter_address = Address::random();
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, reporter_address);
 
 			let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 			let query_id = keccak_256(query_data.as_ref()).into();
@@ -371,13 +372,27 @@ fn begins_dispute_xcm() {
 				None
 			));
 
-			let sent_messages = sent_xcm();
-			let (_, sent_message) = sent_messages.first().unwrap();
-			assert!(sent_message
-				.0
-				.contains(&DescendOrigin(X1(PalletInstance(Tellor::index() as u8)))));
-			// todo: check remaining instructions
-
+			assert_eq!(
+				sent_xcm(),
+				vec![xcm_transact(
+					ethereum_xcm::transact(
+						*GOVERNANCE,
+						contracts::governance::begin_parachain_dispute(
+							query_id.as_ref(),
+							timestamp,
+							uint_value(123).as_ref(),
+							reporter_address,
+							reporter_address,
+							MINIMUM_STAKE_AMOUNT
+						)
+						.try_into()
+						.unwrap(),
+						gas_limits::BEGIN_PARACHAIN_DISPUTE
+					)
+					.into(),
+					gas_limits::BEGIN_PARACHAIN_DISPUTE
+				)]
+			);
 			System::assert_last_event(
 				Event::NewDispute {
 					dispute_id: dispute_id(PARA_ID, query_id, timestamp),
