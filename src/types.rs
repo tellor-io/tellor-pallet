@@ -17,7 +17,7 @@
 use super::Config;
 use frame_support::pallet_prelude::*;
 pub(crate) use governance::Tally;
-pub(crate) use sp_core::U256;
+pub use sp_core::U256;
 use sp_core::{bounded::BoundedBTreeMap, H160, H256};
 pub(crate) use sp_runtime::traits::Keccak256;
 use sp_runtime::{
@@ -41,7 +41,6 @@ pub(crate) type FeedOf<T> = autopay::Feed<BalanceOf<T>, <T as Config>::MaxReward
 pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<BalanceOf<T>>;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
-pub(crate) type Price = U256;
 pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLength>;
 pub type QueryId = H256;
 pub(crate) type ReportOf<T> =

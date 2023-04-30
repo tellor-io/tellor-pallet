@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{Price, QueryId, Timestamp};
+use crate::types::{QueryId, Timestamp, U256};
 use sp_std::vec::Vec;
 use xcm::latest::prelude::*;
 
@@ -29,6 +29,13 @@ pub trait SendXcm {
 
 /// This trait helps pallets read data from Tellor
 pub trait UsingTellor<AccountId> {
+	/// Attempts to convert bytes to an unsigned integer.
+	/// # Arguments
+	/// * `bytes` - Bytes to be converted to an unsigned integer.
+	/// # Returns
+	/// An unsigned integer converted from the supplied bytes, if successful.
+	fn bytes_to_uint(bytes: Vec<u8>) -> Option<U256>;
+
 	/// Retrieves the next value for the query identifier after the specified timestamp.
 	/// # Arguments
 	/// * `query_id` - The query identifier to look up the value for.
@@ -118,11 +125,4 @@ pub trait UsingTellor<AccountId> {
 	/// # Returns
 	/// Value for timestamp submitted, if found.
 	fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Vec<u8>>;
-
-	/// Attempts to convert value to a price.
-	/// # Arguments
-	/// * `value` - Value to be converted to a price.
-	/// # Returns
-	/// A price converted from the value, if successful.
-	fn value_to_price(value: Vec<u8>) -> Option<Price>;
 }
