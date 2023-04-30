@@ -26,9 +26,51 @@ fn retrieve_data() {
 }
 
 #[test]
-#[ignore]
 fn get_new_value_count_by_query_id() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random()))
+	});
+
+	// Based on https://github.com/tellor-io/usingtellor/blob/cfc56240e0f753f452d2f376b5ab126fa95222ad/test/functionTests-UsingTellor.js#L47
+	ext.execute_with(|| {
+		with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(150),
+				0,
+				query_data.clone(),
+			));
+			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 1);
+		});
+		with_block_after(REPORTING_LOCK, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(160),
+				1,
+				query_data.clone(),
+			));
+			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 2);
+		});
+		with_block_after(REPORTING_LOCK, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(170),
+				2,
+				query_data.clone(),
+			));
+			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 3);
+		});
+	});
 }
 
 #[test]
