@@ -444,20 +444,19 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Amount of tip.
 	pub fn get_current_tip(query_id: QueryId) -> BalanceOf<T> {
-		// todo: optimise
 		// if no tips, return 0
-		if <Tips<T>>::get(query_id).map_or(0, |t| t.len()) == 0 {
-			return Zero::zero()
-		}
-		let timestamp_retrieved =
-			Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
-		match <Tips<T>>::get(query_id) {
-			Some(tips) => match tips.last() {
-				Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
-				_ => Zero::zero(),
-			},
-			_ => Zero::zero(),
-		}
+		<Tips<T>>::get(query_id)
+			.and_then(|tips| tips.last().cloned())
+			.map(|last_tip| {
+				let timestamp_retrieved =
+					Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
+				if timestamp_retrieved < last_tip.timestamp {
+					last_tip.amount
+				} else {
+					Zero::zero()
+				}
+			})
+			.unwrap_or_default()
 	}
 
 	/// Returns the current value of a data feed given a specific identifier.
