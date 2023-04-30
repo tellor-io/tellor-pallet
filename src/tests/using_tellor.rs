@@ -126,7 +126,7 @@ fn get_multiple_values_before() {
 
 	// Based on https://github.com/tellor-io/usingtellor/blob/cfc56240e0f753f452d2f376b5ab126fa95222ad/test/functionTests-UsingTellor.js#L192
 	ext.execute_with(|| {
-		// // submit 2 values
+		// submit 2 values
 		let timestamp_1 = with_block(|| {
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
@@ -375,7 +375,48 @@ fn bytes_to_uint() {
 }
 
 #[test]
-#[ignore]
 fn get_reporter_by_timestamp() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let another_reporter = 2;
+
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+			deposit_stake(another_reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+		})
+	});
+
+	// Based on https://github.com/tellor-io/usingtellor/blob/cfc56240e0f753f452d2f376b5ab126fa95222ad/test/functionTests-UsingTellor.js#L352
+	ext.execute_with(|| {
+		with_block(|| {
+			let timestamp = now();
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(150),
+				0,
+				query_data.clone(),
+			));
+			assert_eq!(Tellor::get_reporter_by_timestamp(query_id, timestamp).unwrap(), reporter)
+		});
+		with_block(|| {
+			let timestamp = now();
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(another_reporter),
+				query_id,
+				uint_value(160),
+				0,
+				query_data.clone(),
+			));
+			assert_eq!(
+				Tellor::get_reporter_by_timestamp(query_id, timestamp).unwrap(),
+				another_reporter
+			)
+		});
+	});
 }
