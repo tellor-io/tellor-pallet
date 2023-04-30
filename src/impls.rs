@@ -1569,11 +1569,52 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 	}
 
 	fn get_multiple_values_before(
-		_query_id: QueryId,
-		_timestamp: Timestamp,
-		_max_age: Timestamp,
+		query_id: QueryId,
+		timestamp: Timestamp,
+		max_age: Timestamp,
+		max_count: u32,
 	) -> Vec<(Vec<u8>, Timestamp)> {
-		todo!()
+		// get index of first possible value
+		let Some(start_index) = Self::get_index_for_data_after(
+			query_id,
+			timestamp.saturating_sub(max_age)
+		) else {
+			// no value within range
+			return Vec::default();
+		};
+		// get index of last possible value
+		let Some(end_index) = Self::get_index_for_data_before(query_id, timestamp) else {
+			// no value before timestamp
+			return Vec::default();
+		};
+		let mut value_count: usize = 0;
+		let mut index = 0;
+		let max_count = max_count as usize;
+		let mut timestamps = Vec::with_capacity(max_count);
+		// generate array of non-disputed timestamps within range
+		while value_count < max_count &&
+			end_index.saturating_add(1).saturating_sub(index) > start_index
+		{
+			if let Some(timestamp_retrieved) =
+				Self::get_timestamp_by_query_id_and_index(query_id, end_index.saturating_sub(index))
+			{
+				if !Self::is_in_dispute(query_id, timestamp_retrieved) {
+					timestamps.push(timestamp_retrieved);
+					value_count.saturating_inc();
+				}
+			}
+			index.saturating_inc();
+		}
+
+		// retrieve values and reverse timestamps order
+		let mut result = Vec::new();
+		for i in 0..value_count {
+			let timestamp = timestamps[value_count - 1 - i];
+			if let Some(data) = Self::retrieve_data(query_id, timestamp) {
+				result.push((data.into_inner(), timestamp));
+			}
+		}
+		result
 	}
 
 	fn get_new_value_count_by_query_id(query_id: QueryId) -> usize {

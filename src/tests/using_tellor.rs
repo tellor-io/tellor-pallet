@@ -67,3 +67,235 @@ fn get_index_for_data_after() {
 		});
 	});
 }
+
+#[test]
+fn get_multiple_values_before() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random()))
+	});
+
+	// Based on https://github.com/tellor-io/usingtellor/blob/cfc56240e0f753f452d2f376b5ab126fa95222ad/test/functionTests-UsingTellor.js#L192
+	ext.execute_with(|| {
+		// // submit 2 values
+		let timestamp_1 = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(150),
+				0,
+				query_data.clone(),
+			));
+			Tellor::get_timestamp_by_query_id_and_index(query_id, 0).unwrap()
+		});
+		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(160),
+				1,
+				query_data.clone(),
+			));
+			Tellor::get_timestamp_by_query_id_and_index(query_id, 1).unwrap()
+		});
+
+		let ten_secs_after_submission = with_block_after(10, || now());
+
+		// 1 hour before 1st submission
+		assert_eq!(
+			Tellor::get_multiple_values_before(query_id, timestamp_1 - 3_600, 3_600, 4),
+			vec![]
+		);
+
+		// maxCount = 4
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_submission,
+				3_600 + REPORTING_LOCK,
+				4
+			),
+			vec![
+				(uint_value(150).into_inner(), timestamp_1),
+				(uint_value(160).into_inner(), timestamp_2),
+			]
+		);
+
+		// maxCount = 3
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_submission,
+				3_600 + REPORTING_LOCK,
+				3
+			),
+			vec![
+				(uint_value(150).into_inner(), timestamp_1),
+				(uint_value(160).into_inner(), timestamp_2),
+			]
+		);
+
+		// maxCount = 2
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_submission,
+				3_600 + REPORTING_LOCK,
+				2
+			),
+			vec![
+				(uint_value(150).into_inner(), timestamp_1),
+				(uint_value(160).into_inner(), timestamp_2),
+			]
+		);
+
+		// maxCount = 1
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_submission,
+				3_600 + REPORTING_LOCK,
+				1
+			),
+			vec![(uint_value(160).into_inner(), timestamp_2)]
+		);
+
+		// maxAge = 5
+		assert_eq!(
+			Tellor::get_multiple_values_before(query_id, ten_secs_after_submission, 5, 4),
+			vec![]
+		);
+
+		// submit another 2 values
+		let timestamp_3 = with_block_after(REPORTING_LOCK, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(170),
+				2,
+				query_data.clone(),
+			));
+			Tellor::get_timestamp_by_query_id_and_index(query_id, 2).unwrap()
+		});
+		let timestamp_4 = with_block_after(REPORTING_LOCK, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(180),
+				3,
+				query_data.clone(),
+			));
+			Tellor::get_timestamp_by_query_id_and_index(query_id, 3).unwrap()
+		});
+
+		let ten_secs_after_final_submission = with_block_after(10, || now());
+
+		// maxCount = 6, don't update timestamp
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_submission,
+				3_600 + (REPORTING_LOCK * 3),
+				6
+			),
+			vec![
+				(uint_value(150).into_inner(), timestamp_1),
+				(uint_value(160).into_inner(), timestamp_2),
+			]
+		);
+
+		// maxCount = 6, update timestamp
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_final_submission,
+				3_600 + (REPORTING_LOCK * 3),
+				6
+			),
+			vec![
+				(uint_value(150).into_inner(), timestamp_1),
+				(uint_value(160).into_inner(), timestamp_2),
+				(uint_value(170).into_inner(), timestamp_3),
+				(uint_value(180).into_inner(), timestamp_4),
+			]
+		);
+
+		// maxCount = 5
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_final_submission,
+				3_600 + (REPORTING_LOCK * 3),
+				5
+			),
+			vec![
+				(uint_value(150).into_inner(), timestamp_1),
+				(uint_value(160).into_inner(), timestamp_2),
+				(uint_value(170).into_inner(), timestamp_3),
+				(uint_value(180).into_inner(), timestamp_4),
+			]
+		);
+
+		// maxCount = 4
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_final_submission,
+				3_600 + (REPORTING_LOCK * 3),
+				4
+			),
+			vec![
+				(uint_value(150).into_inner(), timestamp_1),
+				(uint_value(160).into_inner(), timestamp_2),
+				(uint_value(170).into_inner(), timestamp_3),
+				(uint_value(180).into_inner(), timestamp_4),
+			]
+		);
+
+		// maxCount = 3
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_final_submission,
+				3_600 + (REPORTING_LOCK * 3),
+				3
+			),
+			vec![
+				(uint_value(160).into_inner(), timestamp_2),
+				(uint_value(170).into_inner(), timestamp_3),
+				(uint_value(180).into_inner(), timestamp_4),
+			]
+		);
+
+		// maxCount = 2
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_final_submission,
+				3_600 + (REPORTING_LOCK * 3),
+				2
+			),
+			vec![
+				(uint_value(170).into_inner(), timestamp_3),
+				(uint_value(180).into_inner(), timestamp_4),
+			]
+		);
+
+		// maxCount = 1
+		assert_eq!(
+			Tellor::get_multiple_values_before(
+				query_id,
+				ten_secs_after_final_submission,
+				3_600 + (REPORTING_LOCK * 3),
+				1
+			),
+			vec![(uint_value(180).into_inner(), timestamp_4)]
+		);
+	});
+}

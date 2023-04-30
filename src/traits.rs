@@ -80,6 +80,7 @@ pub trait UsingTellor<AccountId> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 		max_age: Timestamp,
+		max_count: u32,
 	) -> Vec<(Vec<u8>, Timestamp)>;
 
 	/// Counts the number of values that have been submitted for the query identifier.
