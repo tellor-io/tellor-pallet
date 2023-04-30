@@ -1473,6 +1473,10 @@ impl<T: Config> Pallet<T> {
 }
 
 impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
+	fn bytes_to_uint(bytes: Vec<u8>) -> Option<U256> {
+		BytesToU256::convert(bytes)
+	}
+
 	fn get_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<(Vec<u8>, Timestamp)> {
 		Self::get_index_for_data_after(query_id, timestamp)
 			.and_then(|index| Self::get_timestamp_by_query_id_and_index(query_id, index))
@@ -1527,9 +1531,5 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 
 	fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Vec<u8>> {
 		Self::retrieve_data(query_id, timestamp).map(|v| v.into_inner())
-	}
-
-	fn value_to_price(value: Vec<u8>) -> Option<Price> {
-		BytesToU256::convert(value)
 	}
 }
