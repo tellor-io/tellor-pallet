@@ -89,6 +89,9 @@ pub mod pallet {
 	};
 	use sp_std::{prelude::*, result};
 
+	#[cfg(feature = "runtime-benchmarks")]
+	use crate::traits::BenchmarkHelper;
+
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
@@ -234,6 +237,11 @@ pub mod pallet {
 		/// The amount per weight unit in the asset used for fee payment for remote execution on the controller contract chain.
 		#[pallet::constant]
 		type XcmWeightToAsset: Get<u128>;
+
+		/// Helper trait for benchmarks.
+		#[cfg(feature = "runtime-benchmarks")]
+		type BenchmarkHelper: BenchmarkHelper<Self::AccountId>;
+
 	}
 
 	// AutoPay
@@ -338,10 +346,6 @@ pub mod pallet {
 	// Query Data
 	#[pallet::storage]
 	pub(super) type QueryData<T> = StorageMap<_, Identity, QueryId, QueryDataOf<T>>;
-
-	#[pallet::storage]
-	#[cfg(feature = "runtime-benchmarks")]
-	pub type NowOffset<T: Config> = StorageValue<_, u64, ValueQuery>;
 
 	#[pallet::type_value]
 	pub fn InitialDisputeFee<T: Config>() -> BalanceOf<T> {

@@ -127,3 +127,19 @@ pub trait UsingTellor<AccountId> {
 	/// Value for timestamp submitted, if found.
 	fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Vec<u8>>;
 }
+
+/// Helper trait for benchmarks
+#[cfg(feature = "runtime-benchmarks")]
+pub trait BenchmarkHelper<AccountId> {
+
+	/// Set the current time.
+	/// # Arguments
+	/// * `time_in_secs` - Time in seconds
+	fn set_time(time_in_secs: u64);
+
+	/// Set balance of the account/
+	/// # Arguments
+	/// * `account_id` - target account
+	/// * `amount` - value to be set as an account balance
+	fn set_balance(account_id: AccountId, amount: u128);
+}
