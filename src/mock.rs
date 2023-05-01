@@ -15,12 +15,10 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate as tellor;
-use crate::{
-	constants::HOURS, types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
-};
+use crate::{constants::HOURS, types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking};
 use frame_support::{
 	assert_ok, log, parameter_types,
-	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},
+	traits::{ConstU16, ConstU64, OnFinalize, UnixTime, Currency},
 	Hashable, PalletId,
 };
 use frame_system as system;
@@ -155,7 +153,8 @@ impl tellor::Config for Test {
 	type WeightToFee = ConstU128<10_000>;
 	type Xcm = TestSendXcm;
 	type XcmFeesAsset = XcmFeesAsset;
-	type XcmWeightToAsset = ConstU128<50_000>; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
+	type XcmWeightToAsset = ConstU128<50_000>;
+	type BenchmarkHelper = TestBenchmarkHelper; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
 }
 
 thread_local! {
@@ -229,4 +228,35 @@ pub(crate) fn with_block_after<R>(time_in_secs: u64, execute: impl FnOnce() -> R
 	System::reset_events();
 	SENT_XCM.with(|q| q.borrow_mut().clear());
 	result
+}
+
+pub struct TestBenchmarkHelper;
+impl tellor::traits::BenchmarkHelper<AccountId> for TestBenchmarkHelper {
+
+	fn set_time(time_in_secs: u64) {
+		let block = System::block_number();
+		match block {
+			0 => {
+				System::set_block_number(1);
+				assert_ok!(Timestamp::set(
+					RuntimeOrigin::none(),
+					(<Timestamp as UnixTime>::now() + Duration::from_secs(1 + time_in_secs)).as_millis()
+						as u64
+				));
+			}
+			_ => {
+				Timestamp::on_finalize(block);
+				System::set_block_number(block + 1);
+				assert_ok!(Timestamp::set(
+					RuntimeOrigin::none(),
+					(<Timestamp as UnixTime>::now() + Duration::from_secs(1 + time_in_secs)).as_millis()
+						as u64
+				));
+			}
+		}
+	}
+
+	fn set_balance(account_id: AccountId, amount: u128) {
+		Balances::make_free_balance_be(&account_id, Balance::from_be(amount));
+	}
 }
