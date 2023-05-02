@@ -263,8 +263,6 @@ sp_api::decl_runtime_apis! {
 		/// The total number of current stakers.
 		fn get_total_stakers() -> u128;
 
-		// todo: get_total_time_based_rewards_balance
-
 		/// Returns whether a given value is disputed.
 		/// # Arguments
 		/// * `query_id` - Unique identifier of the data feed.
