@@ -762,7 +762,7 @@ pub mod pallet {
 								.get(index as usize)
 								.ok_or(Error::<T>::InvalidIndex)?;
 							match <QueryIdFromDataFeedId<T>>::get(feed_id_last_funded) {
-								None => todo!(),
+								None => return Err(Error::<T>::InvalidIndex.into()),
 								Some(query_id_last_funded) => {
 									<DataFeeds<T>>::try_mutate(
 										query_id_last_funded,
@@ -1339,7 +1339,7 @@ pub mod pallet {
 					<DisputeInfo<T>>::contains_key(dispute_id),
 				Error::<T>::InvalidVote
 			);
-			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round todo: check whether this should be a parameter
+			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round
 			<VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
 				match maybe {
 					None => Err(Error::<T>::InvalidVote.into()),

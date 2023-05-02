@@ -255,8 +255,14 @@ impl<T: Config> Convert<U256, BalanceOf<T>> for U256ToBalance<T> {
 
 pub struct BytesToU256;
 impl Convert<Vec<u8>, Option<U256>> for BytesToU256 {
-	fn convert(a: Vec<u8>) -> Option<U256> {
-		let a: Option<[u8; 32]> = a.try_into().ok();
-		a.map(|a| a.into())
+	fn convert(b: Vec<u8>) -> Option<U256> {
+		// From https://github.com/tellor-io/usingtellor/blob/cfc56240e0f753f452d2f376b5ab126fa95222ad/contracts/UsingTellor.sol#L357
+		let mut number = Some(U256::zero());
+		for i in b {
+			number = number
+				.and_then(|n| n.checked_mul(256.into()))
+				.and_then(|n| n.checked_add(i.into()))
+		}
+		number
 	}
 }

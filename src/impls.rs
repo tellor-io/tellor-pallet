@@ -444,20 +444,19 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Amount of tip.
 	pub fn get_current_tip(query_id: QueryId) -> BalanceOf<T> {
-		// todo: optimise
 		// if no tips, return 0
-		if <Tips<T>>::get(query_id).map_or(0, |t| t.len()) == 0 {
-			return Zero::zero()
-		}
-		let timestamp_retrieved =
-			Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
-		match <Tips<T>>::get(query_id) {
-			Some(tips) => match tips.last() {
-				Some(last_tip) if timestamp_retrieved < last_tip.timestamp => last_tip.amount,
-				_ => Zero::zero(),
-			},
-			_ => Zero::zero(),
-		}
+		<Tips<T>>::get(query_id)
+			.and_then(|tips| tips.last().cloned())
+			.map(|last_tip| {
+				let timestamp_retrieved =
+					Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
+				if timestamp_retrieved < last_tip.timestamp {
+					last_tip.amount
+				} else {
+					Zero::zero()
+				}
+			})
+			.unwrap_or_default()
 	}
 
 	/// Returns the current value of a data feed given a specific identifier.
@@ -466,9 +465,8 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The latest submitted value for the given identifier.
 	pub fn get_current_value(query_id: QueryId) -> Option<ValueOf<T>> {
-		// todo: implement properly
 		<Reports<T>>::get(query_id)
-			.and_then(|r| r.value_by_timestamp.last_key_value().map(|kv| kv.1.clone()))
+			.and_then(|r| r.value_by_timestamp.last_key_value().map(|(_, value)| value.clone()))
 	}
 
 	/// Allows the user to get the latest value for the query identifier specified.
@@ -630,11 +628,11 @@ impl<T: Config> Pallet<T> {
 			}
 			// Since the value is within our boundaries, do a binary search
 			loop {
-				// todo: safe math
-				middle = (end - start) / 2 + 1 + start;
+				middle =
+					(end.checked_sub(start)?).checked_div(2)?.checked_add(1)?.checked_add(start)?;
 				time = Self::get_timestamp_by_query_id_and_index(query_id, middle)?;
 				if time < timestamp {
-					//get immediate next value
+					// get immediate next value
 					let next_time =
 						Self::get_timestamp_by_query_id_and_index(query_id, middle + 1)?;
 					if next_time >= timestamp {
@@ -650,21 +648,22 @@ impl<T: Config> Pallet<T> {
 							if middle == 0 && Self::is_in_dispute(query_id, time) {
 								return None
 							}
-							// _time is correct
+							// time is correct
 							Some(middle)
 						}
 					} else {
-						//look from middle + 1(next value) to end
-						start = middle + 1;
+						// look from middle + 1(next value) to end
+						start = middle.checked_add(1)?;
 					}
 				} else {
-					// todo: safe math
-					let mut previous_time =
-						Self::get_timestamp_by_query_id_and_index(query_id, middle - 1)?;
+					let mut previous_time = Self::get_timestamp_by_query_id_and_index(
+						query_id,
+						middle.checked_sub(1)?,
+					)?;
 					if previous_time < timestamp {
 						return if !Self::is_in_dispute(query_id, previous_time) {
-							// _prevTime is correct
-							Some(middle - 1)
+							// previous_time is correct
+							Some(middle.checked_sub(1)?)
 						} else {
 							// iterate backwards until we find a non-disputed value
 							middle.saturating_dec();
@@ -676,13 +675,12 @@ impl<T: Config> Pallet<T> {
 							if middle == 0 && Self::is_in_dispute(query_id, previous_time) {
 								return None
 							}
-							// _prevTime is correct
+							// previous_time is correct
 							Some(middle)
 						}
 					} else {
-						//look from start to middle -1(prev value)
-						// todo: safe math
-						end = middle - 1;
+						// look from start to middle -1(prev value)
+						end = middle.checked_sub(1)?;
 					}
 				}
 			}
@@ -1132,7 +1130,6 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
 	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
-		// todo: rename once remove_value dispatchable removed
 		<Reports<T>>::mutate(query_id, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidTimestamp),
 			Some(report) => {
@@ -1490,8 +1487,78 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		Self::get_data_before(query_id, timestamp).map(|(v, t)| (v.into_inner(), t))
 	}
 
-	fn get_index_for_data_after(_query_id: QueryId, _timestamp: Timestamp) -> Option<usize> {
-		todo!()
+	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
+		let mut count = Self::get_new_value_count_by_query_id(query_id);
+		if count == 0 {
+			return None
+		}
+		count.saturating_dec();
+		let mut search = true; // perform binary search
+		let mut middle = 0;
+		let mut start = 0;
+		let mut end = count;
+		// checking boundaries to short-circuit the algorithm
+		let mut timestamp_retrieved =
+			Self::get_timestamp_by_query_id_and_index(query_id, end).unwrap_or_default();
+		if timestamp_retrieved <= timestamp {
+			return None
+		}
+		timestamp_retrieved =
+			Self::get_timestamp_by_query_id_and_index(query_id, start).unwrap_or_default();
+		if timestamp_retrieved > timestamp {
+			// candidate found, check for disputes
+			search = false;
+		}
+		// since the value is within our boundaries, do a binary search
+		while search {
+			middle = (end.saturating_add(start)).checked_div(2).expect("divisor is non-zero; qed");
+			timestamp_retrieved =
+				Self::get_timestamp_by_query_id_and_index(query_id, middle).unwrap_or_default();
+			if timestamp_retrieved > timestamp {
+				// get immediate previous value
+				let previous_time =
+					Self::get_timestamp_by_query_id_and_index(query_id, middle.saturating_sub(1))
+						.unwrap_or_default();
+				if previous_time <= timestamp {
+					// candidate found, check for disputes
+					search = false;
+				} else {
+					// look from start to middle -1(prev value)
+					end = middle.saturating_sub(1);
+				}
+			} else {
+				// get immediate next value
+				let next_time =
+					Self::get_timestamp_by_query_id_and_index(query_id, middle.saturating_add(1))
+						.unwrap_or_default();
+				if next_time > timestamp {
+					// candidate found, check for disputes
+					search = false;
+					middle.saturating_inc();
+					timestamp_retrieved = next_time;
+				} else {
+					// look from middle + 1(next value) to end
+					start = middle.saturating_add(1);
+				}
+			}
+		}
+		// candidate found, check for disputed values
+		if !Self::is_in_dispute(query_id, timestamp_retrieved) {
+			// timestamp_retrieved is correct
+			Some(middle)
+		} else {
+			// iterate forward until we find a non-disputed value
+			while Self::is_in_dispute(query_id, timestamp_retrieved) && middle < count {
+				middle.saturating_inc();
+				timestamp_retrieved =
+					Self::get_timestamp_by_query_id_and_index(query_id, middle).unwrap_or_default();
+			}
+			if middle == count && Self::is_in_dispute(query_id, timestamp_retrieved) {
+				return None
+			}
+			// timestamp_retrieved is correct
+			Some(middle)
+		}
 	}
 
 	fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
@@ -1499,11 +1566,52 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 	}
 
 	fn get_multiple_values_before(
-		_query_id: QueryId,
-		_timestamp: Timestamp,
-		_max_age: Timestamp,
+		query_id: QueryId,
+		timestamp: Timestamp,
+		max_age: Timestamp,
+		max_count: u32,
 	) -> Vec<(Vec<u8>, Timestamp)> {
-		todo!()
+		// get index of first possible value
+		let Some(start_index) = Self::get_index_for_data_after(
+			query_id,
+			timestamp.saturating_sub(max_age)
+		) else {
+			// no value within range
+			return Vec::default();
+		};
+		// get index of last possible value
+		let Some(end_index) = Self::get_index_for_data_before(query_id, timestamp) else {
+			// no value before timestamp
+			return Vec::default();
+		};
+		let mut value_count: usize = 0;
+		let mut index = 0;
+		let max_count = max_count as usize;
+		let mut timestamps = Vec::with_capacity(max_count);
+		// generate array of non-disputed timestamps within range
+		while value_count < max_count &&
+			end_index.saturating_add(1).saturating_sub(index) > start_index
+		{
+			if let Some(timestamp_retrieved) =
+				Self::get_timestamp_by_query_id_and_index(query_id, end_index.saturating_sub(index))
+			{
+				if !Self::is_in_dispute(query_id, timestamp_retrieved) {
+					timestamps.push(timestamp_retrieved);
+					value_count.saturating_inc();
+				}
+			}
+			index.saturating_inc();
+		}
+
+		// retrieve values and reverse timestamps order
+		let mut result = Vec::new();
+		for i in 0..value_count {
+			let timestamp = timestamps[value_count - 1 - i];
+			if let Some(data) = Self::retrieve_data(query_id, timestamp) {
+				result.push((data.into_inner(), timestamp));
+			}
+		}
+		result
 	}
 
 	fn get_new_value_count_by_query_id(query_id: QueryId) -> usize {

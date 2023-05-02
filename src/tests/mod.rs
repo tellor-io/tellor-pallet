@@ -29,7 +29,7 @@ use crate::{
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{
 	assert_noop, assert_ok,
-	traits::{Get, PalletInfoAccess, UnixTime},
+	traits::{Get, UnixTime},
 };
 use sp_core::{bytes::to_hex, keccak_256, H256, U256};
 use sp_runtime::{
@@ -42,6 +42,7 @@ use xcm::{latest::prelude::*, DoubleEncoded};
 mod autopay;
 mod governance;
 mod oracle;
+mod using_tellor;
 
 type Balance = <Test as crate::Config>::Balance;
 type Error = crate::Error<Test>;
