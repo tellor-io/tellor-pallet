@@ -933,11 +933,9 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
 	) -> BalanceOf<T> {
-		// todo: use boundedvec for timestamps
-
 		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return Zero::zero()};
 		let mut cumulative_reward = <BalanceOf<T>>::zero();
-		for timestamp in timestamps {
+		for timestamp in timestamps.into_iter().take(100) {
 			cumulative_reward.saturating_accrue(
 				Self::do_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
 			)
@@ -979,10 +977,10 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
 	) -> Vec<bool> {
-		// todo: use boundedvec for timestamps
 		<DataFeeds<T>>::get(query_id, feed_id).map_or_else(Vec::default, |feed| {
 			timestamps
 				.into_iter()
+				.take(100)
 				.map(|timestamp| feed.reward_claimed.get(&timestamp).copied().unwrap_or_default())
 				.collect()
 		})
