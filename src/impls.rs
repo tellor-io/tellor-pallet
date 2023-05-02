@@ -1545,7 +1545,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		// candidate found, check for disputed values
 		if !Self::is_in_dispute(query_id, timestamp_retrieved) {
 			// timestamp_retrieved is correct
-			return Some(middle)
+			Some(middle)
 		} else {
 			// iterate forward until we find a non-disputed value
 			while Self::is_in_dispute(query_id, timestamp_retrieved) && middle < count {
@@ -1557,7 +1557,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 				return None
 			}
 			// timestamp_retrieved is correct
-			return Some(middle)
+			Some(middle)
 		}
 	}
 
