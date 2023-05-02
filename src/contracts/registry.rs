@@ -166,26 +166,6 @@ mod tests {
 		)
 	}
 
-	#[allow(deprecated)]
-	fn deregister() -> Function {
-		// deregister()
-		Function {
-			name: "deregister".to_string(),
-			inputs: vec![],
-			outputs: vec![],
-			constant: None,
-			state_mutability: Default::default(),
-		}
-	}
-
-	#[test]
-	#[ignore]
-	fn deregister_function_selector() {
-		// Short signature bytes used for FUNCTION const
-		let function = deregister();
-		println!("{} {:?}", function.signature(), function.short_signature());
-	}
-
 	#[test]
 	fn encodes_junctions() {
 		let id = H256::random().0;

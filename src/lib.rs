@@ -183,7 +183,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
 
-		/// Origin that manages registration and deregistration from the controller contracts.
+		/// Origin that manages registration with the controller contracts.
 		type RegisterOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
 		/// The location of the registry controller contract.
@@ -439,8 +439,6 @@ pub mod pallet {
 		// Registration
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
-		/// Emitted when deregistration from the controller contracts is attempted.
-		DeregistrationAttempted { para_id: u32, contract_address: Address },
 	}
 
 	#[pallet::error]
@@ -493,8 +491,6 @@ pub mod pallet {
 		ValueDisputed,
 
 		// Oracle
-		/// Cannot deregister due to active stake.
-		ActiveStake,
 		InvalidAddress,
 		/// Balance must be greater than stake amount.
 		InsufficientStake,

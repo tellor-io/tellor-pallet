@@ -97,4 +97,3 @@ This repo is a clone of this work [here](https://github.com/evilrobot-01/substra
 | :heavy_check_mark: `report_slash`                    |  :heavy_check_mark:   | 99% implemented                                                |
 | :heavy_check_mark: `report_invalid_dispute`          | :white_square_button: |                                                                |
 | :heavy_check_mark: `slash_dispute_initiator`         | :white_square_button: | Partially implemented, needs clarification on dispute fee      |
-| :heavy_check_mark: `deregister`                      | :white_square_button: |                                                                |
