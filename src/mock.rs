@@ -135,6 +135,7 @@ impl tellor::Config for Test {
 	type GovernanceOrigin = EnsureGovernance;
 	type InitialDisputeFee = ConstU128<{ 50 * 10u128.pow(12) }>; // (100 TRB / 10) * 5, where TRB 1:5 OCP
 	type MaxClaimTimestamps = ConstU32<10>;
+	type MaxDisputeVotes = ConstU32<10>;
 	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;
 	type MaxQueriesPerReporter = ConstU32<10>;

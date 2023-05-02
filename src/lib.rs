@@ -135,6 +135,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxClaimTimestamps: Get<u32>;
 
+		/// The maximum number of dispute votes per dispatchable call.
+		#[pallet::constant]
+		type MaxDisputeVotes: Get<u32>;
+
 		/// The maximum number of feeds per query.
 		#[pallet::constant]
 		type MaxFeedsPerQuery: Get<u32>;
@@ -167,7 +171,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxValueLength: Get<u32>;
 
-		/// The maximum number of votes.
+		/// The maximum number of votes per round.
 		#[pallet::constant]
 		type MaxVotes: Get<u32>;
 
@@ -1328,55 +1332,29 @@ pub mod pallet {
 			supports: Option<bool>,
 		) -> DispatchResult {
 			let voter = ensure_signed(origin)?;
-			// Ensure that dispute has not been executed and that vote does not exist and is not tallied
-			ensure!(
-				dispute_id != <DisputeId>::default() &&
-					dispute_id != Keccak256::hash(&[]) &&
-					<DisputeInfo<T>>::contains_key(dispute_id),
-				Error::<T>::InvalidVote
-			);
-			let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round
-			<VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
-				match maybe {
-					None => Err(Error::<T>::InvalidVote.into()),
-					Some(vote) => {
-						ensure!(vote.tally_date == 0, Error::<T>::VoteAlreadyTallied);
-						ensure!(!vote.voted.contains_key(&voter), Error::<T>::AlreadyVoted);
-						ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
-						// Update voting status and increment total queries for support, invalid, or against based on vote
-						vote.voted
-							.try_insert(voter.clone(), true)
-							.map_err(|_| Error::<T>::MaxVotesReached)?;
-						let reports = Self::get_reports_submitted_by_address(&voter);
-						let user_tips = Self::get_tips_by_address(&voter);
-						match supports {
-							// Invalid
-							None => {
-								vote.reporters.invalid_query.saturating_accrue(reports);
-								vote.users.invalid_query.saturating_accrue(user_tips);
-							},
-							Some(supports) =>
-								if supports {
-									vote.reporters.does_support.saturating_accrue(reports);
-									vote.users.does_support.saturating_accrue(user_tips);
-								} else {
-									vote.reporters.against.saturating_accrue(reports);
-									vote.users.against.saturating_accrue(user_tips);
-								},
-						};
-						Ok(())
-					},
-				}
-			})?;
-			<VoteTallyByAddress<T>>::mutate(&voter, |total| total.saturating_inc());
-			Self::deposit_event(Event::Voted { dispute_id, supports, voter });
+			Self::do_vote(&voter, dispute_id, supports)
+		}
+
+		/// Enables the caller to cast votes for multiple disputes.
+		///
+		/// - `disputes`: The votes for disputes, containing the dispute identifier and whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
+		#[pallet::call_index(11)]
+		#[pallet::weight(343852000)]
+		pub fn vote_on_multiple_disputes(
+			origin: OriginFor<T>,
+			votes: BoundedVec<(DisputeId, Option<bool>), T::MaxDisputeVotes>,
+		) -> DispatchResult {
+			let voter = ensure_signed(origin)?;
+			for (dispute_id, supports) in votes {
+				Self::do_vote(&voter, dispute_id, supports)?
+			}
 			Ok(())
 		}
 
 		/// Sends any pending dispute votes due to the governance controller contract for tallying.
 		///
 		/// - `max_votes`: The maximum number of votes to be sent.
-		#[pallet::call_index(11)]
+		#[pallet::call_index(12)]
 		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResult {
 			ensure_signed(origin)?;
 			Self::do_send_votes(Self::now(), max_votes)
@@ -1387,7 +1365,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who deposited a stake.
 		/// - `amount`: The amount staked.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(12)]
+		#[pallet::call_index(13)]
 		#[pallet::weight(1218085000)]
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
@@ -1448,7 +1426,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who requested a withdrawal.
 		/// - `amount`: The amount requested to withdraw.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(13)]
+		#[pallet::call_index(14)]
 		#[pallet::weight(1155113000)]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
@@ -1509,7 +1487,7 @@ pub mod pallet {
 		/// - `reporter`: The reporter who withdrew a stake.
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
-		#[pallet::call_index(14)]
+		#[pallet::call_index(15)]
 		#[pallet::weight(261856000)]
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
@@ -1557,7 +1535,7 @@ pub mod pallet {
 		///
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `amount`: The slashed amount.
-		#[pallet::call_index(15)]
+		#[pallet::call_index(16)]
 		#[pallet::weight(1051143000)]
 		pub fn report_slash(
 			origin: OriginFor<T>,
@@ -1638,7 +1616,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The outcome of the vote, as determined by governance.
-		#[pallet::call_index(16)]
+		#[pallet::call_index(17)]
 		#[pallet::weight(198884000)]
 		pub fn report_vote_tallied(
 			origin: OriginFor<T>,
@@ -1654,7 +1632,7 @@ pub mod pallet {
 		/// Reports the execution of a vote.
 		///
 		/// - `dispute_id`: The identifier of the dispute.
-		#[pallet::call_index(17)]
+		#[pallet::call_index(18)]
 		#[pallet::weight(323353000)]
 		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResult {
 			// ensure origin is governance controller contract
