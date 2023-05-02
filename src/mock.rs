@@ -108,7 +108,7 @@ impl pallet_timestamp::Config for Test {
 
 pub(crate) static REGISTRY: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 pub(crate) static GOVERNANCE: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
-static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
+pub(crate) static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 
 parameter_types! {
 	pub const MinimumStakeAmount: u128 = 100 * 10u128.pow(18); // 100 TRB

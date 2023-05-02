@@ -393,12 +393,19 @@ fn begins_dispute_xcm() {
 					gas_limits::BEGIN_PARACHAIN_DISPUTE
 				)]
 			);
-			System::assert_last_event(
+			System::assert_has_event(
 				Event::NewDispute {
 					dispute_id: dispute_id(PARA_ID, query_id, timestamp),
 					query_id,
 					timestamp,
 					reporter,
+				}
+				.into(),
+			);
+			System::assert_last_event(
+				Event::NewDisputeSent {
+					para_id: EVM_PARA_ID,
+					contract_address: (*GOVERNANCE).into(),
 				}
 				.into(),
 			);
@@ -907,7 +914,16 @@ fn send_votes() {
 					);
 					assert!(VoteInfo::get(dispute_id, vote_round).unwrap().sent); // Ensure sent
 					assert!(!PendingVotes::contains_key(dispute_id)); // Ensure 'dequeued'
-					assert_eq!(e.event, Event::VoteSent { dispute_id, vote_round }.into()); // Ensure event emitted
+					assert_eq!(
+						e.event,
+						Event::VoteSent {
+							para_id: EVM_PARA_ID,
+							contract_address: (*GOVERNANCE).into(),
+							dispute_id,
+							vote_round
+						}
+						.into()
+					); // Ensure event emitted
 					assert_noop!(
 						Tellor::vote(RuntimeOrigin::signed(0), dispute_id, None),
 						Error::VoteAlreadySent
@@ -1021,7 +1037,16 @@ fn send_votes_via_hook() {
 					);
 					assert!(VoteInfo::get(dispute_id, vote_round).unwrap().sent); // Ensure sent
 					assert!(!PendingVotes::contains_key(dispute_id)); // Ensure 'dequeued'
-					assert_eq!(e.event, Event::VoteSent { dispute_id, vote_round }.into()); // Ensure event emitted
+					assert_eq!(
+						e.event,
+						Event::VoteSent {
+							para_id: EVM_PARA_ID,
+							contract_address: (*GOVERNANCE).into(),
+							dispute_id,
+							vote_round
+						}
+						.into()
+					); // Ensure event emitted
 					assert_noop!(
 						Tellor::vote(RuntimeOrigin::signed(0), dispute_id, None),
 						Error::VoteAlreadySent
@@ -1737,10 +1762,15 @@ fn slash_dispute_initiator() {
 				None
 			));
 
-			match System::events().last().unwrap().event {
-				RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) => dispute_id,
-				_ => panic!(),
-			}
+			System::events()
+				.iter()
+				.filter_map(|e| match e.event {
+					RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) =>
+						Some(dispute_id),
+					_ => None,
+				})
+				.last()
+				.unwrap()
 		});
 
 		// Tally votes after vote duration

@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
-use super::{traits, Config, Error, Pallet};
+use super::{traits, Config, Error, Event, Pallet};
 use crate::types::ParaId;
 use ::xcm::latest::prelude::*;
 use core::marker::PhantomData;
@@ -34,13 +34,19 @@ pub(crate) type DbWeight = frame_support::weights::constants::RocksDbWeight;
 pub(crate) mod ethereum_xcm;
 
 impl<T: Config> Pallet<T> {
-	pub(super) fn send_xcm(para_id: ParaId, message: Xcm<()>) -> Result<(), Error<T>> {
+	pub(super) fn send_xcm(
+		para_id: ParaId,
+		message: Xcm<()>,
+		event: Event<T>,
+	) -> Result<(), Error<T>> {
 		let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
 		let dest = MultiLocation { parents: 1, interior: X1(Parachain(para_id)) };
 		T::Xcm::send_xcm(interior, dest, message).map_err(|e| match e {
 			SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
 			_ => Error::<T>::SendFailure,
-		})
+		})?;
+		Self::deposit_event(event);
+		Ok(())
 	}
 }
 

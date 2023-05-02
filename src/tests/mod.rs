@@ -84,10 +84,14 @@ fn submit_value_and_begin_dispute(
 	));
 	assert_ok!(Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, now(), None));
 
-	match System::events().last().unwrap().event {
-		RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) => dispute_id,
-		_ => panic!(),
-	}
+	System::events()
+		.iter()
+		.filter_map(|e| match e.event {
+			RuntimeEvent::Tellor(Event::<Test>::NewDispute { dispute_id, .. }) => Some(dispute_id),
+			_ => None,
+		})
+		.last()
+		.unwrap()
 }
 
 fn deposit_stake(reporter: AccountIdOf<Test>, amount: impl Into<Tributes>, address: Address) {
@@ -230,7 +234,7 @@ fn registers() {
 				)]
 			);
 			System::assert_last_event(
-				Event::RegistrationAttempted {
+				Event::RegistrationSent {
 					para_id: EVM_PARA_ID,
 					contract_address: (*REGISTRY).into(),
 				}

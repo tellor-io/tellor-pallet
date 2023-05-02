@@ -405,6 +405,8 @@ pub mod pallet {
 			amount: Tributes,
 			address: Address,
 		},
+		/// Emitted when confirmation of a stake withdraw request is sent to the staking controller contract.
+		StakeWithdrawRequestConfirmationSent { para_id: u32, contract_address: Address },
 		/// Emitted when a value is removed (via governance).
 		ValueRemoved { query_id: QueryId, timestamp: Timestamp },
 
@@ -416,12 +418,14 @@ pub mod pallet {
 			timestamp: Timestamp,
 			reporter: AccountIdOf<T>,
 		},
+		/// Emitted when a new dispute is sent to the governance controller contract.
+		NewDisputeSent { para_id: u32, contract_address: Address },
 		/// Emitted when the dispute fee has changed.
 		NewDisputeFee { dispute_fee: BalanceOf<T> },
 		/// Emitted when an address casts their vote.
 		Voted { dispute_id: DisputeId, supports: Option<bool>, voter: AccountIdOf<T> },
 		/// Emitted when a vote is sent to the governance controller contract for tallying.
-		VoteSent { dispute_id: DisputeId, vote_round: u8 },
+		VoteSent { para_id: u32, contract_address: Address, dispute_id: DisputeId, vote_round: u8 },
 		/// Emitted when all casting for a vote is tallied.
 		VoteTallied {
 			dispute_id: DisputeId,
@@ -437,8 +441,8 @@ pub mod pallet {
 		QueryDataStored { query_id: QueryId },
 
 		// Registration
-		/// Emitted when registration with the controller contracts is attempted.
-		RegistrationAttempted { para_id: u32, contract_address: Address },
+		/// Emitted when registration is sent to the controller contracts.
+		RegistrationSent { para_id: u32, contract_address: Address },
 	}
 
 	#[pallet::error]
@@ -618,11 +622,14 @@ pub mod pallet {
 				),
 				GAS_LIMIT,
 			);
-			Self::send_xcm(registry_contract.para_id, message)?;
-			Self::deposit_event(Event::RegistrationAttempted {
-				para_id: registry_contract.para_id,
-				contract_address: registry_contract.address.into(),
-			});
+			Self::send_xcm(
+				registry_contract.para_id,
+				message,
+				Event::RegistrationSent {
+					para_id: registry_contract.para_id,
+					contract_address: registry_contract.address.into(),
+				},
+			)?;
 			Ok(())
 		}
 
@@ -1311,8 +1318,14 @@ pub mod pallet {
 				),
 				GAS_LIMIT,
 			);
-			Self::send_xcm(governance_contract.para_id, message)?;
-			// todo: emit event such as GovernanceBeginDisputeAttempted?
+			Self::send_xcm(
+				governance_contract.para_id,
+				message,
+				Event::NewDisputeSent {
+					para_id: governance_contract.para_id,
+					contract_address: governance_contract.address.into(),
+				},
+			)?;
 			Ok(())
 		}
 
@@ -1499,8 +1512,14 @@ pub mod pallet {
 				),
 				GAS_LIMIT,
 			);
-			Self::send_xcm(staking_contract.para_id, message)?;
-			// todo: emit StakeWithRequestConfirmationSent event?
+			Self::send_xcm(
+				staking_contract.para_id,
+				message,
+				Event::StakeWithdrawRequestConfirmationSent {
+					para_id: staking_contract.para_id,
+					contract_address: staking_contract.address.into(),
+				},
+			)?;
 			Ok(())
 		}
 
