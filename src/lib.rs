@@ -183,7 +183,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
 
-		/// Origin that manages registration and deregistration from the controller contracts.
+		/// Origin that manages registration with the controller contracts.
 		type RegisterOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
 		/// The location of the registry controller contract.
@@ -439,8 +439,6 @@ pub mod pallet {
 		// Registration
 		/// Emitted when registration with the controller contracts is attempted.
 		RegistrationAttempted { para_id: u32, contract_address: Address },
-		/// Emitted when deregistration from the controller contracts is attempted.
-		DeregistrationAttempted { para_id: u32, contract_address: Address },
 	}
 
 	#[pallet::error]
@@ -493,8 +491,6 @@ pub mod pallet {
 		ValueDisputed,
 
 		// Oracle
-		/// Cannot deregister due to active stake.
-		ActiveStake,
 		InvalidAddress,
 		/// Balance must be greater than stake amount.
 		InsufficientStake,
@@ -1665,34 +1661,6 @@ pub mod pallet {
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote
 			Self::execute_vote(dispute_id)
-		}
-
-		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(18)]
-		#[pallet::weight(115413000)]
-		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
-			T::RegisterOrigin::ensure_origin(origin)?;
-			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);
-
-			// Deregister from parachain registry contract
-			let registry_contract = T::Registry::get();
-			const GAS_LIMIT: u64 = gas_limits::DEREGISTER;
-			let message = xcm::transact::<T>(
-				ethereum_xcm::transact(
-					registry_contract.address,
-					registry::deregister()
-						.try_into()
-						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					GAS_LIMIT,
-				),
-				GAS_LIMIT,
-			);
-			Self::send_xcm(registry_contract.para_id, message)?;
-			Self::deposit_event(Event::DeregistrationAttempted {
-				para_id: registry_contract.para_id,
-				contract_address: registry_contract.address.into(),
-			});
-			Ok(())
 		}
 	}
 }

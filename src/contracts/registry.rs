@@ -104,10 +104,6 @@ fn encode_network_id(network_id: NetworkId) -> Vec<u8> {
 	}
 }
 
-pub(crate) fn deregister() -> Vec<u8> {
-	[175, 245, 237, 177].to_vec()
-}
-
 #[cfg(test)]
 mod tests {
 	use super::super::tests::*;
@@ -168,31 +164,6 @@ mod tests {
 				.unwrap()[..],
 			super::register(para_id, pallet_index, weight_to_fee, fee_location)[..]
 		)
-	}
-
-	#[allow(deprecated)]
-	fn deregister() -> Function {
-		// deregister()
-		Function {
-			name: "deregister".to_string(),
-			inputs: vec![],
-			outputs: vec![],
-			constant: None,
-			state_mutability: Default::default(),
-		}
-	}
-
-	#[test]
-	#[ignore]
-	fn deregister_function_selector() {
-		// Short signature bytes used for FUNCTION const
-		let function = deregister();
-		println!("{} {:?}", function.signature(), function.short_signature());
-	}
-
-	#[test]
-	fn encodes_deregister_call() {
-		assert_eq!(deregister().encode_input(&vec![]).unwrap()[..], super::deregister()[..])
 	}
 
 	#[test]
