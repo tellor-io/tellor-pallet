@@ -1666,34 +1666,6 @@ pub mod pallet {
 			// execute vote
 			Self::execute_vote(dispute_id)
 		}
-
-		/// Deregisters the parachain from the Tellor controller contracts.
-		#[pallet::call_index(18)]
-		#[pallet::weight(115413000)]
-		pub fn deregister(origin: OriginFor<T>) -> DispatchResult {
-			T::RegisterOrigin::ensure_origin(origin)?;
-			ensure!(Self::get_total_stake_amount() == U256::zero(), Error::<T>::ActiveStake);
-
-			// Deregister from parachain registry contract
-			let registry_contract = T::Registry::get();
-			const GAS_LIMIT: u64 = gas_limits::DEREGISTER;
-			let message = xcm::transact::<T>(
-				ethereum_xcm::transact(
-					registry_contract.address,
-					registry::deregister()
-						.try_into()
-						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					GAS_LIMIT,
-				),
-				GAS_LIMIT,
-			);
-			Self::send_xcm(registry_contract.para_id, message)?;
-			Self::deposit_event(Event::DeregistrationAttempted {
-				para_id: registry_contract.para_id,
-				contract_address: registry_contract.address.into(),
-			});
-			Ok(())
-		}
 	}
 }
 
