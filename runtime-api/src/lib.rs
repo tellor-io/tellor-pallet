@@ -22,7 +22,7 @@ pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
 pub use governance::VoteInfo;
 use sp_std::vec::Vec;
-use tellor::{DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, Tributes, VoteResult};
+use tellor::{DisputeId, Feed, FeedId, QueryId, Timestamp, Tip, Tributes, VoteResult};
 
 mod autopay;
 mod governance;
@@ -51,7 +51,7 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Unique feed identifier of parameters.
 		/// # Returns
 		/// Details of the specified feed.
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Balance>>;
+		fn get_data_feed(feed_id: FeedId) -> Option<Feed<Balance>>;
 
 		/// Read currently funded feed details.
 		/// # Returns

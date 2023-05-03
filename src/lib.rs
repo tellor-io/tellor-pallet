@@ -35,7 +35,7 @@ use sp_std::vec::Vec;
 pub use traits::{SendXcm, UsingTellor};
 use types::*;
 pub use types::{
-	autopay::{FeedDetails, Tip},
+	autopay::{Feed, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
 	Address, DisputeId, FeedId, QueryId, Timestamp, Tributes, U256,
@@ -367,7 +367,7 @@ pub mod pallet {
 			feed_id: FeedId,
 			amount: BalanceOf<T>,
 			feed_funder: AccountIdOf<T>,
-			feed_details: FeedDetailsOf<T>,
+			feed_details: FeedOf<T>,
 		},
 		/// Emitted when a data feed is set up.
 		NewDataFeed {
@@ -733,7 +733,7 @@ pub mod pallet {
 			let reporter = ensure_signed(origin)?;
 
 			let mut feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
-			let balance = feed.details.balance;
+			let balance = feed.balance;
 			ensure!(balance > Zero::zero(), Error::<T>::InsufficientFeedBalance);
 
 			let mut cumulative_reward = BalanceOf::<T>::zero();
@@ -761,7 +761,6 @@ pub mod pallet {
 					<FeedsWithFunding<T>>::try_mutate(|feeds_with_funding| -> DispatchResult {
 						if feeds_with_funding.len() > 1 {
 							let index = feed
-								.details
 								.feeds_with_funding_index
 								.checked_sub(1)
 								.ok_or(ArithmeticError::Underflow)?;
@@ -782,7 +781,7 @@ pub mod pallet {
 										feed_id_last_funded,
 										|f| -> DispatchResult {
 											if let Some(f) = f {
-												f.details.feeds_with_funding_index = index
+												f.feeds_with_funding_index = index
 													.checked_add(1)
 													.ok_or(ArithmeticError::Overflow)?
 											}
@@ -795,12 +794,12 @@ pub mod pallet {
 						feeds_with_funding.pop();
 						Ok(())
 					})?;
-					feed.details.feeds_with_funding_index = 0;
+					feed.feeds_with_funding_index = 0;
 				}
 				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp), true);
 			}
 
-			feed.details.balance.saturating_reduce(cumulative_reward);
+			feed.balance.saturating_reduce(cumulative_reward);
 			<DataFeeds<T>>::set(query_id, feed_id, Some(feed));
 			let fee = (cumulative_reward
 				.checked_mul(&T::Fee::get().into())
@@ -883,7 +882,7 @@ pub mod pallet {
 			ensure!(interval > 0, Error::<T>::InvalidInterval);
 			ensure!(window < interval, Error::<T>::InvalidWindow);
 
-			let feed = FeedDetailsOf::<T> {
+			let feed = FeedOf::<T> {
 				reward,
 				balance: Zero::zero(),
 				start_time,
@@ -909,7 +908,7 @@ pub mod pallet {
 			})?;
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);
-			<DataFeeds<T>>::insert(query_id, feed_id, FeedOf::<T> { details: feed });
+			<DataFeeds<T>>::insert(query_id, feed_id, feed);
 			Self::deposit_event(Event::NewDataFeed {
 				query_id,
 				feed_id,

@@ -17,7 +17,7 @@
 use super::*;
 use crate::{
 	constants::REPORTING_LOCK,
-	types::{BytesToU256, FeedDetailsOf, FeedId, QueryDataOf, QueryId, Timestamp, TipOf},
+	types::{BytesToU256, FeedId, FeedOf, QueryDataOf, QueryId, Timestamp, TipOf},
 	Config,
 };
 use frame_support::{
@@ -1261,7 +1261,7 @@ fn get_data_feed() {
 	ext.execute_with(|| {
 		assert_eq!(
 			Tellor::get_data_feed(feed_id).unwrap(),
-			FeedDetailsOf::<Test> {
+			FeedOf::<Test> {
 				reward: token(1),
 				balance: token(1_000),
 				start_time: timestamp,
@@ -2207,7 +2207,7 @@ fn get_funded_feed_details() {
 			);
 			assert_eq!(
 				&Tellor::get_funded_feed_details()[0].0,
-				&FeedDetailsOf::<Test> {
+				&FeedOf::<Test> {
 					reward: token(1),
 					balance: token(1_000),
 					start_time: now(),

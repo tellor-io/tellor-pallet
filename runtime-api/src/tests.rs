@@ -34,8 +34,8 @@ use sp_runtime::{
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
-	DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp, Tip,
-	Tributes, VoteResult,
+	DisputeId, EnsureGovernance, EnsureStaking, Feed, FeedId, QueryId, Timestamp, Tip, Tributes,
+	VoteResult,
 };
 use xcm::latest::prelude::*;
 
@@ -173,7 +173,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_current_tip(query_id)
 		}
 
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Balance>> {
+		fn get_data_feed(feed_id: FeedId) -> Option<Feed<Balance>> {
 			tellor::Pallet::<Test>::get_data_feed(feed_id)
 		}
 

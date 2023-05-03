@@ -38,7 +38,6 @@ pub type DisputeId = H256;
 pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, ValueOf<T>>;
 pub type FeedId = H256;
 pub(crate) type FeedOf<T> = autopay::Feed<BalanceOf<T>>;
-pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<BalanceOf<T>>;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
 pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLength>;
@@ -57,13 +56,7 @@ pub(crate) mod autopay {
 	use super::*;
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	#[scale_info(skip_type_params(MaxRewardClaims))]
 	pub struct Feed<Balance> {
-		pub(crate) details: FeedDetails<Balance>,
-	}
-
-	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	pub struct FeedDetails<Balance> {
 		/// Amount paid for each eligible data submission.
 		pub(crate) reward: Balance,
 		/// Account remaining balance.

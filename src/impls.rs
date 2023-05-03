@@ -152,20 +152,20 @@ impl<T: Config> Pallet<T> {
 		};
 
 		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
-		feed.details.balance.saturating_accrue(amount);
+		feed.balance.saturating_accrue(amount);
 		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
 		// Add to array of feeds with funding
-		if feed.details.feeds_with_funding_index == 0 && feed.details.balance > Zero::zero() {
+		if feed.feeds_with_funding_index == 0 && feed.balance > Zero::zero() {
 			let index = <FeedsWithFunding<T>>::try_mutate(
 				|feeds_with_funding| -> Result<usize, DispatchError> {
 					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
 					Ok(feeds_with_funding.len())
 				},
 			)?;
-			feed.details.feeds_with_funding_index =
+			feed.feeds_with_funding_index =
 				index.checked_into().ok_or(ArithmeticError::Overflow)?;
 		}
-		let feed_details = feed.details.clone();
+		let feed_details = feed.clone();
 		<DataFeeds<T>>::insert(query_id, feed_id, feed);
 		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
 		Self::deposit_event(Event::DataFeedFunded {
@@ -200,22 +200,19 @@ impl<T: Config> Pallet<T> {
 			!<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)),
 			Error::<T>::TipAlreadyClaimed
 		);
-		let n = (timestamp
-			.checked_sub(feed.details.start_time)
-			.ok_or(ArithmeticError::Underflow)?)
-		.checked_div(feed.details.interval)
-		.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
+		let n = (timestamp.checked_sub(feed.start_time).ok_or(ArithmeticError::Underflow)?)
+			.checked_div(feed.interval)
+			.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
 		let c = feed
-			.details
 			.start_time
-			.checked_add(feed.details.interval.checked_mul(n).ok_or(ArithmeticError::Overflow)?)
+			.checked_add(feed.interval.checked_mul(n).ok_or(ArithmeticError::Overflow)?)
 			.ok_or(ArithmeticError::Overflow)?; // finds start timestamp c of interval n
 		let value_retrieved = Self::retrieve_data(query_id, timestamp);
 		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
 		let (value_retrieved_before, timestamp_before) =
 			Self::get_data_before(query_id, timestamp).unwrap_or_default();
 		let mut price_change = 0; // price change from last value to current value
-		if feed.details.price_threshold != 0 {
+		if feed.price_threshold != 0 {
 			// v1 is value retrieved at supplied timestamp
 			let v1 = BytesToU256::convert(
 				value_retrieved.expect("value retrieved checked above; qed").into_inner(),
@@ -242,24 +239,23 @@ impl<T: Config> Pallet<T> {
 				.saturated_into();
 			}
 		}
-		let mut reward_amount = feed.details.reward;
+		let mut reward_amount = feed.reward;
 		let time_diff = timestamp.checked_sub(c).ok_or(ArithmeticError::Underflow)?; // time difference between report timestamp and start of interval
 
 		// ensure either report is first within a valid window, or price change threshold is met
-		if time_diff < feed.details.window && timestamp_before < c {
+		if time_diff < feed.window && timestamp_before < c {
 			// add time based rewards if applicable
 			reward_amount.saturating_accrue(
-				feed.details
-					.reward_increase_per_second
+				feed.reward_increase_per_second
 					.checked_mul(&time_diff.into())
 					.ok_or(ArithmeticError::Overflow)?,
 			);
 		} else {
-			ensure!(price_change > feed.details.price_threshold, Error::<T>::PriceThresholdNotMet);
+			ensure!(price_change > feed.price_threshold, Error::<T>::PriceThresholdNotMet);
 		}
 
-		if feed.details.balance < reward_amount {
-			reward_amount = feed.details.balance;
+		if feed.balance < reward_amount {
+			reward_amount = feed.balance;
 		}
 		Ok(reward_amount)
 	}
@@ -580,10 +576,9 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Unique feed identifier of parameters.
 	/// # Returns
 	/// Details of the specified feed.
-	pub fn get_data_feed(feed_id: FeedId) -> Option<FeedDetailsOf<T>> {
+	pub fn get_data_feed(feed_id: FeedId) -> Option<FeedOf<T>> {
 		<QueryIdFromDataFeedId<T>>::get(feed_id)
 			.and_then(|query_id| <DataFeeds<T>>::get(query_id, feed_id))
-			.map(|f| f.details)
 	}
 
 	/// Get the latest dispute fee.
@@ -619,7 +614,7 @@ impl<T: Config> Pallet<T> {
 	/// Read currently funded feed details.
 	/// # Returns
 	/// Details for funded feeds.
-	pub fn get_funded_feed_details() -> Vec<(FeedDetailsOf<T>, QueryDataOf<T>)> {
+	pub fn get_funded_feed_details() -> Vec<(FeedOf<T>, QueryDataOf<T>)> {
 		Self::get_funded_feeds()
 			.into_iter()
 			.filter_map(|feed_id| {
@@ -1002,8 +997,8 @@ impl<T: Config> Pallet<T> {
 				Self::do_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
 			)
 		}
-		if cumulative_reward > feed.details.balance {
-			cumulative_reward = feed.details.balance;
+		if cumulative_reward > feed.balance {
+			cumulative_reward = feed.balance;
 		}
 		cumulative_reward.saturating_reduce(
 			(cumulative_reward.saturating_mul(T::Fee::get().into())) / 1000u16.into(),
