@@ -298,10 +298,18 @@ impl<T: Config> Pallet<T> {
 					),
 					GAS_LIMIT,
 				);
-				Self::send_xcm(governance_contract.para_id, message)?;
+				Self::send_xcm(
+					governance_contract.para_id,
+					message,
+					Event::VoteSent {
+						para_id: governance_contract.para_id,
+						contract_address: governance_contract.address.into(),
+						dispute_id,
+						vote_round,
+					},
+				)?;
 				vote.sent = true;
 				<PendingVotes<T>>::remove(dispute_id);
-				Self::deposit_event(Event::VoteSent { dispute_id, vote_round });
 				Ok(())
 			});
 		}
