@@ -1205,17 +1205,7 @@ pub mod pallet {
 				initiator: dispute_initiator.clone(),
 				voted: BoundedBTreeMap::default(),
 			};
-			// todo: optimise to only write if not already existing
-			let mut dispute = DisputeOf::<T> {
-				query_id,
-				timestamp,
-				value: <ValueOf<T>>::default(),
-				disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp)
-					.ok_or(Error::<T>::NoValueExists)?,
-				slashed_amount: <StakeAmount<T>>::get(),
-			};
-			<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
-			if vote_round == 1 {
+			let dispute = if vote_round == 1 {
 				ensure!(
 					Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? <
 						REPORTING_LOCK,
@@ -1245,9 +1235,19 @@ pub mod pallet {
 						),
 					)
 					.ok_or(ArithmeticError::Overflow)?;
-				dispute.value =
-					Self::retrieve_data(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
+				let dispute = DisputeOf::<T> {
+					query_id,
+					timestamp,
+					value: Self::retrieve_data(query_id, timestamp)
+						.ok_or(Error::<T>::InvalidTimestamp)?,
+					disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp)
+						.ok_or(Error::<T>::NoValueExists)?,
+					slashed_amount: <StakeAmount<T>>::get(),
+				};
+				<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
+				<DisputeInfo<T>>::insert(dispute_id, &dispute);
 				Self::remove_value(query_id, timestamp)?;
+				dispute
 			} else {
 				let prev_id = vote_round.checked_sub(1).ok_or(ArithmeticError::Underflow)?;
 				let prev_vote =
@@ -1266,9 +1266,8 @@ pub mod pallet {
 						vote_round.checked_sub(1).ok_or(ArithmeticError::Underflow)?.into(),
 					))
 					.ok_or(ArithmeticError::Overflow)?;
-				dispute.value =
-					<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?.value;
-			}
+				<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?
+			};
 			let stake_amount = U256ToBalance::<T>::convert(Self::convert(<StakeAmount<T>>::get())?);
 			if vote.fee > stake_amount {
 				vote.fee = stake_amount;
@@ -1278,7 +1277,6 @@ pub mod pallet {
 			T::Asset::transfer(&dispute_initiator, &Self::dispute_fees(), dispute_fee, false)?;
 			<PendingVotes<T>>::insert(dispute_id, (vote_round, vote.start_date + (11 * HOURS)));
 			<VoteInfo<T>>::insert(dispute_id, vote_round, vote);
-			<DisputeInfo<T>>::insert(dispute_id, &dispute);
 			Self::deposit_event(Event::NewDispute {
 				dispute_id,
 				query_id,
