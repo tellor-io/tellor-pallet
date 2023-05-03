@@ -1029,12 +1029,7 @@ pub mod pallet {
 			query_data: QueryDataOf<T>,
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
-			ensure!(
-				// todo: confirm replacement with Tellor
-				//Keccak256::hash(value.as_ref()) != Keccak256::<T>::hash(&[]),
-				!value.is_empty(),
-				Error::<T>::InvalidValue
-			);
+			ensure!(!value.is_empty(), Error::<T>::InvalidValue);
 			let report = <Reports<T>>::get(query_id);
 			ensure!(
 				nonce == report.as_ref().map_or(Nonce::zero(), |r| r.timestamps.len() as Nonce) ||
