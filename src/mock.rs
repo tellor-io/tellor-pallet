@@ -159,6 +159,7 @@ impl tellor::Config for Test {
 	type Xcm = TestSendXcm;
 	type XcmFeesAsset = XcmFeesAsset;
 	type XcmWeightToAsset = ConstU128<50_000>;
+	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = TestBenchmarkHelper; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
 }
 
@@ -232,6 +233,7 @@ pub(crate) fn with_block_after<R>(time_in_secs: u64, execute: impl FnOnce() -> R
 }
 
 pub struct TestBenchmarkHelper;
+#[cfg(feature = "runtime-benchmarks")]
 impl tellor::traits::BenchmarkHelper<AccountId> for TestBenchmarkHelper {
 
 	fn set_time(time_in_secs: u64) {
