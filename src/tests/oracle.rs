@@ -1303,7 +1303,7 @@ fn retrieve_data() {
 #[ignore]
 fn get_total_time_based_rewards_balance() {
 	// https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L533
-	todo!()
+	unimplemented!("currently in backlog")
 }
 
 const REWARD_RATE_TARGET: Balance = 60 * 60 * 24 * 30; // 30 days

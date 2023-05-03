@@ -1103,7 +1103,7 @@ pub mod pallet {
 				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
 			<Reports<T>>::insert(query_id, report);
 
-			// todo: Disperse Time Based Reward
+			// backlog: Disperse Time Based Reward
 			// uint256 _reward = ((block.timestamp - timeOfLastNewValue) * timeBasedReward) / 300; //.5 TRB per 5 minutes
 			// uint256 _totalTimeBasedRewardsBalance =
 			// 	token.balanceOf(address(this)) -
