@@ -118,7 +118,7 @@ sp_api::decl_runtime_apis! {
 		/// * `timestamp` - Timestamp of reported data.
 		/// # Returns
 		/// Whether a reward has been claimed, if timestamp exists.
-		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> Option<bool>;
+		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> bool;
 
 		/// Read whether rewards have been claimed.
 		/// # Arguments

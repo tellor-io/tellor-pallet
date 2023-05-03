@@ -30,7 +30,7 @@ use sp_core::{ConstU128, ConstU32, H256, U256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
-	traits::{BlakeTwo256, Convert, IdentityLookup},
+	traits::{BlakeTwo256, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
@@ -127,7 +127,6 @@ impl tellor::Config for Test {
 	type MaxFundedFeeds = ();
 	type MaxQueriesPerReporter = ConstU32<100>;
 	type MaxQueryDataLength = ();
-	type MaxRewardClaims = ();
 	type MaxTimestamps = ();
 	type MaxTipsPerQuery = ();
 	type MaxValueLength = MaxValueLength;
@@ -223,7 +222,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reward_amount(feed_id, query_id, timestamps)
 		}
 
-		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> Option<bool>{
+		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> bool{
 			tellor::Pallet::<Test>::get_reward_claimed_status(feed_id, query_id, timestamp)
 		}
 
@@ -482,7 +481,7 @@ mod autopay {
 					Time::get()
 				)
 				.unwrap(),
-				None
+				false
 			);
 		});
 	}

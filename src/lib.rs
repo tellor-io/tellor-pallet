@@ -155,10 +155,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
 
-		/// The maximum number of reward claims.
-		#[pallet::constant]
-		type MaxRewardClaims: Get<u32>;
-
 		/// The maximum number of timestamps per data feed.
 		#[pallet::constant]
 		type MaxTimestamps: Get<u32>;
@@ -243,6 +239,18 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type DataFeeds<T> =
 		StorageDoubleMap<_, Identity, QueryId, Identity, FeedId, FeedOf<T>>;
+	/// Tracks which tips were already paid out.
+	#[pallet::storage]
+	pub(super) type DataFeedRewardClaimed<T> = StorageNMap<
+		_,
+		(
+			NMapKey<Identity, QueryId>,
+			NMapKey<Identity, FeedId>,
+			NMapKey<Blake2_128Concat, Timestamp>,
+		),
+		bool,
+		ValueQuery,
+	>;
 	#[pallet::storage]
 	pub(super) type FeedsWithFunding<T> =
 		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
@@ -479,8 +487,6 @@ pub mod pallet {
 		InvalidWindow,
 		/// The maximum number of feeds have been funded.
 		MaxFeedsFunded,
-		/// The maximum number of reward claims has been reached,
-		MaxRewardClaimsReached,
 		/// The maximum number of tips has been reached,
 		MaxTipsReached,
 		/// No tips submitted for this query identifier.
@@ -791,9 +797,7 @@ pub mod pallet {
 					})?;
 					feed.details.feeds_with_funding_index = 0;
 				}
-				feed.reward_claimed
-					.try_insert(*timestamp, true)
-					.map_err(|_| Error::<T>::MaxRewardClaimsReached)?;
+				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp), true);
 			}
 
 			feed.details.balance.saturating_reduce(cumulative_reward);
@@ -905,11 +909,7 @@ pub mod pallet {
 			})?;
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);
-			<DataFeeds<T>>::insert(
-				query_id,
-				feed_id,
-				FeedOf::<T> { details: feed, reward_claimed: BoundedBTreeMap::default() },
-			);
+			<DataFeeds<T>>::insert(query_id, feed_id, FeedOf::<T> { details: feed });
 			Self::deposit_event(Event::NewDataFeed {
 				query_id,
 				feed_id,

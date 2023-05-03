@@ -37,7 +37,7 @@ pub(crate) type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
 pub type DisputeId = H256;
 pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, ValueOf<T>>;
 pub type FeedId = H256;
-pub(crate) type FeedOf<T> = autopay::Feed<BalanceOf<T>, <T as Config>::MaxRewardClaims>;
+pub(crate) type FeedOf<T> = autopay::Feed<BalanceOf<T>>;
 pub(crate) type FeedDetailsOf<T> = autopay::FeedDetails<BalanceOf<T>>;
 pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
@@ -58,10 +58,8 @@ pub(crate) mod autopay {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxRewardClaims))]
-	pub struct Feed<Balance, MaxRewardClaims: Get<u32>> {
+	pub struct Feed<Balance> {
 		pub(crate) details: FeedDetails<Balance>,
-		/// Tracks which tips were already paid out.
-		pub(crate) reward_claimed: BoundedBTreeMap<Timestamp, bool, MaxRewardClaims>,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]

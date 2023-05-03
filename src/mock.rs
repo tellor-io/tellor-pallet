@@ -140,7 +140,6 @@ impl tellor::Config for Test {
 	type MaxFundedFeeds = ConstU32<10>;
 	type MaxQueriesPerReporter = ConstU32<10>;
 	type MaxQueryDataLength = ConstU32<1000>;
-	type MaxRewardClaims = ConstU32<10>;
 	type MaxTimestamps = ConstU32<{ 31_536_000 / 6 * 100 }>; // Seconds per year / 6s block time * 100 years
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so value conversion needs to handle conversion to price for threshold checks

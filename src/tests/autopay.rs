@@ -476,7 +476,7 @@ fn do_get_reward_amount() {
 				bounded_vec![timestamp]
 			));
 			assert_eq!(Tellor::get_data_feed(feed_id).unwrap().balance, token(99));
-			assert!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap())
+			assert!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp))
 		});
 	});
 }
@@ -814,7 +814,7 @@ fn get_reward_claimed_status() {
 
 	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L190
 	ext.execute_with(|| {
-		assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap(), false);
+		assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp), false);
 		with_block_after(86_400, || {
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
@@ -822,10 +822,7 @@ fn get_reward_claimed_status() {
 				query_id,
 				bounded_vec![timestamp]
 			));
-			assert_eq!(
-				Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap(),
-				true
-			);
+			assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp), true);
 		});
 	});
 }

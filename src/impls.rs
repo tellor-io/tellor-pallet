@@ -197,7 +197,7 @@ impl<T: Config> Pallet<T> {
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
 		ensure!(
-			!feed.reward_claimed.get(&timestamp).unwrap_or(&false),
+			!<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)),
 			Error::<T>::TipAlreadyClaimed
 		);
 		let n = (timestamp
@@ -1022,9 +1022,8 @@ impl<T: Config> Pallet<T> {
 		feed_id: FeedId,
 		query_id: QueryId,
 		timestamp: Timestamp,
-	) -> Option<bool> {
-		<DataFeeds<T>>::get(query_id, feed_id)
-			.map(|f| f.reward_claimed.get(&timestamp).copied().unwrap_or_default())
+	) -> bool {
+		<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp))
 	}
 
 	/// Read whether rewards have been claimed.
@@ -1039,13 +1038,11 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
 	) -> Vec<bool> {
-		<DataFeeds<T>>::get(query_id, feed_id).map_or_else(Vec::default, |feed| {
-			timestamps
-				.into_iter()
-				.take(100)
-				.map(|timestamp| feed.reward_claimed.get(&timestamp).copied().unwrap_or_default())
-				.collect()
-		})
+		timestamps
+			.into_iter()
+			.take(100)
+			.map(|timestamp| <DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)))
+			.collect()
 	}
 
 	/// Returns the amount required to report oracle values.
