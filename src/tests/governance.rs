@@ -16,7 +16,8 @@
 
 use super::*;
 use crate::{
-	constants::REPORTING_LOCK, contracts, mock::AccountId, types::Tally, Config, VoteResult, HOURS,
+	constants::REPORTING_LOCK, contracts, mock::AccountId, types::Tally, Config, VoteResult, DAYS,
+	HOURS,
 };
 use frame_support::{
 	assert_noop, assert_ok,
@@ -27,6 +28,7 @@ use sp_runtime::traits::BadOrigin;
 use std::collections::VecDeque;
 
 type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
+type InitialDisputeFee = <Test as Config>::InitialDisputeFee;
 type ParachainId = <Test as Config>::ParachainId;
 type PendingVotes = crate::pallet::PendingVotes<Test>;
 type VoteInfo = crate::pallet::VoteInfo<Test>;
@@ -451,6 +453,115 @@ fn begin_dispute_checks_max_vote_rounds() {
 }
 
 #[test]
+fn begin_dispute_fee_saturates() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let disputer = 2;
+	let disputer_address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+			Balances::make_free_balance_be(&disputer, u128::MAX);
+		})
+	});
+
+	ext.execute_with(|| {
+		for i in 1..=u8::MAX {
+			with_block_after(REPORTING_LOCK, || {
+				assert_ok!(Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(100),
+					0,
+					query_data.clone(),
+				));
+				let timestamp = now();
+				assert_ok!(Tellor::begin_dispute(
+					RuntimeOrigin::signed(disputer),
+					query_id,
+					timestamp,
+					Some(disputer_address),
+				));
+
+				let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+				println!(
+					"{i}:{}",
+					Tellor::get_vote_info(dispute_id, 1).unwrap().fee / 10u128.pow(12)
+				)
+			});
+		}
+	});
+}
+
+#[test]
+fn begin_dispute_round_fee_saturates() {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+	let disputer = 2;
+	let disputer_address = Address::random();
+	let mut ext = new_test_ext();
+
+	// Prerequisites
+	ext.execute_with(|| {
+		with_block(|| {
+			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
+			Balances::make_free_balance_be(&disputer, u128::MAX);
+		})
+	});
+
+	ext.execute_with(|| {
+		let timestamp = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data.clone(),
+			));
+			let timestamp = now();
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(disputer),
+				query_id,
+				timestamp,
+				Some(disputer_address),
+			));
+			timestamp
+		});
+
+		let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+		println!("{}", Tellor::get_vote_info(dispute_id, 1).unwrap().fee / 10u128.pow(12));
+
+		// Repeatedly start new vote rounds until reaching vote_round::MAAX
+		for round in 2..u8::MAX {
+			// Wait max time period before tally
+			with_block_after(6 * DAYS, || {
+				assert_ok!(Tellor::report_vote_tallied(
+					Origin::Governance.into(),
+					dispute_id,
+					VoteResult::Passed,
+				));
+				// Start new round
+				assert_ok!(Tellor::begin_dispute(
+					RuntimeOrigin::signed(disputer),
+					query_id,
+					timestamp,
+					Some(disputer_address),
+				));
+				println!(
+					"{}",
+					Tellor::get_vote_info(dispute_id, round).unwrap().fee / 10u128.pow(12)
+				);
+			});
+		}
+	});
+}
+
+#[test]
 fn execute_vote() {
 	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
 	let query_id = keccak_256(query_data.as_ref()).into();
@@ -822,7 +933,7 @@ fn send_votes() {
 	let disputer = 3;
 	let mut ext = new_test_ext();
 
-	const DISPUTES: u8 = 6;
+	const DISPUTES: u8 = 10;
 
 	// Prerequisites
 	ext.execute_with(|| {
@@ -835,7 +946,9 @@ fn send_votes() {
 				token(1),
 				query_data.clone()
 			));
-			Balances::make_free_balance_be(&disputer, token(1_000));
+			let dispute_fee: Balance = InitialDisputeFee::get(); // 10% 100 TRB to OCP
+			let stake_amount = dispute_fee * 10;
+			Balances::make_free_balance_be(&disputer, stake_amount * DISPUTES as u128);
 		})
 	});
 
@@ -959,7 +1072,9 @@ fn send_votes_via_hook() {
 				token(1),
 				query_data.clone()
 			));
-			Balances::make_free_balance_be(&disputer, token(1_000));
+			let dispute_fee: Balance = InitialDisputeFee::get(); // 10% 100 TRB to OCP
+			let stake_amount = dispute_fee * 10;
+			Balances::make_free_balance_be(&disputer, stake_amount * DISPUTES as u128);
 		})
 	});
 
