@@ -344,6 +344,60 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
+	/// Enables the caller to cast a vote.
+	/// # Arguments
+	/// * `dispute_id` - The identifier of the dispute.
+	/// * `supports` - Whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
+	pub(super) fn do_vote(
+		voter: &AccountIdOf<T>,
+		dispute_id: DisputeId,
+		supports: Option<bool>,
+	) -> DispatchResult {
+		// Ensure that dispute has not been executed and that vote does not exist and is not tallied
+		ensure!(
+			dispute_id != <DisputeId>::default() &&
+				dispute_id != Keccak256::hash(&[]) &&
+				<DisputeInfo<T>>::contains_key(dispute_id),
+			Error::<T>::InvalidVote
+		);
+		let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round
+		<VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
+			match maybe {
+				None => Err(Error::<T>::InvalidVote.into()),
+				Some(vote) => {
+					ensure!(vote.tally_date == 0, Error::<T>::VoteAlreadyTallied);
+					ensure!(!vote.voted.contains_key(&voter), Error::<T>::AlreadyVoted);
+					ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
+					// Update voting status and increment total queries for support, invalid, or against based on vote
+					vote.voted
+						.try_insert(voter.clone(), true)
+						.map_err(|_| Error::<T>::MaxVotesReached)?;
+					let reports = Self::get_reports_submitted_by_address(&voter);
+					let user_tips = Self::get_tips_by_address(&voter);
+					match supports {
+						// Invalid
+						None => {
+							vote.reporters.invalid_query.saturating_accrue(reports);
+							vote.users.invalid_query.saturating_accrue(user_tips);
+						},
+						Some(supports) =>
+							if supports {
+								vote.reporters.does_support.saturating_accrue(reports);
+								vote.users.does_support.saturating_accrue(user_tips);
+							} else {
+								vote.reporters.against.saturating_accrue(reports);
+								vote.users.against.saturating_accrue(user_tips);
+							},
+					};
+					Ok(())
+				},
+			}
+		})?;
+		<VoteTallyByAddress<T>>::mutate(voter, |total| total.saturating_inc());
+		Self::deposit_event(Event::Voted { dispute_id, supports, voter: voter.clone() });
+		Ok(())
+	}
+
 	/// Executes the vote and transfers corresponding dispute fees to initiator/reporter.
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.

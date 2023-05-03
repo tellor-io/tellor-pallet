@@ -1033,9 +1033,132 @@ fn send_votes_via_hook() {
 }
 
 #[test]
-#[ignore]
 fn vote_on_multiple_disputes() {
-	todo!()
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter_1 = 1;
+	let reporter_2 = 2;
+	let reporter_3 = 3;
+	let disputer = 4;
+	let disputer_address = Address::random();
+	let voter = 5;
+	let mut ext = new_test_ext();
+
+	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L205
+	ext.execute_with(|| {
+		with_block(|| {
+			Balances::make_free_balance_be(&disputer, token(1_000));
+			Balances::make_free_balance_be(&voter, token(101));
+
+			// Voter must be user or reporter to have any effect, so make a user by creating a tip
+			assert_ok!(Tellor::tip(
+				RuntimeOrigin::signed(voter),
+				query_id,
+				token(100),
+				query_data.clone()
+			));
+
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter_1,
+				MINIMUM_STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter_2,
+				MINIMUM_STAKE_AMOUNT.into(),
+				Address::random()
+			));
+			assert_ok!(Tellor::report_stake_deposited(
+				Origin::Staking.into(),
+				reporter_3,
+				MINIMUM_STAKE_AMOUNT.into(),
+				Address::random()
+			));
+		});
+
+		let timestamp_1 = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_1),
+				query_id,
+				uint_value(101),
+				0,
+				query_data.clone(),
+			));
+			now()
+		});
+		let timestamp_2 = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_2),
+				query_id,
+				uint_value(102),
+				1,
+				query_data.clone(),
+			));
+			now()
+		});
+		let timestamp_3 = with_block(|| {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter_3),
+				query_id,
+				uint_value(103),
+				2,
+				query_data.clone(),
+			));
+			now()
+		});
+
+		with_block(|| {
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(disputer),
+				query_id,
+				timestamp_1,
+				Some(disputer_address)
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(disputer),
+				query_id,
+				timestamp_2,
+				Some(disputer_address)
+			));
+			assert_ok!(Tellor::begin_dispute(
+				RuntimeOrigin::signed(disputer),
+				query_id,
+				timestamp_3,
+				Some(disputer_address)
+			));
+		});
+
+		with_block(|| {
+			let dispute_1 = dispute_id(PARA_ID, query_id, timestamp_1);
+			let dispute_2 = dispute_id(PARA_ID, query_id, timestamp_2);
+			let dispute_3 = dispute_id(PARA_ID, query_id, timestamp_3);
+
+			assert_ok!(Tellor::vote_on_multiple_disputes(
+				RuntimeOrigin::signed(voter),
+				vec![(dispute_1, Some(true)), (dispute_2, Some(false)), (dispute_3, None)]
+					.try_into()
+					.unwrap()
+			));
+
+			assert_eq!(
+				Tellor::get_vote_info(dispute_1, 1).unwrap().users.does_support,
+				token(100),
+				"dispute 1 users does_support tally should be correct"
+			);
+			assert_eq!(
+				Tellor::get_vote_info(dispute_2, 1).unwrap().users.against,
+				token(100),
+				"dispute 2 users against tally should be correct"
+			);
+			assert_eq!(
+				Tellor::get_vote_info(dispute_3, 1).unwrap().users.invalid_query,
+				token(100),
+				"dispute 3 users invalid tally should be correct"
+			);
+		});
+	});
 }
 
 #[test]
