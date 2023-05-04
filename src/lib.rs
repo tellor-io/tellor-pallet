@@ -154,10 +154,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxValueLength: Get<u32>;
 
-		/// The maximum number of votes per round.
-		#[pallet::constant]
-		type MaxVotes: Get<u32>;
-
 		/// The minimum amount of tokens required to stake.
 		#[pallet::constant]
 		type MinimumStakeAmount: Get<u128>;

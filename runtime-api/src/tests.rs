@@ -127,7 +127,6 @@ impl tellor::Config for Test {
 	type MaxQueryDataLength = ();
 	type MaxTipsPerQuery = ();
 	type MaxValueLength = MaxValueLength;
-	type MaxVotes = ();
 	type MinimumStakeAmount = ();
 	type PalletId = TellorPalletId;
 	type ParachainId = ();

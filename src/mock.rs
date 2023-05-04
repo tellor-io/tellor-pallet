@@ -140,7 +140,6 @@ impl tellor::Config for Test {
 	type MaxQueryDataLength = ConstU32<1000>;
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so value conversion needs to handle conversion to price for threshold checks
-	type MaxVotes = ConstU32<10>;
 	type MinimumStakeAmount = MinimumStakeAmount;
 	type PalletId = TellorPalletId;
 	type ParachainId = ParachainId;
