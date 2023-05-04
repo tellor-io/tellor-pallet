@@ -24,16 +24,15 @@ use frame_support::{
 	assert_noop, assert_ok,
 	traits::{Currency, Hooks},
 };
-use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map, bounded_vec, Get, U256};
+use sp_core::{bounded_vec, Get, U256};
 use sp_runtime::{
 	traits::{BadOrigin, Convert},
 	Saturating,
 };
 
-type BoundedReportsSubmittedByQueryId =
-	BoundedBTreeMap<QueryId, u128, <Test as Config>::MaxQueriesPerReporter>;
 type InitialDisputeFee = <Test as Config>::InitialDisputeFee;
 type StakeAmountCurrencyTarget = <Test as Config>::StakeAmountCurrencyTarget;
+type StakerReportsSubmittedByQueryId = crate::StakerReportsSubmittedByQueryId<Test>;
 
 const PRICE_TRB: u128 = 50 * 10u128.pow(18); // £50
 const PRICE_TRB_LOCAL: u128 = 6 * 10u128.pow(18); // TRB 1:6 OCP
@@ -80,7 +79,7 @@ fn deposit_stake() {
 			assert_eq!(staker_details.start_vote_count, 0);
 			assert_eq!(staker_details.start_vote_tally, 0);
 			assert_eq!(staker_details.staked, true);
-			assert!(staker_details.reports_submitted_by_query_id.is_empty());
+			assert_eq!(StakerReportsSubmittedByQueryId::iter_key_prefix(reporter).count(), 0);
 			assert_eq!(Tellor::total_reward_debt(), 0);
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
 
@@ -1047,9 +1046,7 @@ fn get_staker_info() {
 			assert_eq!(staker_details.start_vote_count, 0);
 			assert_eq!(staker_details.start_vote_tally, 0);
 			assert_eq!(staker_details.staked, true);
-			let reports_submitted_by_query_id: BoundedReportsSubmittedByQueryId =
-				bounded_btree_map!(query_id => 1u128);
-			assert_eq!(staker_details.reports_submitted_by_query_id, reports_submitted_by_query_id);
+			assert_eq!(StakerReportsSubmittedByQueryId::get(reporter, query_id), 1);
 		});
 	});
 }

@@ -46,7 +46,7 @@ type AccountId = u64;
 type Balance = u128;
 type BlockNumber = u64;
 type MaxValueLength = ConstU32<4>;
-type StakeInfo = tellor::StakeInfo<Balance, <Test as tellor::Config>::MaxQueriesPerReporter>;
+type StakeInfo = tellor::StakeInfo<Balance>;
 type Value = BoundedVec<u8, MaxValueLength>;
 
 // Configure a mock runtime to test implementation of the runtime-api
@@ -125,7 +125,6 @@ impl tellor::Config for Test {
 	type MaxDisputeVotes = ();
 	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ();
-	type MaxQueriesPerReporter = ConstU32<100>;
 	type MaxQueryDataLength = ();
 	type MaxTimestamps = ();
 	type MaxTipsPerQuery = ();

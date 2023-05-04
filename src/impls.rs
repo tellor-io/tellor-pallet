@@ -973,9 +973,7 @@ impl<T: Config> Pallet<T> {
 		reporter: AccountIdOf<T>,
 		query_id: QueryId,
 	) -> u128 {
-		<StakerDetails<T>>::get(reporter)
-			.and_then(|stake_info| stake_info.reports_submitted_by_query_id.get(&query_id).copied())
-			.unwrap_or_default()
+		<StakerReportsSubmittedByQueryId<T>>::get(reporter, query_id)
 	}
 
 	/// Read potential reward for a set of oracle submissions.

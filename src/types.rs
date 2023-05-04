@@ -44,8 +44,7 @@ pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLengt
 pub type QueryId = H256;
 pub(crate) type ReportOf<T> =
 	oracle::Report<AccountIdOf<T>, BlockNumberOf<T>, ValueOf<T>, <T as Config>::MaxTimestamps>;
-pub(crate) type StakeInfoOf<T> =
-	oracle::StakeInfo<BalanceOf<T>, <T as Config>::MaxQueriesPerReporter>;
+pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<BalanceOf<T>>;
 pub type Timestamp = u64;
 pub(crate) type TipOf<T> = autopay::Tip<BalanceOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
@@ -123,8 +122,7 @@ pub(crate) mod oracle {
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	#[scale_info(skip_type_params(MaxQueries))]
-	pub struct StakeInfo<Balance, MaxQueries: Get<u32>> {
+	pub struct StakeInfo<Balance> {
 		/// The address on the staking chain.
 		pub(crate) address: Address,
 		/// Stake or withdrawal request start date.
@@ -145,11 +143,9 @@ pub(crate) mod oracle {
 		pub(crate) start_vote_tally: u128,
 		/// Used to keep track of total stakers.
 		pub(crate) staked: bool,
-		/// Mapping of query identifier to number of reports submitted by reporter.
-		pub(crate) reports_submitted_by_query_id: BoundedBTreeMap<QueryId, u128, MaxQueries>,
 	}
 
-	impl<Balance: Zero, MaxQueries: Get<u32>> StakeInfo<Balance, MaxQueries> {
+	impl<Balance: Zero> StakeInfo<Balance> {
 		pub(crate) fn new(address: Address) -> Self {
 			Self {
 				address,
@@ -162,7 +158,6 @@ pub(crate) mod oracle {
 				start_vote_count: 0,
 				start_vote_tally: 0,
 				staked: false,
-				reports_submitted_by_query_id: BoundedBTreeMap::default(),
 			}
 		}
 	}

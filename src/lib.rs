@@ -147,10 +147,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxFundedFeeds: Get<u32>;
 
-		/// The maximum number of queries (data feeds) per reporter.
-		#[pallet::constant]
-		type MaxQueriesPerReporter: Get<u32>;
-
 		/// The maximum length of query data.
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
@@ -291,6 +287,10 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
+	/// Mapping of reporter and query identifier to number of reports submitted.
+	#[pallet::storage]
+	pub(super) type StakerReportsSubmittedByQueryId<T> =
+		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Identity, QueryId, u128, ValueQuery>;
 	/// The time of last update to AccumulatedRewardPerShare.
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_allocation)]
@@ -516,8 +516,6 @@ pub mod pallet {
 		InvalidStakingTokenPrice,
 		/// Value must be submitted.
 		InvalidValue,
-		/// The maximum number of queries has been reached.
-		MaxQueriesReached,
 		/// The maximum number of timestamps has been reached.
 		MaxTimestampsReached,
 		/// Reporter not locked for withdrawal.
@@ -1120,19 +1118,9 @@ pub mod pallet {
 			// Update last oracle value and number of values submitted by a reporter
 			<TimeOfLastNewValue<T>>::set(Some(timestamp));
 			staker.reports_submitted.saturating_inc();
-			staker
-				.reports_submitted_by_query_id
-				.try_insert(
-					query_id,
-					staker
-						.reports_submitted_by_query_id
-						.get(&query_id)
-						.copied()
-						.unwrap_or_default()
-						.checked_add(1)
-						.ok_or(ArithmeticError::Overflow)?,
-				)
-				.map_err(|_| Error::<T>::MaxQueriesReached)?;
+			<StakerReportsSubmittedByQueryId<T>>::mutate(&reporter, query_id, |reports| {
+				reports.saturating_inc();
+			});
 			<StakerDetails<T>>::insert(&reporter, staker);
 			Self::deposit_event(Event::NewReport {
 				query_id,

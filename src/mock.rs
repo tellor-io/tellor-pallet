@@ -138,7 +138,6 @@ impl tellor::Config for Test {
 	type MaxDisputeVotes = ConstU32<10>;
 	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;
-	type MaxQueriesPerReporter = ConstU32<10>;
 	type MaxQueryDataLength = ConstU32<1000>;
 	type MaxTimestamps = ConstU32<{ 31_536_000 / 6 * 100 }>; // Seconds per year / 6s block time * 100 years
 	type MaxTipsPerQuery = ConstU32<10>;
