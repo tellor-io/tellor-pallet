@@ -280,6 +280,10 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type ReportDisputes<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, bool, ValueQuery>;
+	/// Mapping of reported timestamps to reporters.
+	#[pallet::storage]
+	pub(super) type ReportersByTimestamp<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, AccountIdOf<T>>;
 	/// Total staking rewards released per second.
 	#[pallet::storage]
 	#[pallet::getter(fn reward_rate)]
@@ -1077,9 +1081,7 @@ pub mod pallet {
 			staker.reporter_last_timestamp = timestamp;
 			// Checks for no double reporting of timestamps
 			ensure!(
-				report
-					.as_ref()
-					.map_or(true, |r| !r.reporter_by_timestamp.contains_key(&timestamp)),
+				<ReportersByTimestamp<T>>::get(query_id, timestamp).is_none(),
 				Error::<T>::TimestampAlreadyReported
 			);
 
@@ -1108,10 +1110,7 @@ pub mod pallet {
 				.value_by_timestamp
 				.try_insert(timestamp, value.clone())
 				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
-			report
-				.reporter_by_timestamp
-				.try_insert(timestamp, reporter.clone())
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
+			<ReportersByTimestamp<T>>::insert(query_id, timestamp, reporter.clone());
 			<Reports<T>>::insert(query_id, report);
 
 			// backlog: Disperse Time Based Reward

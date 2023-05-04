@@ -914,12 +914,8 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<(AccountIdOf<T>, bool)> {
-		<Reports<T>>::get(query_id).and_then(|report| {
-			report
-				.reporter_by_timestamp
-				.get(&timestamp)
-				.map(|reporter| (reporter.clone(), <ReportDisputes<T>>::get(query_id, timestamp)))
-		})
+		<ReportersByTimestamp<T>>::get(query_id, timestamp)
+			.map(|reporter| (reporter, <ReportDisputes<T>>::get(query_id, timestamp)))
 	}
 
 	/// Returns the reporter who submitted a value for a query identifier at a specific time.
@@ -932,8 +928,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<AccountIdOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|report| report.reporter_by_timestamp.get(&timestamp).cloned())
+		<ReportersByTimestamp<T>>::get(query_id, timestamp)
 	}
 
 	/// Returns the timestamp of the reporter's last submission.
