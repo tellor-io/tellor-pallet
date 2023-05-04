@@ -26,12 +26,14 @@ use frame_system::{RawOrigin};
 use types::{Address, Timestamp};
 use crate::constants::DECIMALS;
 use crate::types::QueryDataOf;
-use sp_core::{bounded::BoundedVec, keccak_256};
+use sp_core::{bounded::BoundedVec};
 use crate::traits::BenchmarkHelper;
 use frame_support::traits::OnInitialize;
+use scale_info::prelude::string::String;
+use codec::alloc::{string::ToString, vec};
+use sp_runtime::traits::{Hash, Keccak256};
 
 type RuntimeOrigin<T> = <T as frame_system::Config>::RuntimeOrigin;
-//type Balance = <T as pallet::Config>::Balance;
 const TRB: u128 = 10u128.pow(DECIMALS);
 const PARA_ID: u32 = 3000;
 const SEED: u32 = 0;
@@ -104,7 +106,7 @@ fn create_feed<T: Config>(
 		query_data.clone(),
 		amount
 	).unwrap();
-	let feed_id = keccak_256(&ethabi::encode(&vec![
+	let feed_id = Keccak256::hash(&ethabi::encode(&vec![
 		Token::FixedBytes(query_id.0.into()),
 		Token::Uint(reward.into()),
 		Token::Uint(start_time.into()),
@@ -118,7 +120,7 @@ fn create_feed<T: Config>(
 }
 
 fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeId {
-	keccak_256(&ethabi::encode(&[
+	Keccak256::hash(&ethabi::encode(&[
 		Token::Uint(para_id.into()),
 		Token::FixedBytes(query_id.0.to_vec()),
 		Token::Uint(timestamp.into()),
@@ -140,7 +142,7 @@ benchmarks! {
 
 	report_stake_deposited {
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		let amount = trb(100);
 		let caller = deposit_stake::<T>(reporter.clone(), amount, address)?;
 	}: _<RuntimeOrigin<T>>(caller, reporter.clone(), amount, address)
@@ -152,7 +154,7 @@ benchmarks! {
 
 	report_staking_withdraw_request {
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		let amount = trb(100);
 		let caller = deposit_stake::<T>(reporter.clone(), amount, address)?;
 	}: _<RuntimeOrigin<T>>(caller, reporter.clone(), amount, address)
@@ -166,7 +168,7 @@ benchmarks! {
 
 	report_stake_withdrawn {
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		let amount = trb(100);
 		let caller = deposit_stake::<T>(reporter.clone(), amount, address)?;
 		// request stake withdraw
@@ -181,7 +183,7 @@ benchmarks! {
 
 	setup_data_feed {
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let feed_creator = account::<AccountIdOf<T>>("account", 1, SEED);
 
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), 1000);
@@ -203,7 +205,7 @@ benchmarks! {
 
 	fund_feed{
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let feed_creator = account::<AccountIdOf<T>>("account", 1, SEED);
 
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), 1000);
@@ -227,9 +229,9 @@ benchmarks! {
 	submit_value {
 		let s in 1..T::MaxTimestamps::get()-1;
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
 
@@ -255,13 +257,13 @@ benchmarks! {
 	update_stake_amount {
 		let staking_token_price_query_data: QueryDataOf<T> =
 			spot_price("trb", "gbp").try_into().unwrap();
-		let staking_token_price_query_id = keccak_256(staking_token_price_query_data.as_ref()).into();
+		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
 		let staking_to_local_token_query_data: QueryDataOf<T> =
 			spot_price("trb", "ocp").try_into().unwrap();
 		let staking_to_local_token_query_id: QueryId =
-			keccak_256(staking_to_local_token_query_data.as_ref()).into();
+			Keccak256::hash(staking_to_local_token_query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(10_000), address)?;
 		T::BenchmarkHelper::set_time(HOURS);
@@ -287,9 +289,9 @@ benchmarks! {
 	tip {
 		let s in 2..T::MaxTimestamps::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
 
@@ -318,11 +320,11 @@ benchmarks! {
 	claim_onetime_tip {
 		let s in 1..T::MaxTipsPerQuery::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
 
-		let address = Address::random();
+		let address = Address::zero();
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
 
@@ -347,11 +349,11 @@ benchmarks! {
 	claim_tip {
 		let s in 2..T::MaxClaimTimestamps::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 20, SEED);
 		//let mut tippers = vec![];
 		let feed_creator = account::<AccountIdOf<T>>("account", 101, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
 
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), 1000);
@@ -397,10 +399,10 @@ benchmarks! {
 		// max report submissions
 		let s in 1..T::MaxTimestamps::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
-		let address = Address::random();
+		let address = Address::zero();
         deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
         deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(another_reporter.clone(), 1000);
@@ -423,9 +425,9 @@ benchmarks! {
 
 	vote {
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_time(HOURS);
 		Tellor::<T>::submit_value(
@@ -452,10 +454,10 @@ benchmarks! {
 
 	report_vote_tallied {
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let caller = T::GovernanceOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
-		let address = Address::random();
+		let address = Address::zero();
 		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_time(HOURS);
 		Tellor::<T>::submit_value(
@@ -480,10 +482,10 @@ benchmarks! {
 		// max vote rounds
 		let r in 3..T::MaxTimestamps::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let caller = T::GovernanceOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
-		let address = Address::random();
+		let address = Address::zero();
 		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_time(HOURS);
 		Tellor::<T>::submit_value(
@@ -513,10 +515,10 @@ benchmarks! {
 
 	report_slash {
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let caller = T::GovernanceOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
-		let address = Address::random();
+		let address = Address::zero();
 		let _ = deposit_stake::<T>(reporter.clone(), trb(1200), address);
 		T::BenchmarkHelper::set_time(HOURS);
 		let _ = Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(4_000), 0, query_data.clone());
@@ -540,11 +542,11 @@ benchmarks! {
 		//let s in 2..T::MaxTimestamps::get();
 		let s in 2..84;
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 		let user = account::<AccountIdOf<T>>("account", 3, SEED);
-		let address = Address::random();
+		let address = Address::zero();
         deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
         deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
@@ -575,10 +577,10 @@ benchmarks! {
 		//let s in 2..T::MaxTimestamps::get();
 		let s in 2..11;
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		let mut votes: BoundedVec<(DisputeId, Option<bool>), T::MaxDisputeVotes> = BoundedVec::default();
         deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
         deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
@@ -604,17 +606,17 @@ benchmarks! {
     on_initialize {
 		let staking_token_price_query_data: QueryDataOf<T> =
 			spot_price("trb", "gbp").try_into().unwrap();
-		let staking_token_price_query_id = keccak_256(staking_token_price_query_data.as_ref()).into();
+		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
 		let staking_to_local_token_query_data: QueryDataOf<T> =
 			spot_price("trb", "ocp").try_into().unwrap();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = keccak_256(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let staking_to_local_token_query_id: QueryId =
-			keccak_256(staking_to_local_token_query_data.as_ref()).into();
+			Keccak256::hash(staking_to_local_token_query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 		let user = account::<AccountIdOf<T>>("account", 3, SEED);
-		let address = Address::random();
+		let address = Address::zero();
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(10_000), address)?;
 		deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
