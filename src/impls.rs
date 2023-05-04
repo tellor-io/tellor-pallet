@@ -489,9 +489,9 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
-	/// Feed identifiers for query identifier.
+	/// Feed identifiers for query identifier, in no particular order.
 	pub fn get_current_feeds(query_id: QueryId) -> Vec<FeedId> {
-		<CurrentFeeds<T>>::get(query_id).map_or_else(Vec::default, |f| f.to_vec())
+		<DataFeeds<T>>::iter_key_prefix(query_id).collect()
 	}
 
 	/// Read current onetime tip by query identifier.

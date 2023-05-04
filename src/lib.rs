@@ -138,10 +138,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxDisputeVotes: Get<u32>;
 
-		/// The maximum number of feeds per query.
-		#[pallet::constant]
-		type MaxFeedsPerQuery: Get<u32>;
-
 		/// The maximum number of funded feeds.
 		#[pallet::constant]
 		type MaxFundedFeeds: Get<u32>;
@@ -224,9 +220,6 @@ pub mod pallet {
 	}
 
 	// AutoPay
-	#[pallet::storage]
-	pub(super) type CurrentFeeds<T> =
-		StorageMap<_, Identity, QueryId, BoundedVec<FeedId, <T as Config>::MaxFeedsPerQuery>>;
 	#[pallet::storage]
 	pub(super) type DataFeeds<T> =
 		StorageDoubleMap<_, Identity, QueryId, Identity, FeedId, FeedOf<T>>;
@@ -915,20 +908,6 @@ pub mod pallet {
 				reward_increase_per_second,
 				feeds_with_funding_index: 0,
 			};
-			<CurrentFeeds<T>>::try_mutate(query_id, |maybe| -> DispatchResult {
-				match maybe {
-					None => {
-						*maybe = Some(
-							BoundedVec::try_from(vec![feed_id])
-								.map_err(|_| Error::<T>::MaxFeedsFunded)?,
-						);
-					},
-					Some(feeds) => {
-						feeds.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-					},
-				}
-				Ok(())
-			})?;
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);
 			<DataFeeds<T>>::insert(query_id, feed_id, feed);

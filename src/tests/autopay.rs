@@ -2376,9 +2376,14 @@ fn get_current_feeds() {
 				})
 				.collect();
 			assert_eq!(feeds.len(), 5);
-			assert_eq!(Tellor::get_current_feeds(query_id), feeds);
+			assert_eq!(sort(Tellor::get_current_feeds(query_id)), sort(feeds));
 		});
 	});
+}
+
+fn sort(mut feeds: Vec<FeedId>) -> Vec<FeedId> {
+	feeds.sort();
+	feeds
 }
 
 // Helper function for creating feeds

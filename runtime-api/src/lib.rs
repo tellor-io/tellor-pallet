@@ -36,7 +36,7 @@ sp_api::decl_runtime_apis! {
 		/// # Arguments
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
-		/// Feed identifiers for query identifier.
+		/// Feed identifiers for query identifier, in no particular order.
 		fn get_current_feeds(query_id: QueryId) -> Vec<FeedId>;
 
 		/// Read current onetime tip by query identifier.
