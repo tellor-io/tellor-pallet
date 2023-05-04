@@ -66,7 +66,6 @@ pub mod pallet {
 	};
 	use crate::{
 		contracts::{staking, Abi},
-		types::oracle::Report,
 		xcm::ContractLocation,
 		Tip,
 	};
@@ -150,10 +149,6 @@ pub mod pallet {
 		/// The maximum length of query data.
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
-
-		/// The maximum number of timestamps per data feed.
-		#[pallet::constant]
-		type MaxTimestamps: Get<u32>;
 
 		/// The maximum number of tips per query.
 		#[pallet::constant]
@@ -273,22 +268,30 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn last_stake_amount_update)]
 	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
-	/// Mapping of query identifiers to a report.
-	#[pallet::storage]
-	pub(super) type Reports<T> = StorageMap<_, Identity, QueryId, ReportOf<T>>;
-	/// Mapping of reported timestamps to whether they have been disputed.
+	/// Mapping of reported timestamps (by query identifier) to whether they have been disputed.
 	#[pallet::storage]
 	pub(super) type ReportDisputes<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, bool, ValueQuery>;
-	/// Mapping of reported timestamps to block number.
+	/// Mapping of reported timestamps (by query identifier) to index.
+	#[pallet::storage]
+	pub(super) type ReportedTimestamps<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, u32>;
+	/// Mapping of reported timestamps (by query identifier) to respective indices.
+	#[pallet::storage]
+	pub(super) type ReportedTimestampsByIndex<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, u32, Timestamp>;
+	/// Mapping of reported timestamp count by query identifier.
+	#[pallet::storage]
+	pub(super) type ReportedTimestampCount<T> = StorageMap<_, Identity, QueryId, u32, ValueQuery>;
+	/// Mapping of reported timestamps (by query identifier) to block number.
 	#[pallet::storage]
 	pub(super) type ReportedTimestampsToBlockNumber<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, BlockNumberOf<T>>;
-	/// Mapping of reported timestamps to values.
+	/// Mapping of reported timestamps (by query identifier) to values.
 	#[pallet::storage]
 	pub(super) type ReportedValuesByTimestamp<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, ValueOf<T>>;
-	/// Mapping of reported timestamps to reporters.
+	/// Mapping of reported timestamps (by query identifier) to reporters.
 	#[pallet::storage]
 	pub(super) type ReportersByTimestamp<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, AccountIdOf<T>>;
@@ -544,8 +547,6 @@ pub mod pallet {
 		InvalidStakingTokenPrice,
 		/// Value must be submitted.
 		InvalidValue,
-		/// The maximum number of timestamps has been reached.
-		MaxTimestampsReached,
 		/// Reporter not locked for withdrawal.
 		NoWithdrawalRequested,
 		/// Still in reporter time lock, please wait!
@@ -1051,10 +1052,8 @@ pub mod pallet {
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
 			ensure!(!value.is_empty(), Error::<T>::InvalidValue);
-			let report = <Reports<T>>::get(query_id);
 			ensure!(
-				nonce == report.as_ref().map_or(Nonce::zero(), |r| r.timestamps.len() as Nonce) ||
-					nonce == 0,
+				nonce == <ReportedTimestampCount<T>>::get(query_id) || nonce == 0,
 				Error::<T>::InvalidNonce
 			);
 			let mut staker =
@@ -1094,22 +1093,13 @@ pub mod pallet {
 			);
 
 			// Update number of timestamps, value for given timestamp, and reporter for timestamp
-			let mut report = report.unwrap_or_else(Report::new);
-			report
-				.timestamp_index
-				.try_insert(
-					timestamp,
-					report
-						.timestamps
-						.len()
-						.checked_into::<u32>()
-						.ok_or(ArithmeticError::Overflow)?,
-				)
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
-			report
-				.timestamps
-				.try_push(timestamp)
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
+			let index = <ReportedTimestampCount<T>>::mutate(query_id, |count| {
+				let index = *count;
+				count.saturating_inc();
+				index
+			});
+			<ReportedTimestampsByIndex<T>>::insert(query_id, index, timestamp);
+			<ReportedTimestamps<T>>::insert(query_id, timestamp, index);
 			<ReportedTimestampsToBlockNumber<T>>::insert(
 				query_id,
 				timestamp,
@@ -1117,7 +1107,6 @@ pub mod pallet {
 			);
 			<ReportedValuesByTimestamp<T>>::insert(query_id, timestamp, value.clone());
 			<ReportersByTimestamp<T>>::insert(query_id, timestamp, reporter.clone());
-			<Reports<T>>::insert(query_id, report);
 
 			// backlog: Disperse Time Based Reward
 			// uint256 _reward = ((block.timestamp - timeOfLastNewValue) * timeBasedReward) / 300; //.5 TRB per 5 minutes
@@ -1181,7 +1170,7 @@ pub mod pallet {
 
 			// Ensure value actually exists
 			ensure!(
-				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
+				<ReportedTimestamps<T>>::contains_key(query_id, timestamp),
 				Error::<T>::NoValueExists
 			);
 			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&[

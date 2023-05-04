@@ -670,7 +670,7 @@ impl<T: Config> Pallet<T> {
 	/// * `timestamp` - The timestamp before which to search for the latest index.
 	/// # Returns
 	/// Whether the index was found along with the latest index found before the supplied timestamp.
-	pub fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
+	pub fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 		let count = Self::get_new_value_count_by_query_id(query_id);
 		if count > 0 {
 			let mut middle;
@@ -1073,11 +1073,8 @@ impl<T: Config> Pallet<T> {
 	/// * `index` - The value index to look up.
 	/// # Returns
 	/// A timestamp if found.
-	pub fn get_timestamp_by_query_id_and_index(
-		query_id: QueryId,
-		index: usize,
-	) -> Option<Timestamp> {
-		<Reports<T>>::get(query_id).and_then(|report| report.timestamps.get(index).copied())
+	pub fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp> {
+		<ReportedTimestampsByIndex<T>>::get(query_id, index)
 	}
 
 	/// Returns the index of a reporter timestamp in the timestamp array for a specific query identifier.
@@ -1090,8 +1087,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<u32> {
-		<Reports<T>>::get(query_id)
-			.and_then(|report| report.timestamp_index.get(&timestamp).copied())
+		<ReportedTimestamps<T>>::get(query_id, timestamp)
 	}
 
 	/// Read the total amount of tips paid by a user.
@@ -1122,8 +1118,8 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - The query identifier to look up.
 	/// # Returns
 	/// Count of the number of values received for the query identifier.
-	pub fn get_new_value_count_by_query_id(query_id: QueryId) -> usize {
-		<Reports<T>>::get(query_id).map_or(usize::zero(), |r| r.timestamps.len())
+	pub fn get_new_value_count_by_query_id(query_id: QueryId) -> u32 {
+		<ReportedTimestampCount<T>>::get(query_id)
 	}
 
 	/// Returns the total number of votes
@@ -1185,21 +1181,15 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
 	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
-		<Reports<T>>::mutate(query_id, |maybe| match maybe {
-			None => Err(Error::<T>::InvalidTimestamp),
-			Some(report) => {
-				ensure!(!<ReportDisputes<T>>::get(query_id, timestamp), Error::ValueDisputed);
-				let index =
-					report.timestamp_index.get(&timestamp).ok_or(Error::InvalidTimestamp)?;
-				ensure!(
-					Some(timestamp).as_ref() == report.timestamps.get(*index as usize),
-					Error::InvalidTimestamp
-				);
-				<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
-				<ReportDisputes<T>>::set(query_id, timestamp, true);
-				Ok(())
-			},
-		})?;
+		ensure!(!<ReportDisputes<T>>::get(query_id, timestamp), Error::<T>::ValueDisputed);
+		let index = <ReportedTimestamps<T>>::get(query_id, timestamp)
+			.ok_or(Error::<T>::InvalidTimestamp)?;
+		ensure!(
+			Some(timestamp) == <ReportedTimestampsByIndex<T>>::get(query_id, index),
+			Error::<T>::InvalidTimestamp
+		);
+		<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
+		<ReportDisputes<T>>::set(query_id, timestamp, true);
 		Self::deposit_event(Event::ValueRemoved { query_id, timestamp });
 		Ok(())
 	}
@@ -1535,7 +1525,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		Self::get_data_before(query_id, timestamp).map(|(v, t)| (v.into_inner(), t))
 	}
 
-	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
+	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 		let mut count = Self::get_new_value_count_by_query_id(query_id);
 		if count == 0 {
 			return None
@@ -1609,7 +1599,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		}
 	}
 
-	fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
+	fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 		Self::get_index_for_data_before(query_id, timestamp)
 	}
 
@@ -1662,7 +1652,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		result
 	}
 
-	fn get_new_value_count_by_query_id(query_id: QueryId) -> usize {
+	fn get_new_value_count_by_query_id(query_id: QueryId) -> u32 {
 		Self::get_new_value_count_by_query_id(query_id)
 	}
 
@@ -1673,7 +1663,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		Self::get_reporter_by_timestamp(query_id, timestamp)
 	}
 
-	fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: usize) -> Option<Timestamp> {
+	fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp> {
 		Self::get_timestamp_by_query_id_and_index(query_id, index)
 	}
 

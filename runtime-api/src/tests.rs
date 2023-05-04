@@ -126,7 +126,6 @@ impl tellor::Config for Test {
 	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ();
 	type MaxQueryDataLength = ();
-	type MaxTimestamps = ();
 	type MaxTipsPerQuery = ();
 	type MaxValueLength = MaxValueLength;
 	type MaxVotes = ();
@@ -288,11 +287,11 @@ mock_impl_runtime_apis! {
 		}
 
 		fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp>{
-			tellor::Pallet::<Test>::get_timestamp_by_query_id_and_index(query_id, index as usize)
+			tellor::Pallet::<Test>::get_timestamp_by_query_id_and_index(query_id, index)
 		}
 
 		fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
-			tellor::Pallet::<Test>::get_index_for_data_before(query_id, timestamp).map(|index| index as u32)
+			tellor::Pallet::<Test>::get_index_for_data_before(query_id, timestamp)
 		}
 
 		fn get_timestamp_index_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {

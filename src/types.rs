@@ -18,7 +18,7 @@ use super::Config;
 use frame_support::pallet_prelude::*;
 pub(crate) use governance::Tally;
 pub use sp_core::U256;
-use sp_core::{bounded::BoundedBTreeMap, H160, H256};
+use sp_core::{H160, H256};
 pub(crate) use sp_runtime::traits::Keccak256;
 use sp_runtime::{traits::Convert, SaturatedConversion};
 use sp_std::vec::Vec;
@@ -35,11 +35,10 @@ pub type DisputeId = H256;
 pub(crate) type DisputeOf<T> = governance::Dispute<AccountIdOf<T>, ValueOf<T>>;
 pub type FeedId = H256;
 pub(crate) type FeedOf<T> = autopay::Feed<BalanceOf<T>>;
-pub(crate) type Nonce = u128;
+pub(crate) type Nonce = u32;
 pub(crate) type ParaId = u32;
 pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLength>;
 pub type QueryId = H256;
-pub(crate) type ReportOf<T> = oracle::Report<<T as Config>::MaxTimestamps>;
 pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<BalanceOf<T>>;
 pub type Timestamp = u64;
 pub(crate) type TipOf<T> = autopay::Tip<BalanceOf<T>>;
@@ -82,24 +81,6 @@ pub(crate) mod autopay {
 
 pub(crate) mod oracle {
 	use super::*;
-
-	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	#[scale_info(skip_type_params(MaxTimestamps))]
-	pub struct Report<MaxTimestamps: Get<u32>> {
-		/// All timestamps reported.
-		pub(crate) timestamps: BoundedVec<Timestamp, MaxTimestamps>,
-		/// Mapping of timestamps to respective indices.
-		pub(crate) timestamp_index: BoundedBTreeMap<Timestamp, u32, MaxTimestamps>,
-	}
-
-	impl<MaxTimestamps: Get<u32>> Report<MaxTimestamps> {
-		pub(crate) fn new() -> Self {
-			Report {
-				timestamps: BoundedVec::default(),
-				timestamp_index: BoundedBTreeMap::default(),
-			}
-		}
-	}
 
 	#[derive(
 		Clone, Default, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen,
