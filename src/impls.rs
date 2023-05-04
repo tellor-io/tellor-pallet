@@ -915,9 +915,10 @@ impl<T: Config> Pallet<T> {
 		timestamp: Timestamp,
 	) -> Option<(AccountIdOf<T>, bool)> {
 		<Reports<T>>::get(query_id).and_then(|report| {
-			report.reporter_by_timestamp.get(&timestamp).map(|reporter| {
-				(reporter.clone(), report.is_disputed.get(&timestamp).cloned().unwrap_or_default())
-			})
+			report
+				.reporter_by_timestamp
+				.get(&timestamp)
+				.map(|reporter| (reporter.clone(), <ReportDisputes<T>>::get(query_id, timestamp)))
 		})
 	}
 
@@ -1162,8 +1163,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Whether the value is disputed.
 	pub fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool {
-		<Reports<T>>::get(query_id)
-			.map_or(false, |report| report.is_disputed.contains_key(&timestamp))
+		<ReportDisputes<T>>::get(query_id, timestamp)
 	}
 
 	/// Returns the duration since UNIX_EPOCH, in seconds.
@@ -1182,10 +1182,7 @@ impl<T: Config> Pallet<T> {
 		<Reports<T>>::mutate(query_id, |maybe| match maybe {
 			None => Err(Error::<T>::InvalidTimestamp),
 			Some(report) => {
-				ensure!(
-					!report.is_disputed.get(&timestamp).copied().unwrap_or_default(),
-					Error::ValueDisputed
-				);
+				ensure!(!<ReportDisputes<T>>::get(query_id, timestamp), Error::ValueDisputed);
 				let index =
 					report.timestamp_index.get(&timestamp).ok_or(Error::InvalidTimestamp)?;
 				ensure!(
@@ -1193,10 +1190,7 @@ impl<T: Config> Pallet<T> {
 					Error::InvalidTimestamp
 				);
 				report.value_by_timestamp.remove(&timestamp);
-				report
-					.is_disputed
-					.try_insert(timestamp, true)
-					.map_err(|_| Error::MaxDisputesReached)?;
+				<ReportDisputes<T>>::set(query_id, timestamp, true);
 				Ok(())
 			},
 		})?;

@@ -98,8 +98,6 @@ pub(crate) mod oracle {
 		pub(crate) value_by_timestamp: BoundedBTreeMap<Timestamp, Value, MaxTimestamps>,
 		/// Mapping of timestamps to reporters.
 		pub(crate) reporter_by_timestamp: BoundedBTreeMap<Timestamp, AccountId, MaxTimestamps>,
-		/// Mapping of timestamps to whether they have been disputed.
-		pub(crate) is_disputed: BoundedBTreeMap<Timestamp, bool, MaxTimestamps>,
 	}
 
 	impl<AccountId, BlockNumber, Value, MaxTimestamps: Get<u32>>
@@ -112,7 +110,6 @@ pub(crate) mod oracle {
 				timestamp_to_block_number: BoundedBTreeMap::default(),
 				value_by_timestamp: BoundedBTreeMap::default(),
 				reporter_by_timestamp: BoundedBTreeMap::default(),
-				is_disputed: BoundedBTreeMap::default(),
 			}
 		}
 	}

@@ -276,6 +276,10 @@ pub mod pallet {
 	/// Mapping of query identifiers to a report.
 	#[pallet::storage]
 	pub(super) type Reports<T> = StorageMap<_, Identity, QueryId, ReportOf<T>>;
+	/// Mapping of reported timestamps to whether they have been disputed.
+	#[pallet::storage]
+	pub(super) type ReportDisputes<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, bool, ValueQuery>;
 	/// Total staking rewards released per second.
 	#[pallet::storage]
 	#[pallet::getter(fn reward_rate)]
@@ -550,8 +554,6 @@ pub mod pallet {
 		InvalidDispute,
 		/// Vote does not exist.
 		InvalidVote,
-		/// The maximum number of disputes has been reached.
-		MaxDisputesReached,
 		/// The maximum number of vote rounds has been reached.
 		MaxVoteRoundsReached,
 		/// Dispute initiator is not a reporter.
