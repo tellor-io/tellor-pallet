@@ -89,9 +89,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Whether or not the account voted for the specific dispute round.
 	pub fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountIdOf<T>) -> bool {
-		<VoteInfo<T>>::get(dispute_id, vote_round)
-			.and_then(|v| v.voted.get(&voter).copied())
-			.unwrap_or_default()
+		<Votes<T>>::get((dispute_id, vote_round, voter))
 	}
 
 	/// The account identifier of the sub-account used to hold dispute fees.
@@ -370,12 +368,13 @@ impl<T: Config> Pallet<T> {
 				None => Err(Error::<T>::InvalidVote.into()),
 				Some(vote) => {
 					ensure!(vote.tally_date == 0, Error::<T>::VoteAlreadyTallied);
-					ensure!(!vote.voted.contains_key(&voter), Error::<T>::AlreadyVoted);
+					ensure!(
+						!<Votes<T>>::get((dispute_id, vote.vote_round, voter)),
+						Error::<T>::AlreadyVoted
+					);
 					ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
 					// Update voting status and increment total queries for support, invalid, or against based on vote
-					vote.voted
-						.try_insert(voter.clone(), true)
-						.map_err(|_| Error::<T>::MaxVotesReached)?;
+					<Votes<T>>::set((dispute_id, vote_round, voter), true);
 					let reports = Self::get_reports_submitted_by_address(&voter);
 					let user_tips = Self::get_tips_by_address(&voter);
 					match supports {

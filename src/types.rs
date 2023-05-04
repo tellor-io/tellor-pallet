@@ -45,8 +45,7 @@ pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<BalanceOf<T>>;
 pub type Timestamp = u64;
 pub(crate) type TipOf<T> = autopay::Tip<BalanceOf<T>>;
 pub(crate) type ValueOf<T> = BoundedVec<u8, <T as Config>::MaxValueLength>;
-pub(crate) type VoteOf<T> =
-	governance::Vote<AccountIdOf<T>, BalanceOf<T>, BlockNumberOf<T>, <T as Config>::MaxVotes>;
+pub(crate) type VoteOf<T> = governance::Vote<AccountIdOf<T>, BalanceOf<T>, BlockNumberOf<T>>;
 
 pub(crate) mod autopay {
 	use super::*;
@@ -181,8 +180,7 @@ pub(crate) mod governance {
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-	#[scale_info(skip_type_params(MaxVotes))]
-	pub struct Vote<AccountId, Balance, BlockNumber, MaxVotes: Get<u32>> {
+	pub struct Vote<AccountId, Balance, BlockNumber> {
 		/// Identifier of the dispute.
 		pub identifier: DisputeId,
 		/// The round of voting on a given dispute or proposal.
@@ -207,8 +205,6 @@ pub(crate) mod governance {
 		pub result: Option<VoteResult>,
 		/// Address which initiated dispute/proposal.
 		pub initiator: AccountId,
-		/// Mapping of accounts to whether they voted or not.
-		pub(crate) voted: BoundedBTreeMap<AccountId, bool, MaxVotes>,
 	}
 
 	/// The status of a potential vote.

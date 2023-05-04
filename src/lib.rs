@@ -82,7 +82,7 @@ pub mod pallet {
 		PalletId,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_core::{bounded::BoundedBTreeMap, U256};
+	use sp_core::U256;
 	use sp_runtime::{
 		traits::{CheckedConversion, CheckedSub},
 		ArithmeticError, SaturatedConversion,
@@ -339,6 +339,18 @@ pub mod pallet {
 	/// Mapping of dispute identifiers to the number of vote rounds.
 	#[pallet::storage]
 	pub(super) type VoteRounds<T> = StorageMap<_, Identity, DisputeId, u8, ValueQuery>;
+	/// Mapping of accounts to whether they voted for a dispute round or not.
+	#[pallet::storage]
+	pub(super) type Votes<T> = StorageNMap<
+		_,
+		(
+			NMapKey<Identity, DisputeId>,
+			NMapKey<Twox64Concat, u8>,
+			NMapKey<Blake2_128Concat, AccountIdOf<T>>,
+		),
+		bool,
+		ValueQuery,
+	>;
 	/// Mapping of addresses to the number of votes they have cast.
 	#[pallet::storage]
 	pub(super) type VoteTallyByAddress<T> =
@@ -542,8 +554,6 @@ pub mod pallet {
 		MaxDisputesReached,
 		/// The maximum number of vote rounds has been reached.
 		MaxVoteRoundsReached,
-		/// The maximum number of votes has been reached.
-		MaxVotesReached,
 		/// Dispute initiator is not a reporter.
 		NotReporter,
 		/// No value exists at given timestamp.
@@ -1196,7 +1206,6 @@ pub mod pallet {
 				executed: false,
 				result: None,
 				initiator: dispute_initiator.clone(),
-				voted: BoundedBTreeMap::default(),
 			};
 			let dispute = if vote_round == 1 {
 				ensure!(
