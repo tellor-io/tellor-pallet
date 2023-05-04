@@ -85,7 +85,7 @@ pub mod pallet {
 	use sp_core::{bounded::BoundedBTreeMap, U256};
 	use sp_runtime::{
 		traits::{CheckedConversion, CheckedSub},
-		ArithmeticError,
+		ArithmeticError, SaturatedConversion,
 	};
 	use sp_std::{prelude::*, result};
 
@@ -1228,19 +1228,15 @@ pub mod pallet {
 					Ok(())
 				})?;
 				// calculate dispute fee based on number of open disputes on query id
-				vote.fee = vote
-					.fee
-					.checked_mul(
-						&<BalanceOf<T>>::from(2u8).saturating_pow(
-							<OpenDisputesOnId<T>>::get(query_id)
-								.ok_or(Error::<T>::InvalidIndex)?
-								.checked_sub(1)
-								.ok_or(ArithmeticError::Underflow)?
-								.checked_into()
-								.ok_or(ArithmeticError::Overflow)?,
-						),
-					)
-					.ok_or(ArithmeticError::Overflow)?;
+				vote.fee = vote.fee.saturating_mul(
+					<BalanceOf<T>>::from(2u8).saturating_pow(
+						<OpenDisputesOnId<T>>::get(query_id)
+							.ok_or(Error::<T>::InvalidIndex)?
+							.checked_sub(1)
+							.expect("open disputes always greater than zero, as set above; qed")
+							.saturated_into(),
+					),
+				);
 				let dispute = DisputeOf::<T> {
 					query_id,
 					timestamp,
@@ -1266,15 +1262,12 @@ pub mod pallet {
 					Error::<T>::DisputeRoundReportingPeriodExpired
 				);
 				ensure!(!prev_vote.executed, Error::<T>::VoteAlreadyExecuted); // Ensure previous round not executed
-				vote.fee = vote
-					.fee
-					.checked_mul(&<BalanceOf<T>>::from(2u8).saturating_pow(
-						vote_round.checked_sub(1).ok_or(ArithmeticError::Underflow)?.into(),
-					))
-					.ok_or(ArithmeticError::Overflow)?;
+				vote.fee = vote.fee.saturating_mul(<BalanceOf<T>>::from(2u8).saturating_pow(
+					vote_round.checked_sub(1).expect("vote round checked above; qed").into(),
+				));
 				<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?
 			};
-			let stake_amount = U256ToBalance::<T>::convert(Self::convert(<StakeAmount<T>>::get())?);
+			let stake_amount = <DisputeFee<T>>::get().saturating_mul(10u8.into());
 			if vote.fee > stake_amount {
 				vote.fee = stake_amount;
 			}
