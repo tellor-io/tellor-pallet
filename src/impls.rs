@@ -522,8 +522,20 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The latest submitted value for the given identifier.
 	pub fn get_current_value(query_id: QueryId) -> Option<ValueOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|r| r.value_by_timestamp.last_key_value().map(|(_, value)| value.clone()))
+		let mut count = Self::get_new_value_count_by_query_id(query_id);
+		if count == 0 {
+			return None
+		}
+		//loop handles for dispute (value = None if disputed)
+		while count > 0 {
+			count.saturating_dec();
+			let value = Self::get_timestamp_by_query_id_and_index(query_id, count)
+				.and_then(|timestamp| Self::retrieve_data(query_id, timestamp));
+			if value.is_some() {
+				return value
+			}
+		}
+		None
 	}
 
 	/// Allows the user to get the latest value for the query identifier specified.
@@ -1184,7 +1196,7 @@ impl<T: Config> Pallet<T> {
 					Some(timestamp).as_ref() == report.timestamps.get(*index as usize),
 					Error::InvalidTimestamp
 				);
-				report.value_by_timestamp.remove(&timestamp);
+				<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
 				<ReportDisputes<T>>::set(query_id, timestamp, true);
 				Ok(())
 			},
@@ -1200,8 +1212,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Value for timestamp submitted, if found.
 	pub fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<ValueOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|report| report.value_by_timestamp.get(&timestamp).cloned())
+		<ReportedValuesByTimestamp<T>>::get(query_id, timestamp)
 	}
 
 	/// The account identifier of the sub-account used to hold staking rewards.

@@ -39,8 +39,7 @@ pub(crate) type Nonce = u128;
 pub(crate) type ParaId = u32;
 pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLength>;
 pub type QueryId = H256;
-pub(crate) type ReportOf<T> =
-	oracle::Report<BlockNumberOf<T>, ValueOf<T>, <T as Config>::MaxTimestamps>;
+pub(crate) type ReportOf<T> = oracle::Report<BlockNumberOf<T>, <T as Config>::MaxTimestamps>;
 pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<BalanceOf<T>>;
 pub type Timestamp = u64;
 pub(crate) type TipOf<T> = autopay::Tip<BalanceOf<T>>;
@@ -86,7 +85,7 @@ pub(crate) mod oracle {
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(MaxTimestamps))]
-	pub struct Report<BlockNumber, Value, MaxTimestamps: Get<u32>> {
+	pub struct Report<BlockNumber, MaxTimestamps: Get<u32>> {
 		/// All timestamps reported.
 		pub(crate) timestamps: BoundedVec<Timestamp, MaxTimestamps>,
 		/// Mapping of timestamps to respective indices.
@@ -94,17 +93,14 @@ pub(crate) mod oracle {
 		/// Mapping of timestamp to block number.
 		pub(crate) timestamp_to_block_number:
 			BoundedBTreeMap<Timestamp, BlockNumber, MaxTimestamps>,
-		/// Mapping of timestamps to values.
-		pub(crate) value_by_timestamp: BoundedBTreeMap<Timestamp, Value, MaxTimestamps>,
 	}
 
-	impl<BlockNumber, Value, MaxTimestamps: Get<u32>> Report<BlockNumber, Value, MaxTimestamps> {
+	impl<BlockNumber, MaxTimestamps: Get<u32>> Report<BlockNumber, MaxTimestamps> {
 		pub(crate) fn new() -> Self {
 			Report {
 				timestamps: BoundedVec::default(),
 				timestamp_index: BoundedBTreeMap::default(),
 				timestamp_to_block_number: BoundedBTreeMap::default(),
-				value_by_timestamp: BoundedBTreeMap::default(),
 			}
 		}
 	}
