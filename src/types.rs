@@ -20,10 +20,7 @@ pub(crate) use governance::Tally;
 pub use sp_core::U256;
 use sp_core::{bounded::BoundedBTreeMap, H160, H256};
 pub(crate) use sp_runtime::traits::Keccak256;
-use sp_runtime::{
-	traits::{Convert, Zero},
-	SaturatedConversion,
-};
+use sp_runtime::{traits::Convert, SaturatedConversion};
 use sp_std::vec::Vec;
 
 pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -121,7 +118,9 @@ pub(crate) mod oracle {
 		}
 	}
 
-	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(
+		Clone, Default, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+	)]
 	pub struct StakeInfo<Balance> {
 		/// The address on the staking chain.
 		pub(crate) address: Address,
@@ -145,20 +144,9 @@ pub(crate) mod oracle {
 		pub(crate) staked: bool,
 	}
 
-	impl<Balance: Zero> StakeInfo<Balance> {
+	impl<Balance: Default> StakeInfo<Balance> {
 		pub(crate) fn new(address: Address) -> Self {
-			Self {
-				address,
-				start_date: Zero::zero(),
-				staked_balance: U256::zero(),
-				locked_balance: U256::zero(),
-				reward_debt: Zero::zero(),
-				reporter_last_timestamp: Zero::zero(),
-				reports_submitted: 0,
-				start_vote_count: 0,
-				start_vote_tally: 0,
-				staked: false,
-			}
+			Self { address, ..Default::default() }
 		}
 	}
 }
