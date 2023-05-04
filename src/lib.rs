@@ -280,6 +280,10 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type ReportDisputes<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, bool, ValueQuery>;
+	/// Mapping of reported timestamps to block number.
+	#[pallet::storage]
+	pub(super) type ReportedTimestampsToBlockNumber<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, BlockNumberOf<T>>;
 	/// Mapping of reported timestamps to values.
 	#[pallet::storage]
 	pub(super) type ReportedValuesByTimestamp<T> =
@@ -1106,10 +1110,11 @@ pub mod pallet {
 				.timestamps
 				.try_push(timestamp)
 				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
-			report
-				.timestamp_to_block_number
-				.try_insert(timestamp, frame_system::Pallet::<T>::block_number())
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
+			<ReportedTimestampsToBlockNumber<T>>::insert(
+				query_id,
+				timestamp,
+				frame_system::Pallet::<T>::block_number(),
+			);
 			<ReportedValuesByTimestamp<T>>::insert(query_id, timestamp, value.clone());
 			<ReportersByTimestamp<T>>::insert(query_id, timestamp, reporter.clone());
 			<Reports<T>>::insert(query_id, report);

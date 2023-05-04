@@ -482,8 +482,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<BlockNumberOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|r| r.timestamp_to_block_number.get(&timestamp).copied())
+		<ReportedTimestampsToBlockNumber<T>>::get(query_id, timestamp)
 	}
 
 	/// Read current data feeds.
