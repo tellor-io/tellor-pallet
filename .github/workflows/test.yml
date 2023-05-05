@@ -58,7 +58,7 @@ jobs:
       - name: Configure CI
         run: mkdir .config && echo -e "[profile.ci.junit]\npath = \"junit.xml\"" > .config/nextest.toml
       - name: Run pallet tests
-        run: cargo nextest run --release --profile ci
+        run: cargo nextest run --features=default,runtime-benchmarks --release --profile ci
       - name: Report pallet test results
         uses: dorny/test-reporter@v1
         if: success() || failure()    # run this step even if previous step failed
