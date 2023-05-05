@@ -22,7 +22,7 @@ pub use autopay::{FeedDetailsWithQueryData, SingleTipWithQueryData};
 use codec::Codec;
 pub use governance::VoteInfo;
 use sp_std::vec::Vec;
-use tellor::{DisputeId, FeedDetails, FeedId, QueryId, Timestamp, Tip, Tributes, VoteResult};
+use tellor::{DisputeId, Feed, FeedId, QueryId, Timestamp, Tip, Tributes, VoteResult};
 
 mod autopay;
 mod governance;
@@ -36,7 +36,7 @@ sp_api::decl_runtime_apis! {
 		/// # Arguments
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
-		/// Feed identifiers for query identifier.
+		/// Feed identifiers for query identifier, in no particular order.
 		fn get_current_feeds(query_id: QueryId) -> Vec<FeedId>;
 
 		/// Read current onetime tip by query identifier.
@@ -51,7 +51,7 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Unique feed identifier of parameters.
 		/// # Returns
 		/// Details of the specified feed.
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Balance>>;
+		fn get_data_feed(feed_id: FeedId) -> Option<Feed<Balance>>;
 
 		/// Read currently funded feed details.
 		/// # Returns
@@ -118,7 +118,7 @@ sp_api::decl_runtime_apis! {
 		/// * `timestamp` - Timestamp of reported data.
 		/// # Returns
 		/// Whether a reward has been claimed, if timestamp exists.
-		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> Option<bool>;
+		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> bool;
 
 		/// Read whether rewards have been claimed.
 		/// # Arguments

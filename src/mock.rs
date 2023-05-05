@@ -136,15 +136,10 @@ impl tellor::Config for Test {
 	type InitialDisputeFee = ConstU128<{ 50 * 10u128.pow(12) }>; // (100 TRB / 10) * 5, where TRB 1:5 OCP
 	type MaxClaimTimestamps = ConstU32<10>;
 	type MaxDisputeVotes = ConstU32<10>;
-	type MaxFeedsPerQuery = ConstU32<10>;
 	type MaxFundedFeeds = ConstU32<10>;
-	type MaxQueriesPerReporter = ConstU32<10>;
 	type MaxQueryDataLength = ConstU32<1000>;
-	type MaxRewardClaims = ConstU32<10>;
-	type MaxTimestamps = ConstU32<{ 31_536_000 / 6 * 100 }>; // Seconds per year / 6s block time * 100 years
 	type MaxTipsPerQuery = ConstU32<10>;
 	type MaxValueLength = ConstU32<128>; // Chain may want to store any raw bytes, so value conversion needs to handle conversion to price for threshold checks
-	type MaxVotes = ConstU32<10>;
 	type MinimumStakeAmount = MinimumStakeAmount;
 	type PalletId = TellorPalletId;
 	type ParachainId = ParachainId;

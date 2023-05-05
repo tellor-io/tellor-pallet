@@ -89,9 +89,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Whether or not the account voted for the specific dispute round.
 	pub fn did_vote(dispute_id: DisputeId, vote_round: u8, voter: AccountIdOf<T>) -> bool {
-		<VoteInfo<T>>::get(dispute_id, vote_round)
-			.and_then(|v| v.voted.get(&voter).copied())
-			.unwrap_or_default()
+		<Votes<T>>::get((dispute_id, vote_round, voter))
 	}
 
 	/// The account identifier of the sub-account used to hold dispute fees.
@@ -152,20 +150,20 @@ impl<T: Config> Pallet<T> {
 		};
 
 		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
-		feed.details.balance.saturating_accrue(amount);
+		feed.balance.saturating_accrue(amount);
 		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
 		// Add to array of feeds with funding
-		if feed.details.feeds_with_funding_index == 0 && feed.details.balance > Zero::zero() {
+		if feed.feeds_with_funding_index == 0 && feed.balance > Zero::zero() {
 			let index = <FeedsWithFunding<T>>::try_mutate(
 				|feeds_with_funding| -> Result<usize, DispatchError> {
 					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
 					Ok(feeds_with_funding.len())
 				},
 			)?;
-			feed.details.feeds_with_funding_index =
+			feed.feeds_with_funding_index =
 				index.checked_into().ok_or(ArithmeticError::Overflow)?;
 		}
-		let feed_details = feed.details.clone();
+		let feed_details = feed.clone();
 		<DataFeeds<T>>::insert(query_id, feed_id, feed);
 		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
 		Self::deposit_event(Event::DataFeedFunded {
@@ -197,25 +195,22 @@ impl<T: Config> Pallet<T> {
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
 		ensure!(
-			!feed.reward_claimed.get(&timestamp).unwrap_or(&false),
+			!<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)),
 			Error::<T>::TipAlreadyClaimed
 		);
-		let n = (timestamp
-			.checked_sub(feed.details.start_time)
-			.ok_or(ArithmeticError::Underflow)?)
-		.checked_div(feed.details.interval)
-		.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
+		let n = (timestamp.checked_sub(feed.start_time).ok_or(ArithmeticError::Underflow)?)
+			.checked_div(feed.interval)
+			.ok_or(ArithmeticError::DivisionByZero)?; // finds closest interval n to timestamp
 		let c = feed
-			.details
 			.start_time
-			.checked_add(feed.details.interval.checked_mul(n).ok_or(ArithmeticError::Overflow)?)
+			.checked_add(feed.interval.checked_mul(n).ok_or(ArithmeticError::Overflow)?)
 			.ok_or(ArithmeticError::Overflow)?; // finds start timestamp c of interval n
 		let value_retrieved = Self::retrieve_data(query_id, timestamp);
 		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
 		let (value_retrieved_before, timestamp_before) =
 			Self::get_data_before(query_id, timestamp).unwrap_or_default();
 		let mut price_change = 0; // price change from last value to current value
-		if feed.details.price_threshold != 0 {
+		if feed.price_threshold != 0 {
 			// v1 is value retrieved at supplied timestamp
 			let v1 = BytesToU256::convert(
 				value_retrieved.expect("value retrieved checked above; qed").into_inner(),
@@ -242,24 +237,23 @@ impl<T: Config> Pallet<T> {
 				.saturated_into();
 			}
 		}
-		let mut reward_amount = feed.details.reward;
+		let mut reward_amount = feed.reward;
 		let time_diff = timestamp.checked_sub(c).ok_or(ArithmeticError::Underflow)?; // time difference between report timestamp and start of interval
 
 		// ensure either report is first within a valid window, or price change threshold is met
-		if time_diff < feed.details.window && timestamp_before < c {
+		if time_diff < feed.window && timestamp_before < c {
 			// add time based rewards if applicable
 			reward_amount.saturating_accrue(
-				feed.details
-					.reward_increase_per_second
+				feed.reward_increase_per_second
 					.checked_mul(&time_diff.into())
 					.ok_or(ArithmeticError::Overflow)?,
 			);
 		} else {
-			ensure!(price_change > feed.details.price_threshold, Error::<T>::PriceThresholdNotMet);
+			ensure!(price_change > feed.price_threshold, Error::<T>::PriceThresholdNotMet);
 		}
 
-		if feed.details.balance < reward_amount {
-			reward_amount = feed.details.balance;
+		if feed.balance < reward_amount {
+			reward_amount = feed.balance;
 		}
 		Ok(reward_amount)
 	}
@@ -374,12 +368,13 @@ impl<T: Config> Pallet<T> {
 				None => Err(Error::<T>::InvalidVote.into()),
 				Some(vote) => {
 					ensure!(vote.tally_date == 0, Error::<T>::VoteAlreadyTallied);
-					ensure!(!vote.voted.contains_key(&voter), Error::<T>::AlreadyVoted);
+					ensure!(
+						!<Votes<T>>::get((dispute_id, vote.vote_round, voter)),
+						Error::<T>::AlreadyVoted
+					);
 					ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
 					// Update voting status and increment total queries for support, invalid, or against based on vote
-					vote.voted
-						.try_insert(voter.clone(), true)
-						.map_err(|_| Error::<T>::MaxVotesReached)?;
+					<Votes<T>>::set((dispute_id, vote_round, voter), true);
 					let reports = Self::get_reports_submitted_by_address(&voter);
 					let user_tips = Self::get_tips_by_address(&voter);
 					match supports {
@@ -487,17 +482,16 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<BlockNumberOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|r| r.timestamp_to_block_number.get(&timestamp).copied())
+		<ReportedTimestampsToBlockNumber<T>>::get(query_id, timestamp)
 	}
 
 	/// Read current data feeds.
 	/// # Arguments
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
-	/// Feed identifiers for query identifier.
+	/// Feed identifiers for query identifier, in no particular order.
 	pub fn get_current_feeds(query_id: QueryId) -> Vec<FeedId> {
-		<CurrentFeeds<T>>::get(query_id).map_or_else(Vec::default, |f| f.to_vec())
+		<DataFeeds<T>>::iter_key_prefix(query_id).collect()
 	}
 
 	/// Read current onetime tip by query identifier.
@@ -527,8 +521,20 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The latest submitted value for the given identifier.
 	pub fn get_current_value(query_id: QueryId) -> Option<ValueOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|r| r.value_by_timestamp.last_key_value().map(|(_, value)| value.clone()))
+		let mut count = Self::get_new_value_count_by_query_id(query_id);
+		if count == 0 {
+			return None
+		}
+		//loop handles for dispute (value = None if disputed)
+		while count > 0 {
+			count.saturating_dec();
+			let value = Self::get_timestamp_by_query_id_and_index(query_id, count)
+				.and_then(|timestamp| Self::retrieve_data(query_id, timestamp));
+			if value.is_some() {
+				return value
+			}
+		}
+		None
 	}
 
 	/// Allows the user to get the latest value for the query identifier specified.
@@ -580,10 +586,9 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Unique feed identifier of parameters.
 	/// # Returns
 	/// Details of the specified feed.
-	pub fn get_data_feed(feed_id: FeedId) -> Option<FeedDetailsOf<T>> {
+	pub fn get_data_feed(feed_id: FeedId) -> Option<FeedOf<T>> {
 		<QueryIdFromDataFeedId<T>>::get(feed_id)
 			.and_then(|query_id| <DataFeeds<T>>::get(query_id, feed_id))
-			.map(|f| f.details)
 	}
 
 	/// Get the latest dispute fee.
@@ -619,7 +624,7 @@ impl<T: Config> Pallet<T> {
 	/// Read currently funded feed details.
 	/// # Returns
 	/// Details for funded feeds.
-	pub fn get_funded_feed_details() -> Vec<(FeedDetailsOf<T>, QueryDataOf<T>)> {
+	pub fn get_funded_feed_details() -> Vec<(FeedOf<T>, QueryDataOf<T>)> {
 		Self::get_funded_feeds()
 			.into_iter()
 			.filter_map(|feed_id| {
@@ -665,7 +670,7 @@ impl<T: Config> Pallet<T> {
 	/// * `timestamp` - The timestamp before which to search for the latest index.
 	/// # Returns
 	/// Whether the index was found along with the latest index found before the supplied timestamp.
-	pub fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
+	pub fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 		let count = Self::get_new_value_count_by_query_id(query_id);
 		if count > 0 {
 			let mut middle;
@@ -920,11 +925,8 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<(AccountIdOf<T>, bool)> {
-		<Reports<T>>::get(query_id).and_then(|report| {
-			report.reporter_by_timestamp.get(&timestamp).map(|reporter| {
-				(reporter.clone(), report.is_disputed.get(&timestamp).cloned().unwrap_or_default())
-			})
-		})
+		<ReportersByTimestamp<T>>::get(query_id, timestamp)
+			.map(|reporter| (reporter, <ReportDisputes<T>>::get(query_id, timestamp)))
 	}
 
 	/// Returns the reporter who submitted a value for a query identifier at a specific time.
@@ -937,8 +939,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<AccountIdOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|report| report.reporter_by_timestamp.get(&timestamp).cloned())
+		<ReportersByTimestamp<T>>::get(query_id, timestamp)
 	}
 
 	/// Returns the timestamp of the reporter's last submission.
@@ -978,9 +979,7 @@ impl<T: Config> Pallet<T> {
 		reporter: AccountIdOf<T>,
 		query_id: QueryId,
 	) -> u128 {
-		<StakerDetails<T>>::get(reporter)
-			.and_then(|stake_info| stake_info.reports_submitted_by_query_id.get(&query_id).copied())
-			.unwrap_or_default()
+		<StakerReportsSubmittedByQueryId<T>>::get(reporter, query_id)
 	}
 
 	/// Read potential reward for a set of oracle submissions.
@@ -1002,8 +1001,8 @@ impl<T: Config> Pallet<T> {
 				Self::do_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
 			)
 		}
-		if cumulative_reward > feed.details.balance {
-			cumulative_reward = feed.details.balance;
+		if cumulative_reward > feed.balance {
+			cumulative_reward = feed.balance;
 		}
 		cumulative_reward.saturating_reduce(
 			(cumulative_reward.saturating_mul(T::Fee::get().into())) / 1000u16.into(),
@@ -1022,9 +1021,8 @@ impl<T: Config> Pallet<T> {
 		feed_id: FeedId,
 		query_id: QueryId,
 		timestamp: Timestamp,
-	) -> Option<bool> {
-		<DataFeeds<T>>::get(query_id, feed_id)
-			.map(|f| f.reward_claimed.get(&timestamp).copied().unwrap_or_default())
+	) -> bool {
+		<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp))
 	}
 
 	/// Read whether rewards have been claimed.
@@ -1039,13 +1037,11 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
 	) -> Vec<bool> {
-		<DataFeeds<T>>::get(query_id, feed_id).map_or_else(Vec::default, |feed| {
-			timestamps
-				.into_iter()
-				.take(100)
-				.map(|timestamp| feed.reward_claimed.get(&timestamp).copied().unwrap_or_default())
-				.collect()
-		})
+		timestamps
+			.into_iter()
+			.take(100)
+			.map(|timestamp| <DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)))
+			.collect()
 	}
 
 	/// Returns the amount required to report oracle values.
@@ -1077,11 +1073,8 @@ impl<T: Config> Pallet<T> {
 	/// * `index` - The value index to look up.
 	/// # Returns
 	/// A timestamp if found.
-	pub fn get_timestamp_by_query_id_and_index(
-		query_id: QueryId,
-		index: usize,
-	) -> Option<Timestamp> {
-		<Reports<T>>::get(query_id).and_then(|report| report.timestamps.get(index).copied())
+	pub fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp> {
+		<ReportedTimestampsByIndex<T>>::get(query_id, index)
 	}
 
 	/// Returns the index of a reporter timestamp in the timestamp array for a specific query identifier.
@@ -1094,8 +1087,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<u32> {
-		<Reports<T>>::get(query_id)
-			.and_then(|report| report.timestamp_index.get(&timestamp).copied())
+		<ReportedTimestamps<T>>::get(query_id, timestamp)
 	}
 
 	/// Read the total amount of tips paid by a user.
@@ -1126,8 +1118,8 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - The query identifier to look up.
 	/// # Returns
 	/// Count of the number of values received for the query identifier.
-	pub fn get_new_value_count_by_query_id(query_id: QueryId) -> usize {
-		<Reports<T>>::get(query_id).map_or(usize::zero(), |r| r.timestamps.len())
+	pub fn get_new_value_count_by_query_id(query_id: QueryId) -> u32 {
+		<ReportedTimestampCount<T>>::get(query_id)
 	}
 
 	/// Returns the total number of votes
@@ -1173,8 +1165,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Whether the value is disputed.
 	pub fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool {
-		<Reports<T>>::get(query_id)
-			.map_or(false, |report| report.is_disputed.contains_key(&timestamp))
+		<ReportDisputes<T>>::get(query_id, timestamp)
 	}
 
 	/// Returns the duration since UNIX_EPOCH, in seconds.
@@ -1190,27 +1181,15 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
 	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
-		<Reports<T>>::mutate(query_id, |maybe| match maybe {
-			None => Err(Error::<T>::InvalidTimestamp),
-			Some(report) => {
-				ensure!(
-					!report.is_disputed.get(&timestamp).copied().unwrap_or_default(),
-					Error::ValueDisputed
-				);
-				let index =
-					report.timestamp_index.get(&timestamp).ok_or(Error::InvalidTimestamp)?;
-				ensure!(
-					Some(timestamp).as_ref() == report.timestamps.get(*index as usize),
-					Error::InvalidTimestamp
-				);
-				report.value_by_timestamp.remove(&timestamp);
-				report
-					.is_disputed
-					.try_insert(timestamp, true)
-					.map_err(|_| Error::MaxDisputesReached)?;
-				Ok(())
-			},
-		})?;
+		ensure!(!<ReportDisputes<T>>::get(query_id, timestamp), Error::<T>::ValueDisputed);
+		let index = <ReportedTimestamps<T>>::get(query_id, timestamp)
+			.ok_or(Error::<T>::InvalidTimestamp)?;
+		ensure!(
+			Some(timestamp) == <ReportedTimestampsByIndex<T>>::get(query_id, index),
+			Error::<T>::InvalidTimestamp
+		);
+		<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
+		<ReportDisputes<T>>::set(query_id, timestamp, true);
 		Self::deposit_event(Event::ValueRemoved { query_id, timestamp });
 		Ok(())
 	}
@@ -1222,8 +1201,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Value for timestamp submitted, if found.
 	pub fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<ValueOf<T>> {
-		<Reports<T>>::get(query_id)
-			.and_then(|report| report.value_by_timestamp.get(&timestamp).cloned())
+		<ReportedValuesByTimestamp<T>>::get(query_id, timestamp)
 	}
 
 	/// The account identifier of the sub-account used to hold staking rewards.
@@ -1547,7 +1525,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		Self::get_data_before(query_id, timestamp).map(|(v, t)| (v.into_inner(), t))
 	}
 
-	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
+	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 		let mut count = Self::get_new_value_count_by_query_id(query_id);
 		if count == 0 {
 			return None
@@ -1621,7 +1599,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		}
 	}
 
-	fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<usize> {
+	fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 		Self::get_index_for_data_before(query_id, timestamp)
 	}
 
@@ -1674,7 +1652,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		result
 	}
 
-	fn get_new_value_count_by_query_id(query_id: QueryId) -> usize {
+	fn get_new_value_count_by_query_id(query_id: QueryId) -> u32 {
 		Self::get_new_value_count_by_query_id(query_id)
 	}
 
@@ -1685,7 +1663,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		Self::get_reporter_by_timestamp(query_id, timestamp)
 	}
 
-	fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: usize) -> Option<Timestamp> {
+	fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp> {
 		Self::get_timestamp_by_query_id_and_index(query_id, index)
 	}
 

@@ -16,12 +16,12 @@
 
 use codec::{Decode, Encode};
 use sp_std::vec::Vec;
-use tellor::FeedDetails;
+use tellor::Feed;
 
 #[derive(Encode, Debug, Decode, Eq, PartialEq)]
 pub struct FeedDetailsWithQueryData<Balance> {
 	/// Feed details for feed identifier with funding.
-	pub details: FeedDetails<Balance>,
+	pub details: Feed<Balance>,
 	/// Query data for requested data
 	pub query_data: Vec<u8>,
 }

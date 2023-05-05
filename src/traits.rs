@@ -58,7 +58,7 @@ pub trait UsingTellor<AccountId> {
 	/// * `timestamp` - The timestamp after which to search for latest index.
 	/// # Returns
 	/// The latest index after the specified timestamp, if found.
-	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<usize>;
+	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<u32>;
 
 	/// Retrieves the latest index of data before the specified timestamp for the query identifier.
 	/// # Arguments
@@ -66,7 +66,7 @@ pub trait UsingTellor<AccountId> {
 	/// * `timestamp` - The timestamp before which to search for latest index.
 	/// # Returns
 	/// The latest index before the specified timestamp, if found.
-	fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<usize>;
+	fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32>;
 
 	/// Retrieves multiple values before the specified timestamp.
 	/// # Arguments
@@ -88,7 +88,7 @@ pub trait UsingTellor<AccountId> {
 	/// * `query_id` - The query identifier to look up.
 	/// # Returns
 	/// Count of the number of values received for the query identifier.
-	fn get_new_value_count_by_query_id(query_id: QueryId) -> usize;
+	fn get_new_value_count_by_query_id(query_id: QueryId) -> u32;
 
 	/// Returns the reporter who submitted a value for a query identifier at a specific time.
 	/// # Arguments
@@ -104,7 +104,7 @@ pub trait UsingTellor<AccountId> {
 	/// * `index` - The value index to look up.
 	/// # Returns
 	/// A timestamp if found.
-	fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: usize) -> Option<Timestamp>;
+	fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp>;
 
 	/// Returns whether a given value is disputed.
 	/// # Arguments

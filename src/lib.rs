@@ -35,7 +35,7 @@ use sp_std::vec::Vec;
 pub use traits::{SendXcm, UsingTellor};
 use types::*;
 pub use types::{
-	autopay::{FeedDetails, Tip},
+	autopay::{Feed, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
 	Address, DisputeId, FeedId, QueryId, Timestamp, Tributes, U256,
@@ -66,7 +66,6 @@ pub mod pallet {
 	};
 	use crate::{
 		contracts::{staking, Abi},
-		types::oracle::Report,
 		xcm::ContractLocation,
 		Tip,
 	};
@@ -82,7 +81,7 @@ pub mod pallet {
 		PalletId,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_core::{bounded::BoundedBTreeMap, U256};
+	use sp_core::U256;
 	use sp_runtime::{
 		traits::{CheckedConversion, CheckedSub},
 		ArithmeticError, SaturatedConversion,
@@ -139,29 +138,13 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxDisputeVotes: Get<u32>;
 
-		/// The maximum number of feeds per query.
-		#[pallet::constant]
-		type MaxFeedsPerQuery: Get<u32>;
-
 		/// The maximum number of funded feeds.
 		#[pallet::constant]
 		type MaxFundedFeeds: Get<u32>;
 
-		/// The maximum number of queries (data feeds) per reporter.
-		#[pallet::constant]
-		type MaxQueriesPerReporter: Get<u32>;
-
 		/// The maximum length of query data.
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
-
-		/// The maximum number of reward claims.
-		#[pallet::constant]
-		type MaxRewardClaims: Get<u32>;
-
-		/// The maximum number of timestamps per data feed.
-		#[pallet::constant]
-		type MaxTimestamps: Get<u32>;
 
 		/// The maximum number of tips per query.
 		#[pallet::constant]
@@ -170,10 +153,6 @@ pub mod pallet {
 		/// The maximum length of an individual value submitted to the oracle.
 		#[pallet::constant]
 		type MaxValueLength: Get<u32>;
-
-		/// The maximum number of votes per round.
-		#[pallet::constant]
-		type MaxVotes: Get<u32>;
 
 		/// The minimum amount of tokens required to stake.
 		#[pallet::constant]
@@ -238,11 +217,20 @@ pub mod pallet {
 
 	// AutoPay
 	#[pallet::storage]
-	pub(super) type CurrentFeeds<T> =
-		StorageMap<_, Identity, QueryId, BoundedVec<FeedId, <T as Config>::MaxFeedsPerQuery>>;
-	#[pallet::storage]
 	pub(super) type DataFeeds<T> =
 		StorageDoubleMap<_, Identity, QueryId, Identity, FeedId, FeedOf<T>>;
+	/// Tracks which tips were already paid out.
+	#[pallet::storage]
+	pub(super) type DataFeedRewardClaimed<T> = StorageNMap<
+		_,
+		(
+			NMapKey<Identity, QueryId>,
+			NMapKey<Identity, FeedId>,
+			NMapKey<Blake2_128Concat, Timestamp>,
+		),
+		bool,
+		ValueQuery,
+	>;
 	#[pallet::storage]
 	pub(super) type FeedsWithFunding<T> =
 		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
@@ -269,9 +257,33 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn last_stake_amount_update)]
 	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
-	/// Mapping of query identifiers to a report.
+	/// Mapping of reported timestamps (by query identifier) to whether they have been disputed.
 	#[pallet::storage]
-	pub(super) type Reports<T> = StorageMap<_, Identity, QueryId, ReportOf<T>>;
+	pub(super) type ReportDisputes<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, bool, ValueQuery>;
+	/// Mapping of reported timestamps (by query identifier) to index.
+	#[pallet::storage]
+	pub(super) type ReportedTimestamps<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, u32>;
+	/// Mapping of reported timestamps (by query identifier) to respective indices.
+	#[pallet::storage]
+	pub(super) type ReportedTimestampsByIndex<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, u32, Timestamp>;
+	/// Mapping of reported timestamp count by query identifier.
+	#[pallet::storage]
+	pub(super) type ReportedTimestampCount<T> = StorageMap<_, Identity, QueryId, u32, ValueQuery>;
+	/// Mapping of reported timestamps (by query identifier) to block number.
+	#[pallet::storage]
+	pub(super) type ReportedTimestampsToBlockNumber<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, BlockNumberOf<T>>;
+	/// Mapping of reported timestamps (by query identifier) to values.
+	#[pallet::storage]
+	pub(super) type ReportedValuesByTimestamp<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, ValueOf<T>>;
+	/// Mapping of reported timestamps (by query identifier) to reporters.
+	#[pallet::storage]
+	pub(super) type ReportersByTimestamp<T> =
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, AccountIdOf<T>>;
 	/// Total staking rewards released per second.
 	#[pallet::storage]
 	#[pallet::getter(fn reward_rate)]
@@ -283,6 +295,10 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type StakerDetails<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, StakeInfoOf<T>>;
+	/// Mapping of reporter and query identifier to number of reports submitted.
+	#[pallet::storage]
+	pub(super) type StakerReportsSubmittedByQueryId<T> =
+		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Identity, QueryId, u128, ValueQuery>;
 	/// The time of last update to AccumulatedRewardPerShare.
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_allocation)]
@@ -331,6 +347,18 @@ pub mod pallet {
 	/// Mapping of dispute identifiers to the number of vote rounds.
 	#[pallet::storage]
 	pub(super) type VoteRounds<T> = StorageMap<_, Identity, DisputeId, u8, ValueQuery>;
+	/// Mapping of accounts to whether they voted for a dispute round or not.
+	#[pallet::storage]
+	pub(super) type Votes<T> = StorageNMap<
+		_,
+		(
+			NMapKey<Identity, DisputeId>,
+			NMapKey<Twox64Concat, u8>,
+			NMapKey<Blake2_128Concat, AccountIdOf<T>>,
+		),
+		bool,
+		ValueQuery,
+	>;
 	/// Mapping of addresses to the number of votes they have cast.
 	#[pallet::storage]
 	pub(super) type VoteTallyByAddress<T> =
@@ -359,7 +387,7 @@ pub mod pallet {
 			feed_id: FeedId,
 			amount: BalanceOf<T>,
 			feed_funder: AccountIdOf<T>,
-			feed_details: FeedDetailsOf<T>,
+			feed_details: FeedOf<T>,
 		},
 		/// Emitted when a data feed is set up.
 		NewDataFeed {
@@ -479,8 +507,6 @@ pub mod pallet {
 		InvalidWindow,
 		/// The maximum number of feeds have been funded.
 		MaxFeedsFunded,
-		/// The maximum number of reward claims has been reached,
-		MaxRewardClaimsReached,
 		/// The maximum number of tips has been reached,
 		MaxTipsReached,
 		/// No tips submitted for this query identifier.
@@ -510,10 +536,6 @@ pub mod pallet {
 		InvalidStakingTokenPrice,
 		/// Value must be submitted.
 		InvalidValue,
-		/// The maximum number of queries has been reached.
-		MaxQueriesReached,
-		/// The maximum number of timestamps has been reached.
-		MaxTimestampsReached,
 		/// Reporter not locked for withdrawal.
 		NoWithdrawalRequested,
 		/// Still in reporter time lock, please wait!
@@ -534,12 +556,8 @@ pub mod pallet {
 		InvalidDispute,
 		/// Vote does not exist.
 		InvalidVote,
-		/// The maximum number of disputes has been reached.
-		MaxDisputesReached,
 		/// The maximum number of vote rounds has been reached.
 		MaxVoteRoundsReached,
-		/// The maximum number of votes has been reached.
-		MaxVotesReached,
 		/// Dispute initiator is not a reporter.
 		NotReporter,
 		/// No value exists at given timestamp.
@@ -727,7 +745,7 @@ pub mod pallet {
 			let reporter = ensure_signed(origin)?;
 
 			let mut feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
-			let balance = feed.details.balance;
+			let balance = feed.balance;
 			ensure!(balance > Zero::zero(), Error::<T>::InsufficientFeedBalance);
 
 			let mut cumulative_reward = BalanceOf::<T>::zero();
@@ -755,7 +773,6 @@ pub mod pallet {
 					<FeedsWithFunding<T>>::try_mutate(|feeds_with_funding| -> DispatchResult {
 						if feeds_with_funding.len() > 1 {
 							let index = feed
-								.details
 								.feeds_with_funding_index
 								.checked_sub(1)
 								.ok_or(ArithmeticError::Underflow)?;
@@ -776,7 +793,7 @@ pub mod pallet {
 										feed_id_last_funded,
 										|f| -> DispatchResult {
 											if let Some(f) = f {
-												f.details.feeds_with_funding_index = index
+												f.feeds_with_funding_index = index
 													.checked_add(1)
 													.ok_or(ArithmeticError::Overflow)?
 											}
@@ -789,14 +806,12 @@ pub mod pallet {
 						feeds_with_funding.pop();
 						Ok(())
 					})?;
-					feed.details.feeds_with_funding_index = 0;
+					feed.feeds_with_funding_index = 0;
 				}
-				feed.reward_claimed
-					.try_insert(*timestamp, true)
-					.map_err(|_| Error::<T>::MaxRewardClaimsReached)?;
+				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp), true);
 			}
 
-			feed.details.balance.saturating_reduce(cumulative_reward);
+			feed.balance.saturating_reduce(cumulative_reward);
 			<DataFeeds<T>>::set(query_id, feed_id, Some(feed));
 			let fee = (cumulative_reward
 				.checked_mul(&T::Fee::get().into())
@@ -879,7 +894,7 @@ pub mod pallet {
 			ensure!(interval > 0, Error::<T>::InvalidInterval);
 			ensure!(window < interval, Error::<T>::InvalidWindow);
 
-			let feed = FeedDetailsOf::<T> {
+			let feed = FeedOf::<T> {
 				reward,
 				balance: Zero::zero(),
 				start_time,
@@ -889,27 +904,9 @@ pub mod pallet {
 				reward_increase_per_second,
 				feeds_with_funding_index: 0,
 			};
-			<CurrentFeeds<T>>::try_mutate(query_id, |maybe| -> DispatchResult {
-				match maybe {
-					None => {
-						*maybe = Some(
-							BoundedVec::try_from(vec![feed_id])
-								.map_err(|_| Error::<T>::MaxFeedsFunded)?,
-						);
-					},
-					Some(feeds) => {
-						feeds.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-					},
-				}
-				Ok(())
-			})?;
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);
-			<DataFeeds<T>>::insert(
-				query_id,
-				feed_id,
-				FeedOf::<T> { details: feed, reward_claimed: BoundedBTreeMap::default() },
-			);
+			<DataFeeds<T>>::insert(query_id, feed_id, feed);
 			Self::deposit_event(Event::NewDataFeed {
 				query_id,
 				feed_id,
@@ -1030,10 +1027,8 @@ pub mod pallet {
 		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
 			ensure!(!value.is_empty(), Error::<T>::InvalidValue);
-			let report = <Reports<T>>::get(query_id);
 			ensure!(
-				nonce == report.as_ref().map_or(Nonce::zero(), |r| r.timestamps.len() as Nonce) ||
-					nonce == 0,
+				nonce == <ReportedTimestampCount<T>>::get(query_id) || nonce == 0,
 				Error::<T>::InvalidNonce
 			);
 			let mut staker =
@@ -1068,42 +1063,25 @@ pub mod pallet {
 			staker.reporter_last_timestamp = timestamp;
 			// Checks for no double reporting of timestamps
 			ensure!(
-				report
-					.as_ref()
-					.map_or(true, |r| !r.reporter_by_timestamp.contains_key(&timestamp)),
+				<ReportersByTimestamp<T>>::get(query_id, timestamp).is_none(),
 				Error::<T>::TimestampAlreadyReported
 			);
 
 			// Update number of timestamps, value for given timestamp, and reporter for timestamp
-			let mut report = report.unwrap_or_else(Report::new);
-			report
-				.timestamp_index
-				.try_insert(
-					timestamp,
-					report
-						.timestamps
-						.len()
-						.checked_into::<u32>()
-						.ok_or(ArithmeticError::Overflow)?,
-				)
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
-			report
-				.timestamps
-				.try_push(timestamp)
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
-			report
-				.timestamp_to_block_number
-				.try_insert(timestamp, frame_system::Pallet::<T>::block_number())
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
-			report
-				.value_by_timestamp
-				.try_insert(timestamp, value.clone())
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
-			report
-				.reporter_by_timestamp
-				.try_insert(timestamp, reporter.clone())
-				.map_err(|_| Error::<T>::MaxTimestampsReached)?;
-			<Reports<T>>::insert(query_id, report);
+			let index = <ReportedTimestampCount<T>>::mutate(query_id, |count| {
+				let index = *count;
+				count.saturating_inc();
+				index
+			});
+			<ReportedTimestampsByIndex<T>>::insert(query_id, index, timestamp);
+			<ReportedTimestamps<T>>::insert(query_id, timestamp, index);
+			<ReportedTimestampsToBlockNumber<T>>::insert(
+				query_id,
+				timestamp,
+				frame_system::Pallet::<T>::block_number(),
+			);
+			<ReportedValuesByTimestamp<T>>::insert(query_id, timestamp, value.clone());
+			<ReportersByTimestamp<T>>::insert(query_id, timestamp, reporter.clone());
 
 			// backlog: Disperse Time Based Reward
 			// uint256 _reward = ((block.timestamp - timeOfLastNewValue) * timeBasedReward) / 300; //.5 TRB per 5 minutes
@@ -1121,19 +1099,9 @@ pub mod pallet {
 			// Update last oracle value and number of values submitted by a reporter
 			<TimeOfLastNewValue<T>>::set(Some(timestamp));
 			staker.reports_submitted.saturating_inc();
-			staker
-				.reports_submitted_by_query_id
-				.try_insert(
-					query_id,
-					staker
-						.reports_submitted_by_query_id
-						.get(&query_id)
-						.copied()
-						.unwrap_or_default()
-						.checked_add(1)
-						.ok_or(ArithmeticError::Overflow)?,
-				)
-				.map_err(|_| Error::<T>::MaxQueriesReached)?;
+			<StakerReportsSubmittedByQueryId<T>>::mutate(&reporter, query_id, |reports| {
+				reports.saturating_inc();
+			});
 			<StakerDetails<T>>::insert(&reporter, staker);
 			Self::deposit_event(Event::NewReport {
 				query_id,
@@ -1177,7 +1145,7 @@ pub mod pallet {
 
 			// Ensure value actually exists
 			ensure!(
-				<Reports<T>>::get(query_id).map_or(false, |r| r.timestamps.contains(&timestamp)),
+				<ReportedTimestamps<T>>::contains_key(query_id, timestamp),
 				Error::<T>::NoValueExists
 			);
 			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&[
@@ -1209,7 +1177,6 @@ pub mod pallet {
 				executed: false,
 				result: None,
 				initiator: dispute_initiator.clone(),
-				voted: BoundedBTreeMap::default(),
 			};
 			let dispute = if vote_round == 1 {
 				ensure!(

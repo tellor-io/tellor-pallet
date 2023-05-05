@@ -30,12 +30,12 @@ use sp_core::{ConstU128, ConstU32, H256, U256};
 use sp_runtime::{
 	generic::BlockId,
 	testing::Header,
-	traits::{BlakeTwo256, Convert, IdentityLookup},
+	traits::{BlakeTwo256, IdentityLookup},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tellor::{
-	DisputeId, EnsureGovernance, EnsureStaking, FeedDetails, FeedId, QueryId, Timestamp, Tip,
-	Tributes, VoteResult,
+	DisputeId, EnsureGovernance, EnsureStaking, Feed, FeedId, QueryId, Timestamp, Tip, Tributes,
+	VoteResult,
 };
 use xcm::latest::prelude::*;
 
@@ -46,7 +46,7 @@ type AccountId = u64;
 type Balance = u128;
 type BlockNumber = u64;
 type MaxValueLength = ConstU32<4>;
-type StakeInfo = tellor::StakeInfo<Balance, <Test as tellor::Config>::MaxQueriesPerReporter>;
+type StakeInfo = tellor::StakeInfo<Balance>;
 type Value = BoundedVec<u8, MaxValueLength>;
 
 // Configure a mock runtime to test implementation of the runtime-api
@@ -123,15 +123,10 @@ impl tellor::Config for Test {
 	type InitialDisputeFee = ();
 	type MaxClaimTimestamps = ();
 	type MaxDisputeVotes = ();
-	type MaxFeedsPerQuery = ();
 	type MaxFundedFeeds = ();
-	type MaxQueriesPerReporter = ConstU32<100>;
 	type MaxQueryDataLength = ();
-	type MaxRewardClaims = ();
-	type MaxTimestamps = ();
 	type MaxTipsPerQuery = ();
 	type MaxValueLength = MaxValueLength;
-	type MaxVotes = ();
 	type MinimumStakeAmount = ();
 	type PalletId = TellorPalletId;
 	type ParachainId = ();
@@ -174,7 +169,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_current_tip(query_id)
 		}
 
-		fn get_data_feed(feed_id: FeedId) -> Option<FeedDetails<Balance>> {
+		fn get_data_feed(feed_id: FeedId) -> Option<Feed<Balance>> {
 			tellor::Pallet::<Test>::get_data_feed(feed_id)
 		}
 
@@ -223,7 +218,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reward_amount(feed_id, query_id, timestamps)
 		}
 
-		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> Option<bool>{
+		fn get_reward_claimed_status(feed_id: FeedId, query_id: QueryId, timestamp: Timestamp) -> bool{
 			tellor::Pallet::<Test>::get_reward_claimed_status(feed_id, query_id, timestamp)
 		}
 
@@ -290,11 +285,11 @@ mock_impl_runtime_apis! {
 		}
 
 		fn get_timestamp_by_query_id_and_index(query_id: QueryId, index: u32) -> Option<Timestamp>{
-			tellor::Pallet::<Test>::get_timestamp_by_query_id_and_index(query_id, index as usize)
+			tellor::Pallet::<Test>::get_timestamp_by_query_id_and_index(query_id, index)
 		}
 
 		fn get_index_for_data_before(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
-			tellor::Pallet::<Test>::get_index_for_data_before(query_id, timestamp).map(|index| index as u32)
+			tellor::Pallet::<Test>::get_index_for_data_before(query_id, timestamp)
 		}
 
 		fn get_timestamp_index_by_timestamp(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
@@ -482,7 +477,7 @@ mod autopay {
 					Time::get()
 				)
 				.unwrap(),
-				None
+				false
 			);
 		});
 	}

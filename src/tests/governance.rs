@@ -15,24 +15,20 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
-use crate::{
-	constants::REPORTING_LOCK, contracts, mock::AccountId, types::Tally, Config, VoteResult, DAYS,
-	HOURS,
-};
+use crate::{constants::REPORTING_LOCK, contracts, types::Tally, Config, VoteResult, DAYS, HOURS};
 use frame_support::{
 	assert_noop, assert_ok,
 	traits::{Currency, Hooks},
 };
-use sp_core::{bounded::BoundedBTreeMap, bounded_btree_map};
 use sp_runtime::traits::BadOrigin;
 use std::collections::VecDeque;
 
-type BoundedVotes = BoundedBTreeMap<AccountId, bool, <Test as Config>::MaxVotes>;
 type InitialDisputeFee = <Test as Config>::InitialDisputeFee;
 type ParachainId = <Test as Config>::ParachainId;
 type PendingVotes = crate::pallet::PendingVotes<Test>;
 type VoteInfo = crate::pallet::VoteInfo<Test>;
 type VoteRounds = crate::pallet::VoteRounds<Test>;
+type Votes = crate::Votes<Test>;
 
 #[test]
 fn begin_dispute() {
@@ -1704,8 +1700,11 @@ fn get_vote_info() {
 			assert_eq!(vote.executed, true, "vote executed should be correct");
 			assert_eq!(vote.result, Some(VoteResult::Passed), "vote result should be Passed");
 			assert_eq!(vote.initiator, reporter, "vote initiator should be correct");
-			let voted: BoundedVotes = bounded_btree_map!(reporter => true);
-			assert_eq!(vote.voted, voted, "vote account vote status should be correct");
+			assert_eq!(
+				Votes::get((dispute_id, vote.vote_round, reporter)),
+				true,
+				"vote account vote status should be correct"
+			);
 		})
 	});
 }

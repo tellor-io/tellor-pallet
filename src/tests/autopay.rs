@@ -17,7 +17,7 @@
 use super::*;
 use crate::{
 	constants::REPORTING_LOCK,
-	types::{BytesToU256, FeedDetailsOf, FeedId, QueryDataOf, QueryId, Timestamp, TipOf},
+	types::{BytesToU256, FeedId, FeedOf, QueryDataOf, QueryId, Timestamp, TipOf},
 	Config,
 };
 use frame_support::{
@@ -476,7 +476,7 @@ fn do_get_reward_amount() {
 				bounded_vec![timestamp]
 			));
 			assert_eq!(Tellor::get_data_feed(feed_id).unwrap().balance, token(99));
-			assert!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap())
+			assert!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp))
 		});
 	});
 }
@@ -814,7 +814,7 @@ fn get_reward_claimed_status() {
 
 	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L190
 	ext.execute_with(|| {
-		assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap(), false);
+		assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp), false);
 		with_block_after(86_400, || {
 			assert_ok!(Tellor::claim_tip(
 				RuntimeOrigin::signed(reporter),
@@ -822,10 +822,7 @@ fn get_reward_claimed_status() {
 				query_id,
 				bounded_vec![timestamp]
 			));
-			assert_eq!(
-				Tellor::get_reward_claimed_status(feed_id, query_id, timestamp).unwrap(),
-				true
-			);
+			assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp), true);
 		});
 	});
 }
@@ -1264,7 +1261,7 @@ fn get_data_feed() {
 	ext.execute_with(|| {
 		assert_eq!(
 			Tellor::get_data_feed(feed_id).unwrap(),
-			FeedDetailsOf::<Test> {
+			FeedOf::<Test> {
 				reward: token(1),
 				balance: token(1_000),
 				start_time: timestamp,
@@ -2210,7 +2207,7 @@ fn get_funded_feed_details() {
 			);
 			assert_eq!(
 				&Tellor::get_funded_feed_details()[0].0,
-				&FeedDetailsOf::<Test> {
+				&FeedOf::<Test> {
 					reward: token(1),
 					balance: token(1_000),
 					start_time: now(),
@@ -2379,9 +2376,14 @@ fn get_current_feeds() {
 				})
 				.collect();
 			assert_eq!(feeds.len(), 5);
-			assert_eq!(Tellor::get_current_feeds(query_id), feeds);
+			assert_eq!(sort(Tellor::get_current_feeds(query_id)), sort(feeds));
 		});
 	});
+}
+
+fn sort(mut feeds: Vec<FeedId>) -> Vec<FeedId> {
+	feeds.sort();
+	feeds
 }
 
 // Helper function for creating feeds
