@@ -1033,7 +1033,7 @@ pub mod pallet {
 			let report = <Reports<T>>::get(query_id);
 			ensure!(
 				nonce == report.as_ref().map_or(Nonce::zero(), |r| r.timestamps.len() as Nonce) ||
-					nonce == 0, // todo: query || nonce == 0 check
+					nonce == 0,
 				Error::<T>::InvalidNonce
 			);
 			let mut staker =
