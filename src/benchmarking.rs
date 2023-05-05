@@ -35,7 +35,7 @@ use sp_runtime::traits::{Hash, Keccak256};
 
 type RuntimeOrigin<T> = <T as frame_system::Config>::RuntimeOrigin;
 const TRB: u128 = 10u128.pow(DECIMALS);
-const PARA_ID: u32 = 3000;
+const PARA_ID: u32 = 1000;
 const SEED: u32 = 0;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
@@ -130,6 +130,7 @@ fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeI
 
 
 benchmarks! {
+
 
 	register {
 
@@ -227,23 +228,13 @@ benchmarks! {
 	}
 
 	submit_value {
-		let s in 1..T::MaxTimestamps::get()-1;
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let address = Address::zero();
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
-
-		// submitting multiple reports
-		for i in 1..=s {
-			T::BenchmarkHelper::set_time(HOURS);
-			Tellor::<T>::submit_value(
-				RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 1_000), 0, query_data.clone()
-			)?;
-		}
         T::BenchmarkHelper::set_time(HOURS);
-
 	}: _(RawOrigin::Signed(reporter.clone()), query_id, uint_value::<T>(4_000), 0, query_data.clone())
 	verify {
 		assert!(<StakerDetails<T>>::get(reporter).is_some());
@@ -256,7 +247,7 @@ benchmarks! {
 
 	update_stake_amount {
 		let staking_token_price_query_data: QueryDataOf<T> =
-			spot_price("trb", "gbp").try_into().unwrap();
+			spot_price("trb", "usd").try_into().unwrap();
 		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
 		let staking_to_local_token_query_data: QueryDataOf<T> =
 			spot_price("trb", "ocp").try_into().unwrap();
@@ -274,7 +265,7 @@ benchmarks! {
 			uint_value::<T>(50 * 10u128.pow(18)),
 			0,
 			staking_token_price_query_data.clone())?;
-		T::BenchmarkHelper::set_time(HOURS);
+		T::BenchmarkHelper::set_time(12 * HOURS);
 
 		Tellor::<T>::submit_value(
 			RawOrigin::Signed(reporter.clone()).into(),
@@ -444,7 +435,6 @@ benchmarks! {
 		Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, disputed_timestamp, None)?;
 
 		let dispute_id = dispute_id(PARA_ID, query_id, disputed_timestamp);
-
 	}: _(RawOrigin::Signed(reporter.clone()), dispute_id, Some(true))
 	verify {
 		assert_last_event::<T>(
@@ -537,25 +527,32 @@ benchmarks! {
 				Event::SlashReported { reporter, amount: trb(100)}.into(),
 			);
 	}
-
+	// check reporters length to submit same query id
 	send_votes {
-		//let s in 2..T::MaxTimestamps::get();
-		let s in 2..84;
+		let s in 2..T::MaxTimestamps::get();
+		//let s in 3..100;
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
-		let user = account::<AccountIdOf<T>>("account", 3, SEED);
+		let user = account::<AccountIdOf<T>>("account", 2, SEED);
 		let address = Address::zero();
         deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
-        deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
-		T::BenchmarkHelper::set_balance(another_reporter.clone(), 1000);
-		for i in 1..s {
+		for i in 2..s {
 			T::BenchmarkHelper::set_time(HOURS);
-			Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 1_000), 0, query_data.clone())?;
+			let another_reporter = account::<AccountIdOf<T>>("account", i + 1, SEED);
+			deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
+			T::BenchmarkHelper::set_balance(another_reporter.clone(), 100);
+			Tellor::<T>::submit_value(
+				RawOrigin::Signed(another_reporter.clone()).into(),
+				query_id,
+				uint_value::<T>(i * 1_000),
+				0,
+				query_data.clone())?;
+
 			let report_timestamp = <Reports<T>>::get(query_id)
 				.map( |r| r.timestamps).unwrap();
+
 			let timestamp = report_timestamp.last().unwrap();
 			let dispute_id = dispute_id(PARA_ID, query_id, *timestamp);
 			if i % 2 == 0 {
@@ -571,11 +568,11 @@ benchmarks! {
 		}
 
 		T::BenchmarkHelper::set_time(HOURS);
-	}: _(RawOrigin::Signed(reporter), T::MaxTimestamps::get().try_into().unwrap())
+	}: _(RawOrigin::Signed(reporter), T::MaxTimestamps::get() as u8)
 
 	vote_on_multiple_disputes {
 		//let s in 2..T::MaxTimestamps::get();
-		let s in 2..11;
+		let s in 2..T::MaxDisputeVotes::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
@@ -586,7 +583,7 @@ benchmarks! {
         deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
 		T::BenchmarkHelper::set_balance(another_reporter.clone(), 1000);
-		for i in 1..s {
+		for i in 1..=s {
 			T::BenchmarkHelper::set_time(HOURS);
 			Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 1_000), 0, query_data.clone())?;
 			let report_timestamp = <Reports<T>>::get(query_id)

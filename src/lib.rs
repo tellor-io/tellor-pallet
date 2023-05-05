@@ -55,6 +55,8 @@ mod impls;
 pub mod traits;
 mod types;
 pub mod xcm;
+pub mod weights;
+pub use weights::*;
 
 #[allow(clippy::too_many_arguments)]
 #[frame_support::pallet]
@@ -220,6 +222,8 @@ pub mod pallet {
 		/// Helper trait for benchmarks.
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: BenchmarkHelper<Self::AccountId>;
+
+		type WeightInfo: WeightInfo;
 
 	}
 
@@ -624,7 +628,7 @@ pub mod pallet {
 			let _ = <Pallet<T>>::do_send_votes(timestamp, 3);
 
 			// todo: calculate actual weight
-			Weight::zero()
+			<T as Config>::WeightInfo::on_initialize()
 		}
 	}
 
@@ -632,7 +636,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Registers the parachain with the Tellor controller contracts.
 		#[pallet::call_index(0)]
-		#[pallet::weight(115413000)]
+		#[pallet::weight(<T as Config>::WeightInfo::register())]
 		pub fn register(origin: OriginFor<T>) -> DispatchResult {
 			T::RegisterOrigin::ensure_origin(origin)?;
 			// Register with parachain registry contract
@@ -669,12 +673,12 @@ pub mod pallet {
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(1)]
-		#[pallet::weight(780231000)]
+		#[pallet::weight(<T as Config>::WeightInfo::claim_onetime_tip(T::MaxTipsPerQuery::get()))]
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
 			ensure!(
 				<Tips<T>>::get(query_id).map_or(false, |t| t.len() > 0),
@@ -682,9 +686,9 @@ pub mod pallet {
 			);
 
 			let mut cumulative_reward = BalanceOf::<T>::zero();
-			for timestamp in timestamps {
+			for timestamp in &timestamps {
 				cumulative_reward.saturating_accrue(Self::get_onetime_tip_amount(
-					query_id, timestamp, &reporter,
+					query_id, *timestamp, &reporter,
 				)?);
 			}
 			let fee = (cumulative_reward
@@ -735,7 +739,7 @@ pub mod pallet {
 				amount: cumulative_reward,
 				reporter,
 			});
-			Ok(())
+			Ok(Some(T::WeightInfo::claim_onetime_tip(timestamps.len() as u32)).into())
 		}
 
 		/// Allows Tellor reporters to claim their tips in batches.
@@ -744,13 +748,13 @@ pub mod pallet {
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(2)]
-		#[pallet::weight(1171187000)]
+		#[pallet::weight(<T as Config>::WeightInfo::claim_tip(T::MaxClaimTimestamps::get()))]
 		pub fn claim_tip(
 			origin: OriginFor<T>,
 			feed_id: FeedId,
 			query_id: QueryId,
 			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
 
 			let mut feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
@@ -841,7 +845,7 @@ pub mod pallet {
 				amount: cumulative_reward,
 				reporter,
 			});
-			Ok(())
+			Ok(Some(T::WeightInfo::claim_tip(timestamps.len() as u32)).into())
 		}
 
 		/// Allows data feed account to be filled with tokens.
@@ -850,7 +854,7 @@ pub mod pallet {
 		/// - `query_id`: Identifier of reported data type associated with feed.
 		/// - `amount`: Quantity of tokens to fund feed.
 		#[pallet::call_index(3)]
-		#[pallet::weight(365826000)]
+		#[pallet::weight(<T as Config>::WeightInfo::fund_feed())]
 		pub fn fund_feed(
 			origin: OriginFor<T>,
 			feed_id: FeedId,
@@ -873,7 +877,7 @@ pub mod pallet {
 		/// - `query_data`: The data used by reporters to fulfil the query.
 		/// - `amount`: Optional initial amount to fund it with.
 		#[pallet::call_index(4)]
-		#[pallet::weight(636738000)]
+		#[pallet::weight(<T as Config>::WeightInfo::setup_data_feed())]
 		pub fn setup_data_feed(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -934,7 +938,7 @@ pub mod pallet {
 		/// - `amount`: Amount to tip.
 		/// - `query_data`: The data used by reporters to fulfil the query.
 		#[pallet::call_index(5)]
-		#[pallet::weight(696760000)]
+		#[pallet::weight(<T as Config>::WeightInfo::tip(T::MaxTimestamps::get()))]
 		pub fn tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1013,7 +1017,7 @@ pub mod pallet {
 		///
 		/// - `amount`: Amount of tokens to fund staking account with.
 		#[pallet::call_index(6)]
-		#[pallet::weight(573766000)]
+		#[pallet::weight(<T as Config>::WeightInfo::add_staking_rewards())]
 		pub fn add_staking_rewards(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
 			let funder = ensure_signed(origin)?;
 			Self::do_add_staking_rewards(&funder, amount)
@@ -1026,7 +1030,7 @@ pub mod pallet {
 		/// - `nonce`: The current value count for the query identifier.
 		/// - `query_data`: The data used to fulfil the data query.
 		#[pallet::call_index(7)]
-		#[pallet::weight(386325000)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_value())]
 		pub fn submit_value(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1125,7 +1129,7 @@ pub mod pallet {
 
 		/// Updates the stake amount after retrieving the latest token price from oracle.
 		#[pallet::call_index(8)]
-		#[pallet::weight(465371000)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_stake_amount())]
 		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
 			ensure_signed(origin)?;
 			Self::do_update_stake_amount()?;
@@ -1138,7 +1142,7 @@ pub mod pallet {
 		/// - `timestamp`: Timestamp being disputed.
 		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
 		#[pallet::call_index(9)]
-		#[pallet::weight(717259000)]
+		#[pallet::weight(<T as Config>::WeightInfo::begin_dispute(T::MaxTimestamps::get()))]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1300,7 +1304,7 @@ pub mod pallet {
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `supports`: Whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
 		#[pallet::call_index(10)]
-		#[pallet::weight(343852000)]
+		#[pallet::weight(<T as Config>::WeightInfo::vote())]
 		pub fn vote(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1314,26 +1318,29 @@ pub mod pallet {
 		///
 		/// - `disputes`: The votes for disputes, containing the dispute identifier and whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
 		#[pallet::call_index(11)]
-		#[pallet::weight(343852000)]
+		#[pallet::weight(<T as Config>::WeightInfo::vote_on_multiple_disputes(T::MaxDisputeVotes::get()))]
 		pub fn vote_on_multiple_disputes(
 			origin: OriginFor<T>,
 			votes: BoundedVec<(DisputeId, Option<bool>), T::MaxVotes>,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let voter = ensure_signed(origin)?;
-			for (dispute_id, supports) in votes {
-				Self::do_vote(&voter, dispute_id, supports)?
+			for (dispute_id, supports) in &votes {
+				Self::do_vote(&voter, *dispute_id, *supports)?
 			}
-			Ok(())
+			Ok(Some(T::WeightInfo::vote_on_multiple_disputes(votes.len() as u32)).into())
 		}
 
 		/// Sends any pending dispute votes due to the governance controller contract for tallying.
 		///
 		/// - `max_votes`: The maximum number of votes to be sent.
 		#[pallet::call_index(12)]
-		#[pallet::weight(1218085000)]
-		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResult {
+		#[pallet::weight(<T as Config>::WeightInfo::send_votes(T::MaxTimestamps::get()))]
+		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
-			Self::do_send_votes(Self::now(), max_votes)
+			match Self::do_send_votes(Self::now(), max_votes) {
+				Ok(vote_count) => Ok(Some(T::WeightInfo::vote_on_multiple_disputes(vote_count)).into()),
+				Err(error) => Err(error.into()),
+			}
 		}
 
 		/// Reports a stake deposited by a reporter.
@@ -1342,7 +1349,7 @@ pub mod pallet {
 		/// - `amount`: The amount staked.
 		/// - `address`: The corresponding address on the controlling chain.
 		#[pallet::call_index(13)]
-		#[pallet::weight(1218085000)]
+		#[pallet::weight(<T as Config>::WeightInfo::report_stake_deposited())]
 		pub fn report_stake_deposited(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1403,7 +1410,7 @@ pub mod pallet {
 		/// - `amount`: The amount requested to withdraw.
 		/// - `address`: The corresponding address on the controlling chain.
 		#[pallet::call_index(14)]
-		#[pallet::weight(1155113000)]
+		#[pallet::weight(<T as Config>::WeightInfo::report_staking_withdraw_request())]
 		pub fn report_staking_withdraw_request(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1470,7 +1477,7 @@ pub mod pallet {
 		/// - `amount`: The total amount withdrawn.
 		/// - `address`: The corresponding address on the controlling chain.
 		#[pallet::call_index(15)]
-		#[pallet::weight(261856000)]
+		#[pallet::weight(<T as Config>::WeightInfo::report_stake_withdrawn())]
 		pub fn report_stake_withdrawn(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1518,7 +1525,7 @@ pub mod pallet {
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `amount`: The slashed amount.
 		#[pallet::call_index(16)]
-		#[pallet::weight(1051143000)]
+		#[pallet::weight(<T as Config>::WeightInfo::report_slash())]
 		pub fn report_slash(
 			origin: OriginFor<T>,
 			reporter: AccountIdOf<T>,
@@ -1599,7 +1606,7 @@ pub mod pallet {
 		/// - `dispute_id`: The identifier of the dispute.
 		/// - `result`: The outcome of the vote, as determined by governance.
 		#[pallet::call_index(17)]
-		#[pallet::weight(198884000)]
+		#[pallet::weight(<T as Config>::WeightInfo::report_vote_tallied())]
 		pub fn report_vote_tallied(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,
@@ -1615,7 +1622,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		#[pallet::call_index(18)]
-		#[pallet::weight(323353000)]
+		#[pallet::weight(<T as Config>::WeightInfo::report_vote_executed(T::MaxTimestamps::get()))]
 		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResult {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;

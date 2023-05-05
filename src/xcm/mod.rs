@@ -41,7 +41,7 @@ impl<T: Config> Pallet<T> {
 	) -> Result<(), Error<T>> {
 		let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
 		let dest = MultiLocation { parents: 1, interior: X1(Parachain(para_id)) };
-		if !cfg!(feature = "runtime-benchmarks"){
+		if !cfg!(feature = "runtime-benchmarks") {
 			T::Xcm::send_xcm(interior, dest, message).map_err(|e| match e {
 				SendError::Fees => Error::<T>::FeesNotMet,
 			SendError::NotApplicable => Error::<T>::Unreachable,

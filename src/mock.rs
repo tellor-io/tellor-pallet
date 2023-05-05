@@ -155,7 +155,8 @@ impl tellor::Config for Test {
 	type XcmFeesAsset = XcmFeesAsset;
 	type XcmWeightToAsset = ConstU128<50_000>;
 	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = TestBenchmarkHelper; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
+	type BenchmarkHelper = TestBenchmarkHelper;
+	type WeightInfo = (); // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
 }
 
 thread_local! {

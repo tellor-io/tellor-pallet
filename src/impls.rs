@@ -262,7 +262,7 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `timestamp` - Data feed unique identifier.
 	/// * `max` - The maximum number of pending dispute votes to be sent.
-	pub(super) fn do_send_votes(timestamp: Timestamp, max: u8) -> DispatchResult {
+	pub(super) fn do_send_votes(timestamp: Timestamp, max: u8) -> Result<u32, DispatchError> {
 		let governance_contract = T::Governance::get();
 		const GAS_LIMIT: u64 = gas_limits::VOTE;
 		// Check for any pending votes to be sent to governance controller contract
@@ -270,7 +270,7 @@ impl<T: Config> Pallet<T> {
 			.filter(|(_, (_, scheduled))| &timestamp >= scheduled)
 			.collect();
 		pending_votes.sort_by_key(|(_, (_, scheduled))| *scheduled);
-		for (dispute_id, (vote_round, _)) in pending_votes.into_iter().take(max.into()) {
+		for (dispute_id, (vote_round, _)) in pending_votes.clone().into_iter().take(max.into()) {
 			let _ = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
 				let vote = maybe.as_mut().ok_or(Error::<T>::InvalidVote)?;
 				ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
@@ -307,7 +307,7 @@ impl<T: Config> Pallet<T> {
 				Ok(())
 			});
 		}
-		Ok(())
+		Ok(pending_votes.len() as u32)
 	}
 
 	// Updates the stake amount after retrieving the latest token price from oracle.
