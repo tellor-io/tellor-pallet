@@ -18,15 +18,17 @@ use super::*;
 use codec::Encode;
 use ethabi::Token;
 use xcm::latest::{Junction, MultiLocation, NetworkId};
+use crate::types::governance::Weights;
 
 pub(crate) fn register(
 	para_id: ParaId,
 	pallet_index: u8,
 	weight_to_fee: u128,
 	fee_location: MultiLocation,
+	weights: Weights,
 ) -> Vec<u8> {
 	call(
-		&[116, 99, 167, 98],
+		&[96, 114, 55, 127],
 		encode(&[
 			Token::Uint(para_id.into()),
 			Token::Uint(pallet_index.into()),
@@ -40,6 +42,14 @@ pub(crate) fn register(
 						.map(|j| Token::Bytes(encode_junction(j)))
 						.collect(),
 				),
+			]),
+			Token::Tuple(vec![
+				Token::Uint(weights.report_stake_deposited.into()),
+				Token::Uint(weights.report_staking_withdraw_request.into()),
+				Token::Uint(weights.report_stake_withdrawn.into()),
+				Token::Uint(weights.report_vote_tallied.into()),
+				Token::Uint(weights.report_vote_executed.into()),
+				Token::Uint(weights.report_slash.into()),
 			]),
 		]),
 	)
@@ -111,6 +121,7 @@ mod tests {
 	use ethabi::{Function, ParamType, Token};
 	use sp_core::{bounded::WeakBoundedVec, bytes::from_hex, H160, H256};
 	use xcm::latest::prelude::*;
+	use crate::types::governance::Weights;
 
 	#[allow(deprecated)]
 	fn register() -> Function {
@@ -126,6 +137,17 @@ mod tests {
 					ParamType::Tuple(vec![
 						ParamType::Uint(8),                           // parents
 						ParamType::Array(Box::new(ParamType::Bytes)), // interior
+					]),
+				),
+				param(
+					"_weights",
+					ParamType::Tuple(vec![
+						ParamType::Uint(64),
+						ParamType::Uint(64),
+						ParamType::Uint(64),
+						ParamType::Uint(64),
+						ParamType::Uint(64),
+						ParamType::Uint(64),
 					]),
 				),
 			],
@@ -148,6 +170,14 @@ mod tests {
 		let para_id = 3000;
 		let pallet_index = 3;
 		let weight_to_fee = 10_000;
+		let weights = Weights {
+			report_stake_deposited: 1200000,
+			report_staking_withdraw_request: 1000000,
+			report_stake_withdrawn: 1500000,
+			report_vote_tallied: 3500000,
+			report_vote_executed: 2500000,
+			report_slash: 1000000,
+		};
 		let fee_location = MultiLocation::new(1, X1(Parachain(3000))); // fee location for execution on this parachain, from context of evm parachain
 
 		assert_eq!(
@@ -159,10 +189,18 @@ mod tests {
 					Token::Tuple(vec![
 						Token::Uint(1.into()),
 						Token::Array(vec![Token::Bytes(encode_junction(Parachain(3000)))])
+					]),
+					Token::Tuple(vec![
+						Token::Uint(weights.report_stake_deposited.into()),
+						Token::Uint(weights.report_staking_withdraw_request.into()),
+						Token::Uint(weights.report_stake_withdrawn.into()),
+						Token::Uint(weights.report_vote_tallied.into()),
+						Token::Uint(weights.report_vote_executed.into()),
+						Token::Uint(weights.report_slash.into()),
 					])
 				])
 				.unwrap()[..],
-			super::register(para_id, pallet_index, weight_to_fee, fee_location)[..]
+			super::register(para_id, pallet_index, weight_to_fee, fee_location, weights)[..]
 		)
 	}
 

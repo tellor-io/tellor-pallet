@@ -38,6 +38,8 @@ use sp_runtime::{
 };
 use std::convert::Into;
 use xcm::{latest::prelude::*, DoubleEncoded};
+use crate::types::governance::Weights;
+use crate::weights::WeightInfo;
 
 mod autopay;
 mod governance;
@@ -212,7 +214,14 @@ fn registers() {
 			{
 				assert_noop!(Tellor::register(origin), BadOrigin);
 			}
-
+			let weights = Weights {
+				report_stake_deposited: <Test as crate::Config>::WeightInfo::report_stake_deposited().ref_time(),
+				report_staking_withdraw_request: <Test as crate::Config>::WeightInfo::report_staking_withdraw_request().ref_time(),
+				report_stake_withdrawn: <Test as crate::Config>::WeightInfo::report_stake_withdrawn().ref_time(),
+				report_vote_tallied: <Test as crate::Config>::WeightInfo::report_vote_tallied().ref_time(),
+				report_vote_executed: <Test as crate::Config>::WeightInfo::report_vote_executed(<Test as crate::Config>::MaxTimestamps::get()).ref_time(),
+				report_slash: <Test as crate::Config>::WeightInfo::report_slash().ref_time(),
+			};
 			assert_ok!(Tellor::register(RuntimeOrigin::root()));
 			assert_eq!(
 				sent_xcm(),
@@ -223,7 +232,8 @@ fn registers() {
 							PARA_ID,
 							PALLET_INDEX,
 							<Test as crate::Config>::WeightToFee::get(),
-							crate::xcm::FeeLocation::<Test>::get().unwrap()
+							crate::xcm::FeeLocation::<Test>::get().unwrap(),
+							weights
 						)
 						.try_into()
 						.unwrap(),
