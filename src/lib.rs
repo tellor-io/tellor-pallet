@@ -89,7 +89,6 @@ pub mod pallet {
 	use sp_std::{prelude::*, result};
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.

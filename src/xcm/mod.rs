@@ -149,7 +149,7 @@ pub(crate) fn gas_to_weight(gas_limit: u64) -> Weight {
 	// https://github.com/PureStake/moonbeam/blob/master/runtime/moonbase/src/lib.rs#L371-L375
 	const GAS_PER_SECOND: u64 = 40_000_000;
 	const WEIGHT_PER_GAS: u64 = WEIGHT_REF_TIME_PER_SECOND / GAS_PER_SECOND;
-	Weight::from_ref_time(gas_limit.saturating_mul(WEIGHT_PER_GAS))
+	Weight::from_parts(gas_limit.saturating_mul(WEIGHT_PER_GAS), 0)
 }
 
 /// The weight of a XCM message.
@@ -157,11 +157,11 @@ pub(crate) fn weigh() -> Weight {
 	// Standard database weight
 	let db_weight = frame_support::weights::constants::RocksDbWeight::get();
 	// Moonbase Alpha benchmarked instruction weights
-	const DESCEND_ORIGIN: Weight = Weight::from_ref_time(10_084_000); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L169
-	const WITHDRAW_ASSET: Weight = Weight::from_ref_time(200_000_000); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_fungible.rs#L28
+	const DESCEND_ORIGIN: Weight = Weight::from_parts(10_084_000, 0); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L169
+	const WITHDRAW_ASSET: Weight = Weight::from_parts(200_000_000, 0); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_fungible.rs#L28
 	let buy_execution: Weight =
-		Weight::from_ref_time(158_702_000).saturating_add(db_weight.reads(4)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L136
-	let transact: Weight = Weight::from_ref_time(34_785_000).saturating_add(db_weight.reads(1)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L148
+		Weight::from_parts(158_702_000, 0).saturating_add(db_weight.reads(4)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L136
+	let transact: Weight = Weight::from_parts(34_785_000, 0).saturating_add(db_weight.reads(1)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L148
 
 	// Calculate combined weight of xcm instructions
 	DESCEND_ORIGIN
@@ -265,9 +265,9 @@ mod tests {
 	fn gas_to_weight() {
 		// https://docs.moonbeam.network/builders/interoperability/xcm/remote-evm-calls/#differences-regular-remote-evm
 		const WEIGHT_PER_GAS: u64 = 25_000;
-		assert_eq!(super::gas_to_weight(1), Weight::from_ref_time(WEIGHT_PER_GAS));
+		assert_eq!(super::gas_to_weight(1), Weight::from_parts(WEIGHT_PER_GAS, 0));
 		const MAX_GAS_LIMIT: u64 = 720_000;
-		assert_eq!(super::gas_to_weight(MAX_GAS_LIMIT), Weight::from_ref_time(18_000_000_000));
+		assert_eq!(super::gas_to_weight(MAX_GAS_LIMIT), Weight::from_parts(18_000_000_000, 0));
 	}
 
 	#[test]
@@ -299,11 +299,12 @@ mod tests {
 		let read = frame_support::weights::constants::RocksDbWeight::get().read;
 		assert_eq!(
 			super::weigh(),
-			Weight::from_ref_time(
+			Weight::from_parts(
 				10_084_000 + // DescendOrigin
 					200_000_000 + // WithdrawAsset
 					(158_702_000 + read * 4) + // BuyExecution
-					(34_785_000 + 1 * read) // Transact
+					(34_785_000 + 1 * read), // Transact
+				0
 			)
 		);
 	}
@@ -311,6 +312,6 @@ mod tests {
 	#[test]
 	fn weight_to_fee() {
 		const WEIGHT_FEE: u128 = 50_000;
-		assert_eq!(super::weight_to_fee::<Test>(Weight::from_ref_time(1)), WEIGHT_FEE);
+		assert_eq!(super::weight_to_fee::<Test>(Weight::from_parts(1, 0)), WEIGHT_FEE);
 	}
 }
