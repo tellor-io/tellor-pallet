@@ -108,7 +108,7 @@ impl pallet_timestamp::Config for Test {
 parameter_types! {
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
 	pub const FeeLocation: Junctions = Junctions::Here;
-	pub const XcmFeesAsset: AssetId = AssetId::Abstract(vec![]);
+	pub const XcmFeesAsset: AssetId = AssetId::Abstract([08;32]);
 }
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
@@ -150,7 +150,7 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		_interior: impl Into<Junctions>,
 		_dest: impl Into<MultiLocation>,
 		_message: Xcm<()>,
-	) -> Result<(), SendError> {
+	) -> Result<XcmHash, SendError> {
 		unimplemented!("not required for runtime api tests")
 	}
 }

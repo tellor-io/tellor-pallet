@@ -42,7 +42,8 @@ impl<T: Config> Pallet<T> {
 		let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
 		let dest = MultiLocation { parents: 1, interior: X1(Parachain(para_id)) };
 		T::Xcm::send_xcm(interior, dest, message).map_err(|e| match e {
-			SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
+			SendError::Fees => Error::<T>::FeesNotMet,
+			SendError::NotApplicable => Error::<T>::Unreachable,
 			_ => Error::<T>::SendFailure,
 		})?;
 		Self::deposit_event(event);
@@ -110,7 +111,10 @@ impl Into<MultiLocation> for ContractLocation {
 	fn into(self) -> MultiLocation {
 		MultiLocation {
 			parents: 1,
-			interior: X2(Parachain(self.para_id), AccountKey20 { network: Any, key: self.address }),
+			interior: X2(
+				Parachain(self.para_id),
+				AccountKey20 { network: None, key: self.address },
+			),
 		}
 	}
 }
@@ -132,10 +136,10 @@ pub(crate) fn transact<T: Config>(call: Vec<u8>, gas_limit: u64) -> Xcm<()> {
 	// Construct xcm message
 	Xcm(vec![
 		WithdrawAsset(asset.clone().into()),
-		BuyExecution { fees: asset, weight_limit: Limited(total_weight.ref_time()) },
+		BuyExecution { fees: asset, weight_limit: Limited(total_weight) },
 		Transact {
-			origin_type: OriginKind::SovereignAccount,
-			require_weight_at_most: transact_extrinsic_weight.ref_time(),
+			origin_kind: OriginKind::SovereignAccount,
+			require_weight_at_most: transact_extrinsic_weight,
 			call: call.into(),
 		},
 	])
@@ -179,13 +183,13 @@ impl<T: Config> FeeLocation<T> {
 	}
 
 	fn convert(
-		interior: Junctions,
+		interior: InteriorMultiLocation,
 		dest: &MultiLocation,
 		para_id: ParaId,
 	) -> Result<MultiLocation, DispatchError> {
-		let mut interior = interior.into();
+		let mut interior: MultiLocation = interior.into();
 		interior
-			.reanchor(dest, &MultiLocation::new(1, X1(Parachain(para_id))))
+			.reanchor(dest, Parachain(para_id).into())
 			.map_err(|_| Error::<T>::JunctionOverflow)?;
 		Ok(interior)
 	}
@@ -280,10 +284,10 @@ mod tests {
 			super::transact::<Test>(vec![], GAS_LIMIT),
 			Xcm(vec![
 				WithdrawAsset(fees.clone().into()),
-				BuyExecution { fees, weight_limit: Limited(total_weight.ref_time()) },
+				BuyExecution { fees, weight_limit: Limited(total_weight) },
 				Transact {
-					origin_type: OriginKind::SovereignAccount,
-					require_weight_at_most: xt_weight.ref_time(),
+					origin_kind: OriginKind::SovereignAccount,
+					require_weight_at_most: xt_weight,
 					call: vec![].into(),
 				},
 			]),

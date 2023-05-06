@@ -117,7 +117,7 @@ pub mod pallet {
 		type Fee: Get<u16>;
 
 		/// The (interior) fee location to be used by controller contracts for XCM execution on this parachain.
-		type FeeLocation: Get<Junctions>;
+		type FeeLocation: Get<InteriorMultiLocation>;
 
 		/// The location of the governance controller contract.
 		#[pallet::constant]
@@ -576,6 +576,7 @@ pub mod pallet {
 		VotingPeriodActive,
 
 		// XCM
+		FeesNotMet,
 		JunctionOverflow,
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,
