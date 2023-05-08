@@ -134,10 +134,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxClaimTimestamps: Get<u32>;
 
-		/// The maximum number of dispute votes per dispatchable call.
-		#[pallet::constant]
-		type MaxDisputeVotes: Get<u32>;
-
 		/// The maximum number of funded feeds.
 		#[pallet::constant]
 		type MaxFundedFeeds: Get<u32>;
@@ -153,6 +149,10 @@ pub mod pallet {
 		/// The maximum length of an individual value submitted to the oracle.
 		#[pallet::constant]
 		type MaxValueLength: Get<u32>;
+
+		/// The maximum number of votes when voting on multiple disputes.
+		#[pallet::constant]
+		type MaxVotes: Get<u32>;
 
 		/// The minimum amount of tokens required to stake.
 		#[pallet::constant]
@@ -1308,7 +1308,7 @@ pub mod pallet {
 		#[pallet::weight(343852000)]
 		pub fn vote_on_multiple_disputes(
 			origin: OriginFor<T>,
-			votes: BoundedVec<(DisputeId, Option<bool>), T::MaxDisputeVotes>,
+			votes: BoundedVec<(DisputeId, Option<bool>), T::MaxVotes>,
 		) -> DispatchResult {
 			let voter = ensure_signed(origin)?;
 			for (dispute_id, supports) in votes {
