@@ -375,8 +375,8 @@ impl<T: Config> Pallet<T> {
 					ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
 					// Update voting status and increment total queries for support, invalid, or against based on vote
 					<Votes<T>>::set((dispute_id, vote_round, voter), true);
-					let reports = Self::get_reports_submitted_by_address(&voter);
-					let user_tips = Self::get_tips_by_address(&voter);
+					let reports = Self::get_reports_submitted_by_address(voter);
+					let user_tips = Self::get_tips_by_address(voter);
 					match supports {
 						// Invalid
 						None => {
@@ -404,6 +404,7 @@ impl<T: Config> Pallet<T> {
 	/// Executes the vote and transfers corresponding dispute fees to initiator/reporter.
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.
+	#[allow(clippy::identity_op)]
 	pub(super) fn execute_vote(dispute_id: DisputeId) -> DispatchResult {
 		// Ensure validity of dispute id, vote has been executed, and vote must be tallied
 		ensure!(
