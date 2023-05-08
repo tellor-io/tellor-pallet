@@ -100,20 +100,26 @@ where
 pub struct ContractLocation {
 	pub(crate) para_id: ParaId,
 	pub(crate) address: [u8; 20],
+	pub(crate) network: Option<NetworkId>,
 }
 impl From<(ParaId, [u8; 20])> for ContractLocation {
 	fn from(value: (ParaId, [u8; 20])) -> Self {
-		ContractLocation { para_id: value.0, address: value.1 }
+		ContractLocation { para_id: value.0, address: value.1, network: None }
+	}
+}
+impl From<(ParaId, [u8; 20], NetworkId)> for ContractLocation {
+	fn from(value: (ParaId, [u8; 20], NetworkId)) -> Self {
+		ContractLocation { para_id: value.0, address: value.1, network: Some(value.2) }
 	}
 }
 
-impl Into<MultiLocation> for ContractLocation {
-	fn into(self) -> MultiLocation {
+impl From<ContractLocation> for MultiLocation {
+	fn from(value: ContractLocation) -> Self {
 		MultiLocation {
 			parents: 1,
 			interior: X2(
-				Parachain(self.para_id),
-				AccountKey20 { network: None, key: self.address },
+				Parachain(value.para_id),
+				AccountKey20 { network: value.network, key: value.address },
 			),
 		}
 	}
@@ -212,7 +218,17 @@ mod tests {
 	fn contract_location_from_tuple() {
 		let address = Address::random().0;
 		let location: ContractLocation = (PARA_ID, address).into();
-		assert_eq!(location, ContractLocation { para_id: PARA_ID, address });
+		assert_eq!(location, ContractLocation { para_id: PARA_ID, address, network: None });
+	}
+
+	#[test]
+	fn contract_location_from_tuple_with_network() {
+		let address = Address::random().0;
+		let location: ContractLocation = (PARA_ID, address, Polkadot).into();
+		assert_eq!(
+			location,
+			ContractLocation { para_id: PARA_ID, address, network: Some(Polkadot) }
+		);
 	}
 
 	#[test]
