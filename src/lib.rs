@@ -673,7 +673,7 @@ pub mod pallet {
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::claim_onetime_tip(T::MaxTipsPerQuery::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::claim_onetime_tip(T::MaxValueLength::get(), T::MaxClaimTimestamps::get()))]
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -727,7 +727,7 @@ pub mod pallet {
 										.ok_or(ArithmeticError::Overflow)?,
 								),
 							);
-							<QueryIdsWithFundingIndex<T>>::remove(query_id);
+							<QueryIdsWithFundingIndex<T>>::remove(query_id.clone());
 							query_ids_with_funding.pop();
 							Ok(())
 						},
@@ -739,7 +739,7 @@ pub mod pallet {
 				amount: cumulative_reward,
 				reporter,
 			});
-			Ok(Some(T::WeightInfo::claim_onetime_tip(timestamps.len() as u32)).into())
+			Ok(Some(T::WeightInfo::claim_onetime_tip(Self::get_new_value_count_by_query_id(query_id), timestamps.len() as u32)).into())
 		}
 
 		/// Allows Tellor reporters to claim their tips in batches.
@@ -877,7 +877,7 @@ pub mod pallet {
 		/// - `query_data`: The data used by reporters to fulfil the query.
 		/// - `amount`: Optional initial amount to fund it with.
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::setup_data_feed())]
+		#[pallet::weight(<T as Config>::WeightInfo::setup_data_feed(T::MaxQueryDataLength::get()))]
 		pub fn setup_data_feed(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -889,7 +889,7 @@ pub mod pallet {
 			reward_increase_per_second: BalanceOf<T>,
 			query_data: QueryDataOf<T>,
 			amount: BalanceOf<T>,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let feed_creator = ensure_signed(origin)?;
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			let feed_id = Keccak256::hash(&contracts::encode(&vec![
@@ -923,13 +923,13 @@ pub mod pallet {
 			Self::deposit_event(Event::NewDataFeed {
 				query_id,
 				feed_id,
-				query_data,
+				query_data: query_data.clone(),
 				feed_creator: feed_creator.clone(),
 			});
 			if amount > Zero::zero() {
 				Self::do_fund_feed(feed_creator, feed_id, query_id, amount)?;
 			}
-			Ok(())
+			Ok(Some(T::WeightInfo::setup_data_feed(query_data.len() as u32)).into())
 		}
 
 		/// Function to run a single tip.
@@ -938,13 +938,13 @@ pub mod pallet {
 		/// - `amount`: Amount to tip.
 		/// - `query_data`: The data used by reporters to fulfil the query.
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::tip(T::MaxTimestamps::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::tip(T::MaxValueLength::get(), T::MaxQueryDataLength::get()))]
 		pub fn tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			amount: BalanceOf<T>,
 			query_data: QueryDataOf<T>,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let tipper = ensure_signed(origin)?;
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
@@ -1009,8 +1009,8 @@ pub mod pallet {
 			}
 			T::Asset::transfer(&tipper, &Self::tips(), amount, true)?;
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
-			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
-			Ok(())
+			Self::deposit_event(Event::TipAdded { query_id, amount, query_data: query_data.clone(), tipper });
+			Ok(Some(T::WeightInfo::tip(Self::get_new_value_count_by_query_id(query_id), query_data.len() as u32)).into())
 		}
 
 		/// Funds the staking account with staking rewards.
@@ -1030,14 +1030,14 @@ pub mod pallet {
 		/// - `nonce`: The current value count for the query identifier.
 		/// - `query_data`: The data used to fulfil the data query.
 		#[pallet::call_index(7)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_value())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_value(T::MaxQueryDataLength::get(), T::MaxValueLength::get()))]
 		pub fn submit_value(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			value: ValueOf<T>,
 			nonce: Nonce,
 			query_data: QueryDataOf<T>,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
 			ensure!(!value.is_empty(), Error::<T>::InvalidValue);
 			ensure!(
@@ -1119,12 +1119,12 @@ pub mod pallet {
 			Self::deposit_event(Event::NewReport {
 				query_id,
 				time: timestamp,
-				value,
+				value: value.clone(),
 				nonce,
-				query_data,
+				query_data: query_data.clone(),
 				reporter,
 			});
-			Ok(())
+			Ok(Some(T::WeightInfo::submit_value(query_data.len() as u32, value.len() as u32)).into())
 		}
 
 		/// Updates the stake amount after retrieving the latest token price from oracle.
@@ -1142,7 +1142,7 @@ pub mod pallet {
 		/// - `timestamp`: Timestamp being disputed.
 		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
 		#[pallet::call_index(9)]
-		#[pallet::weight(<T as Config>::WeightInfo::begin_dispute(T::MaxTimestamps::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::begin_dispute())]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -1334,7 +1334,7 @@ pub mod pallet {
 		///
 		/// - `max_votes`: The maximum number of votes to be sent.
 		#[pallet::call_index(12)]
-		#[pallet::weight(<T as Config>::WeightInfo::send_votes(T::MaxTimestamps::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::send_votes(u8::MAX.into()))]
 		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
 			match Self::do_send_votes(Self::now(), max_votes) {
@@ -1622,12 +1622,15 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		#[pallet::call_index(18)]
-		#[pallet::weight(<T as Config>::WeightInfo::report_vote_executed(T::MaxTimestamps::get()))]
-		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResult {
+		#[pallet::weight(<T as Config>::WeightInfo::report_vote_executed(u8::MAX.into()))]
+		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResultWithPostInfo {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote
-			Self::execute_vote(dispute_id)
+			match Self::execute_vote(dispute_id) {
+				Ok(vote_round) => Ok(Some(T::WeightInfo::report_vote_executed(vote_round as u32)).into()),
+				Err(error) => Err(error.into()),
+			}
 		}
 	}
 }

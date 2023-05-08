@@ -405,7 +405,7 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.
 	#[allow(clippy::identity_op)]
-	pub(super) fn execute_vote(dispute_id: DisputeId) -> DispatchResult {
+	pub(super) fn execute_vote(dispute_id: DisputeId) -> Result<u8, DispatchError> {
 		// Ensure validity of dispute id, vote has been executed, and vote must be tallied
 		ensure!(
 			dispute_id != <DisputeId>::default() &&
@@ -470,7 +470,7 @@ impl<T: Config> Pallet<T> {
 			},
 		)?;
 		Self::deposit_event(Event::VoteExecuted { dispute_id, result });
-		Ok(())
+		Ok(final_vote_round)
 	}
 
 	/// Returns the block number at a given timestamp.
