@@ -184,6 +184,7 @@ benchmarks! {
 	}
 
 	setup_data_feed {
+		// Maximum value for query data in order to measure the maximum weight
 		let q in 1..T::MaxQueryDataLength::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![1u8; q as usize]).unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
@@ -230,7 +231,9 @@ benchmarks! {
 	}
 
 	submit_value {
+		// Maximum value for query data in order to measure the maximum weight
 		let q in 1..T::MaxQueryDataLength::get();
+		// Maximum length for value in order to measure the maximum weight
 		let v in 1..T::MaxValueLength::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![1u8; q as usize]).unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
@@ -283,8 +286,10 @@ benchmarks! {
 	}: _(RawOrigin::Signed(reporter))
 
 	tip {
-		let s in 2..T::MaxValueLength::get();
+		// Maximum value for query data in order to measure the maximum weight
 		let q in 1..T::MaxQueryDataLength::get();
+		// Maximum submissions in order to measure maximum weight as this extrinsic iterates over all the report submissions
+		let s in 2..T::MaxValueLength::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![1u8; q as usize]).unwrap();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
@@ -321,7 +326,9 @@ benchmarks! {
 
 	claim_onetime_tip {
 		// todo! max submissions
+		// Maximum submissions in order to measure maximum weight as this extrinsic iterates over all the report submissions
 		let s in 2..T::MaxValueLength::get();
+		// Maximum timestamps for claiming tip for measuring maximum weight
 		let t in 1..T::MaxClaimTimestamps::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
@@ -353,6 +360,7 @@ benchmarks! {
 	}: _(RawOrigin::Signed(reporter), query_id, timestamps)
 
 	claim_tip {
+		// Maximum timestamps for claiming tip for measuring maximum weight
 		let s in 1..T::MaxClaimTimestamps::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
@@ -477,7 +485,7 @@ benchmarks! {
 	}: _<RuntimeOrigin<T>>(caller, dispute_id, VoteResult::Passed)
 
 	report_vote_executed {
-		// max vote rounds
+		// Maximum number of vote rounds are used as this extrinsic iterates over all vote rounds
 		let r in 1..u8::MAX.into();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
@@ -539,8 +547,9 @@ benchmarks! {
 				Event::SlashReported { reporter, amount: trb(100)}.into(),
 			);
 	}
-	// check reporters length to submit same query id
+
 	send_votes {
+		// The maximum number of votes be sent
 		let s in 1..u8::MAX.into();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
@@ -550,7 +559,6 @@ benchmarks! {
         deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
 		for i in 1..=s {
-
 			let another_reporter = account::<AccountIdOf<T>>("account", i, SEED);
 			deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
 			T::BenchmarkHelper::set_balance(another_reporter.clone(), 100);
@@ -580,6 +588,7 @@ benchmarks! {
 	}: _(RawOrigin::Signed(reporter), u8::MAX)
 
 	vote_on_multiple_disputes {
+		// Maximum votes for disputes are used in order to measure the maximum weight
 		let s in 2..T::MaxDisputeVotes::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
