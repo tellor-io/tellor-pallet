@@ -141,10 +141,10 @@ fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> (MultiLocat
 		Xcm(vec![
 			DescendOrigin(X1(PalletInstance(PALLET_INDEX))), // interior
 			WithdrawAsset(fees.clone().into()),
-			BuyExecution { fees, weight_limit: Limited(total_weight.ref_time()) },
+			BuyExecution { fees, weight_limit: Limited(total_weight) },
 			Transact {
-				origin_type: OriginKind::SovereignAccount,
-				require_weight_at_most: xt_weight.ref_time(),
+				origin_kind: OriginKind::SovereignAccount,
+				require_weight_at_most: xt_weight,
 				call: call.into(),
 			},
 		]),

@@ -28,7 +28,6 @@ use frame_support::{
 use sp_api::mock_impl_runtime_apis;
 use sp_core::{ConstU128, ConstU32, H256, U256};
 use sp_runtime::{
-	generic::BlockId,
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
 };
@@ -108,7 +107,7 @@ impl pallet_timestamp::Config for Test {
 parameter_types! {
 	pub const TellorPalletId: PalletId = PalletId(*b"py/tellr");
 	pub const FeeLocation: Junctions = Junctions::Here;
-	pub const XcmFeesAsset: AssetId = AssetId::Abstract(vec![]);
+	pub const XcmFeesAsset: AssetId = AssetId::Abstract([08;32]);
 }
 impl tellor::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
@@ -150,7 +149,7 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		_interior: impl Into<Junctions>,
 		_dest: impl Into<MultiLocation>,
 		_message: Xcm<()>,
-	) -> Result<(), SendError> {
+	) -> Result<XcmHash, SendError> {
 		unimplemented!("not required for runtime api tests")
 	}
 }
@@ -368,7 +367,7 @@ mock_impl_runtime_apis! {
 	}
 }
 
-const BLOCKID: BlockId<Block> = BlockId::Number(0);
+const BLOCKID: H256 = H256::zero();
 
 // Tests simply ensure that required API functions are accessible to a runtime
 
@@ -378,80 +377,77 @@ mod autopay {
 	#[test]
 	fn get_current_feeds() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(
-				Test.get_current_feeds(&BLOCKID, QueryId::random()).unwrap(),
-				Vec::default()
-			);
+			assert_eq!(Test.get_current_feeds(BLOCKID, QueryId::random()).unwrap(), Vec::default());
 		});
 	}
 
 	#[test]
 	fn get_current_tip() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_current_tip(&BLOCKID, QueryId::random()).unwrap(), 0);
+			assert_eq!(Test.get_current_tip(BLOCKID, QueryId::random()).unwrap(), 0);
 		});
 	}
 
 	#[test]
 	fn get_data_feed() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_data_feed(&BLOCKID, FeedId::random()).unwrap(), None);
+			assert_eq!(Test.get_data_feed(BLOCKID, FeedId::random()).unwrap(), None);
 		});
 	}
 
 	#[test]
 	fn get_funded_feed_details() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_funded_feed_details(&BLOCKID).unwrap(), Vec::default());
+			assert_eq!(Test.get_funded_feed_details(BLOCKID).unwrap(), Vec::default());
 		});
 	}
 
 	#[test]
 	fn get_funded_feeds() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_funded_feeds(&BLOCKID).unwrap(), Vec::default());
+			assert_eq!(Test.get_funded_feeds(BLOCKID).unwrap(), Vec::default());
 		});
 	}
 
 	#[test]
 	fn get_funded_query_ids() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_funded_query_ids(&BLOCKID).unwrap(), Vec::default());
+			assert_eq!(Test.get_funded_query_ids(BLOCKID).unwrap(), Vec::default());
 		});
 	}
 
 	#[test]
 	fn get_funded_single_tips_info() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_funded_single_tips_info(&BLOCKID).unwrap(), Vec::default());
+			assert_eq!(Test.get_funded_single_tips_info(BLOCKID).unwrap(), Vec::default());
 		});
 	}
 
 	#[test]
 	fn get_past_tip_count() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_past_tip_count(&BLOCKID, QueryId::random()).unwrap(), 0);
+			assert_eq!(Test.get_past_tip_count(BLOCKID, QueryId::random()).unwrap(), 0);
 		});
 	}
 
 	#[test]
 	fn get_past_tips() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_past_tips(&BLOCKID, QueryId::random()).unwrap(), Vec::default());
+			assert_eq!(Test.get_past_tips(BLOCKID, QueryId::random()).unwrap(), Vec::default());
 		});
 	}
 
 	#[test]
 	fn get_past_tip_by_index() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_past_tip_by_index(&BLOCKID, QueryId::random(), 0).unwrap(), None);
+			assert_eq!(Test.get_past_tip_by_index(BLOCKID, QueryId::random(), 0).unwrap(), None);
 		});
 	}
 
 	#[test]
 	fn get_query_id_from_feed_id() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_query_id_from_feed_id(&BLOCKID, FeedId::random()).unwrap(), None);
+			assert_eq!(Test.get_query_id_from_feed_id(BLOCKID, FeedId::random()).unwrap(), None);
 		});
 	}
 
@@ -459,7 +455,7 @@ mod autopay {
 	fn get_reward_amount() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_reward_amount(&BLOCKID, FeedId::random(), QueryId::random(), vec![])
+				Test.get_reward_amount(BLOCKID, FeedId::random(), QueryId::random(), vec![])
 					.unwrap(),
 				0
 			);
@@ -471,7 +467,7 @@ mod autopay {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
 				Test.get_reward_claimed_status(
-					&BLOCKID,
+					BLOCKID,
 					FeedId::random(),
 					QueryId::random(),
 					Time::get()
@@ -487,7 +483,7 @@ mod autopay {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
 				Test.get_reward_claim_status_list(
-					&BLOCKID,
+					BLOCKID,
 					FeedId::random(),
 					QueryId::random(),
 					vec![]
@@ -501,7 +497,7 @@ mod autopay {
 	#[test]
 	fn get_tips_by_address() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_tips_by_address(&BLOCKID, AccountId::default()).unwrap(), 0);
+			assert_eq!(Test.get_tips_by_address(BLOCKID, AccountId::default()).unwrap(), 0);
 		});
 	}
 }
@@ -513,7 +509,7 @@ mod oracle {
 	fn get_block_number_by_timestamp() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_block_number_by_timestamp(&BLOCKID, QueryId::random(), 0).unwrap(),
+				Test.get_block_number_by_timestamp(BLOCKID, QueryId::random(), 0).unwrap(),
 				None
 			);
 		});
@@ -522,14 +518,14 @@ mod oracle {
 	#[test]
 	fn get_current_value() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_current_value(&BLOCKID, QueryId::random()).unwrap(), None);
+			assert_eq!(Test.get_current_value(BLOCKID, QueryId::random()).unwrap(), None);
 		});
 	}
 
 	#[test]
 	fn get_data_before() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_data_before(&BLOCKID, QueryId::random(), 0).unwrap(), None);
+			assert_eq!(Test.get_data_before(BLOCKID, QueryId::random(), 0).unwrap(), None);
 		});
 	}
 
@@ -537,7 +533,7 @@ mod oracle {
 	fn get_new_value_count_by_query_id() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_new_value_count_by_query_id(&BLOCKID, QueryId::random()).unwrap(),
+				Test.get_new_value_count_by_query_id(BLOCKID, QueryId::random()).unwrap(),
 				0
 			);
 		});
@@ -546,7 +542,7 @@ mod oracle {
 	#[test]
 	fn get_report_details() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_report_details(&BLOCKID, QueryId::random(), 0).unwrap(), None);
+			assert_eq!(Test.get_report_details(BLOCKID, QueryId::random(), 0).unwrap(), None);
 		});
 	}
 
@@ -554,7 +550,7 @@ mod oracle {
 	fn get_reporter_by_timestamp() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_reporter_by_timestamp(&BLOCKID, QueryId::random(), 0).unwrap(),
+				Test.get_reporter_by_timestamp(BLOCKID, QueryId::random(), 0).unwrap(),
 				None
 			);
 		});
@@ -564,7 +560,7 @@ mod oracle {
 	fn get_reporter_last_timestamp() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_reporter_last_timestamp(&BLOCKID, AccountId::default()).unwrap(),
+				Test.get_reporter_last_timestamp(BLOCKID, AccountId::default()).unwrap(),
 				None
 			);
 		});
@@ -573,7 +569,7 @@ mod oracle {
 	#[test]
 	fn get_reporting_lock() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_reporting_lock(&BLOCKID).unwrap(), 43200);
+			assert_eq!(Test.get_reporting_lock(BLOCKID).unwrap(), 43200);
 		});
 	}
 
@@ -581,7 +577,7 @@ mod oracle {
 	fn get_reports_submitted_by_address() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_reports_submitted_by_address(&BLOCKID, AccountId::default()).unwrap(),
+				Test.get_reports_submitted_by_address(BLOCKID, AccountId::default()).unwrap(),
 				0
 			);
 		});
@@ -592,7 +588,7 @@ mod oracle {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
 				Test.get_reports_submitted_by_address_and_query_id(
-					&BLOCKID,
+					BLOCKID,
 					AccountId::default(),
 					QueryId::random()
 				)
@@ -605,21 +601,21 @@ mod oracle {
 	#[test]
 	fn get_stake_amount() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_stake_amount(&BLOCKID).unwrap(), U256::zero());
+			assert_eq!(Test.get_stake_amount(BLOCKID).unwrap(), U256::zero());
 		});
 	}
 
 	#[test]
 	fn get_staker_info() {
 		new_test_ext().execute_with(|| {
-			assert!(Test.get_staker_info(&BLOCKID, 0).unwrap().is_none());
+			assert!(Test.get_staker_info(BLOCKID, 0).unwrap().is_none());
 		});
 	}
 
 	#[test]
 	fn get_time_of_last_new_value() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_time_of_last_new_value(&BLOCKID).unwrap(), None);
+			assert_eq!(Test.get_time_of_last_new_value(BLOCKID).unwrap(), None);
 		});
 	}
 
@@ -627,8 +623,7 @@ mod oracle {
 	fn get_timestamp_by_query_id_and_index() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_timestamp_by_query_id_and_index(&BLOCKID, QueryId::random(), 0)
-					.unwrap(),
+				Test.get_timestamp_by_query_id_and_index(BLOCKID, QueryId::random(), 0).unwrap(),
 				None
 			);
 		});
@@ -638,7 +633,7 @@ mod oracle {
 	fn get_index_for_data_before() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_index_for_data_before(&BLOCKID, QueryId::random(), 0).unwrap(),
+				Test.get_index_for_data_before(BLOCKID, QueryId::random(), 0).unwrap(),
 				None
 			);
 		});
@@ -648,7 +643,7 @@ mod oracle {
 	fn get_timestamp_index_by_timestamp() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_timestamp_index_by_timestamp(&BLOCKID, QueryId::random(), 0).unwrap(),
+				Test.get_timestamp_index_by_timestamp(BLOCKID, QueryId::random(), 0).unwrap(),
 				None
 			);
 		});
@@ -657,28 +652,28 @@ mod oracle {
 	#[test]
 	fn get_total_stake_amount() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_total_stake_amount(&BLOCKID).unwrap(), U256::zero());
+			assert_eq!(Test.get_total_stake_amount(BLOCKID).unwrap(), U256::zero());
 		});
 	}
 
 	#[test]
 	fn get_total_stakers() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_total_stakers(&BLOCKID).unwrap(), 0);
+			assert_eq!(Test.get_total_stakers(BLOCKID).unwrap(), 0);
 		});
 	}
 
 	#[test]
 	fn is_in_dispute() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.is_in_dispute(&BLOCKID, QueryId::random(), 0).unwrap(), false);
+			assert_eq!(Test.is_in_dispute(BLOCKID, QueryId::random(), 0).unwrap(), false);
 		});
 	}
 
 	#[test]
 	fn retrieve_data() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.retrieve_data(&BLOCKID, QueryId::random(), 0).unwrap(), None);
+			assert_eq!(Test.retrieve_data(BLOCKID, QueryId::random(), 0).unwrap(), None);
 		});
 	}
 }
@@ -690,7 +685,7 @@ mod governance {
 	fn did_vote() {
 		new_test_ext().execute_with(|| {
 			assert!(!Test
-				.did_vote(&BLOCKID, DisputeId::default(), 0, AccountId::default())
+				.did_vote(BLOCKID, DisputeId::default(), 0, AccountId::default())
 				.unwrap());
 		});
 	}
@@ -698,7 +693,7 @@ mod governance {
 	#[test]
 	fn get_dispute_fee() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_dispute_fee(&BLOCKID).unwrap(), 0);
+			assert_eq!(Test.get_dispute_fee(BLOCKID).unwrap(), 0);
 		});
 	}
 
@@ -706,7 +701,7 @@ mod governance {
 	fn get_disputes_by_reporter() {
 		new_test_ext().execute_with(|| {
 			assert_eq!(
-				Test.get_disputes_by_reporter(&BLOCKID, AccountId::default()).unwrap(),
+				Test.get_disputes_by_reporter(BLOCKID, AccountId::default()).unwrap(),
 				vec![]
 			);
 		});
@@ -715,42 +710,42 @@ mod governance {
 	#[test]
 	fn get_dispute_info() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_dispute_info(&BLOCKID, DisputeId::default()).unwrap(), None);
+			assert_eq!(Test.get_dispute_info(BLOCKID, DisputeId::default()).unwrap(), None);
 		});
 	}
 
 	#[test]
 	fn get_open_disputes_on_id() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_open_disputes_on_id(&BLOCKID, H256::random()).unwrap(), 0);
+			assert_eq!(Test.get_open_disputes_on_id(BLOCKID, H256::random()).unwrap(), 0);
 		});
 	}
 
 	#[test]
 	fn get_vote_count() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_vote_count(&BLOCKID).unwrap(), 0);
+			assert_eq!(Test.get_vote_count(BLOCKID).unwrap(), 0);
 		});
 	}
 
 	#[test]
 	fn get_vote_info() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_vote_info(&BLOCKID, DisputeId::default(), 0).unwrap(), None);
+			assert_eq!(Test.get_vote_info(BLOCKID, DisputeId::default(), 0).unwrap(), None);
 		});
 	}
 
 	#[test]
 	fn get_vote_rounds() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_vote_rounds(&BLOCKID, H256::random()).unwrap(), 0);
+			assert_eq!(Test.get_vote_rounds(BLOCKID, H256::random()).unwrap(), 0);
 		});
 	}
 
 	#[test]
 	fn get_vote_tally_by_address() {
 		new_test_ext().execute_with(|| {
-			assert_eq!(Test.get_vote_tally_by_address(&BLOCKID, 0).unwrap(), 0);
+			assert_eq!(Test.get_vote_tally_by_address(BLOCKID, 0).unwrap(), 0);
 		});
 	}
 }

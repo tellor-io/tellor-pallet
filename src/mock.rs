@@ -21,7 +21,7 @@ use crate::{
 use frame_support::{
 	assert_ok, log, parameter_types,
 	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},
-	PalletId,
+	Hashable, PalletId,
 };
 use frame_system as system;
 use once_cell::sync::Lazy;
@@ -171,18 +171,22 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		interior: impl Into<Junctions>,
 		dest: impl Into<MultiLocation>,
 		mut message: Xcm<()>,
-	) -> Result<(), SendError> {
-		// From https://github.com/paritytech/polkadot/blob/645723987cf9662244be8faf4e9b63e8b9a1b3a3/xcm/pallet-xcm/src/lib.rs#L1085-L1090
+	) -> Result<XcmHash, SendError> {
+		// From https://github.com/paritytech/polkadot/blob/1203b2519fed1727256556fb879c6c03c27a830d/xcm/pallet-xcm/src/lib.rs#L1450
 		let interior = interior.into();
 		let dest = dest.into();
-		if interior != Junctions::Here {
-			message.0.insert(0, DescendOrigin(interior))
+		let _maybe_fee_payer: Option<MultiLocation> = if interior != Junctions::Here {
+			message.0.insert(0, DescendOrigin(interior));
+			Some(interior.into())
+		} else {
+			None
 		};
-		log::trace!(target: "xcm::send_xcm", "dest: {:?}, message: {:?}", &dest, &message);
+		log::debug!(target: "xcm::send_xcm", "dest: {:?}, message: {:?}", &dest, &message);
 
 		// From https://github.com/paritytech/polkadot/blob/645723987cf9662244be8faf4e9b63e8b9a1b3a3/xcm/pallet-xcm/src/mock.rs#L154
+		let xcm_hash = message.twox_256();
 		SENT_XCM.with(|q| q.borrow_mut().push((dest.into(), message)));
-		Ok(())
+		Ok(xcm_hash)
 	}
 }
 

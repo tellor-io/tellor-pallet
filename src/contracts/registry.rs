@@ -46,7 +46,7 @@ pub(crate) fn register(
 }
 
 fn encode_junction(junction: Junction) -> Vec<u8> {
-	// Based on https://github.com/PureStake/moonbeam/blob/7f85ea4d5f6feb9e1f37355c8269ffebc533dd51/precompiles/utils/src/data/xcm.rs#L173
+	// Based on https://github.com/PureStake/moonbeam/blob/v0.31.1/precompiles/utils/src/data/xcm.rs#L262
 	match junction {
 		Junction::Parachain(para_id) => {
 			let mut encoded = vec![0];
@@ -81,35 +81,60 @@ fn encode_junction(junction: Junction) -> Vec<u8> {
 			encoded.extend(i.to_be_bytes());
 			encoded
 		},
-		Junction::GeneralKey(key) => {
+		Junction::GeneralKey { length, data } => {
 			let mut encoded = vec![6];
-			encoded.extend(key.into_inner());
+			encoded.push(length);
+			encoded.extend(data);
 			encoded
 		},
 		Junction::OnlyChild => vec![7],
+		Junction::GlobalConsensus(network_id) => {
+			let mut encoded = vec![9];
+			encoded.extend(encode_network_id(Some(network_id)));
+			encoded
+		},
 		_ => unreachable!("Junction::Plurality not supported yet"),
 	}
 }
 
-fn encode_network_id(network_id: NetworkId) -> Vec<u8> {
+fn encode_network_id(network_id: Option<NetworkId>) -> Vec<u8> {
+	// Based on https://github.com/PureStake/moonbeam/blob/b71106f45100eb70bb21404cb48db1e73ed448d7/precompiles/utils/src/data/xcm.rs#L44
 	match network_id {
-		NetworkId::Any => vec![0],
-		NetworkId::Named(name) => {
-			let mut encoded = vec![1];
-			encoded.append(name.into_inner().as_mut());
-			encoded
+		None => vec![0],
+		Some(network_id) => match network_id {
+			NetworkId::ByGenesis(id) => {
+				let mut encoded = vec![1];
+				encoded.extend(id);
+				encoded
+			},
+			NetworkId::Polkadot => vec![2, 2],
+			NetworkId::Kusama => vec![3, 3],
+			NetworkId::ByFork { block_number, block_hash } => {
+				let mut encoded = vec![4, 1];
+				encoded.extend(block_number.to_be_bytes());
+				encoded.extend(block_hash);
+				encoded
+			},
+			NetworkId::Westend => vec![5, 4],
+			NetworkId::Rococo => vec![6, 5],
+			NetworkId::Wococo => vec![7, 6],
+			NetworkId::Ethereum { chain_id } => {
+				let mut encoded = vec![8, 7];
+				encoded.extend(chain_id.to_be_bytes());
+				encoded
+			},
+			NetworkId::BitcoinCore => vec![9, 8],
+			NetworkId::BitcoinCash => vec![10, 9],
 		},
-		NetworkId::Polkadot => vec![2],
-		NetworkId::Kusama => vec![3],
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::super::tests::*;
-	use crate::contracts::registry::encode_junction;
+	use crate::contracts::registry::{encode_junction, encode_network_id};
 	use ethabi::{Function, ParamType, Token};
-	use sp_core::{bounded::WeakBoundedVec, bytes::from_hex, H160, H256};
+	use sp_core::{bytes::from_hex, H160, H256};
 	use xcm::latest::prelude::*;
 
 	#[allow(deprecated)]
@@ -173,15 +198,15 @@ mod tests {
 		let x: Vec<(Junction, Vec<u8>)> = vec![
 			(Parachain(2023), from_hex("0x00000007E7").unwrap()),
 			(
-				AccountId32 { network: Any, id },
+				AccountId32 { network: None, id },
 				from_hex(&format!("0x01{}00", hex::encode(id))).unwrap(),
 			),
 			(
-				AccountIndex64 { network: Any, index: u64::MAX },
+				AccountIndex64 { network: None, index: u64::MAX },
 				from_hex(&format!("0x02{}00", hex::encode(u64::MAX.to_be_bytes()))).unwrap(),
 			),
 			(
-				AccountKey20 { network: Any, key },
+				AccountKey20 { network: None, key },
 				from_hex(&format!("0x03{}00", hex::encode(key))).unwrap(),
 			),
 			(PalletInstance(3), from_hex("0x0403").unwrap()),
@@ -190,14 +215,33 @@ mod tests {
 				from_hex(&format!("0x05{}", hex::encode(u128::MAX.to_be_bytes()))).unwrap(),
 			),
 			(
-				GeneralKey(WeakBoundedVec::try_from(key.to_vec()).unwrap()),
-				from_hex(&format!("0x06{}", hex::encode(key))).unwrap(),
+				GeneralKey { length: id.len() as u8, data: id },
+				from_hex(&format!(
+					"0x06{}{}",
+					hex::encode((id.len() as u8).to_be_bytes()),
+					hex::encode(id)
+				))
+				.unwrap(),
 			),
 			(OnlyChild, from_hex("0x07").unwrap()),
+			(
+				GlobalConsensus(Polkadot),
+				from_hex(&format!("0x09{}", hex::encode(encode_network_id(Some(Polkadot)))))
+					.unwrap(),
+			),
 		];
 
 		for (source, expected) in x {
-			assert_eq!(super::encode_junction(source), expected);
+			assert_eq!(encode_junction(source), expected);
+		}
+	}
+
+	#[test]
+	fn encodes_network_id() {
+		let x: Vec<(Option<NetworkId>, Vec<u8>)> = vec![(None, from_hex("0x0").unwrap())];
+
+		for (source, expected) in x {
+			assert_eq!(encode_network_id(source), expected);
 		}
 	}
 }

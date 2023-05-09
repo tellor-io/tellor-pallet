@@ -89,7 +89,6 @@ pub mod pallet {
 	use sp_std::{prelude::*, result};
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -117,7 +116,7 @@ pub mod pallet {
 		type Fee: Get<u16>;
 
 		/// The (interior) fee location to be used by controller contracts for XCM execution on this parachain.
-		type FeeLocation: Get<Junctions>;
+		type FeeLocation: Get<InteriorMultiLocation>;
 
 		/// The location of the governance controller contract.
 		#[pallet::constant]
@@ -576,6 +575,7 @@ pub mod pallet {
 		VotingPeriodActive,
 
 		// XCM
+		FeesNotMet,
 		JunctionOverflow,
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,

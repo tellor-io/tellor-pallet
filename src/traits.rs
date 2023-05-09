@@ -24,7 +24,7 @@ pub trait SendXcm {
 		interior: impl Into<Junctions>,
 		dest: impl Into<MultiLocation>,
 		message: Xcm<()>,
-	) -> Result<(), SendError>;
+	) -> Result<XcmHash, SendError>;
 }
 
 /// This trait helps pallets read data from Tellor

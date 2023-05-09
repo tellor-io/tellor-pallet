@@ -42,7 +42,8 @@ impl<T: Config> Pallet<T> {
 		let interior = X1(PalletInstance(Pallet::<T>::index() as u8));
 		let dest = MultiLocation { parents: 1, interior: X1(Parachain(para_id)) };
 		T::Xcm::send_xcm(interior, dest, message).map_err(|e| match e {
-			SendError::CannotReachDestination(..) => Error::<T>::Unreachable,
+			SendError::Fees => Error::<T>::FeesNotMet,
+			SendError::NotApplicable => Error::<T>::Unreachable,
 			_ => Error::<T>::SendFailure,
 		})?;
 		Self::deposit_event(event);
@@ -99,18 +100,27 @@ where
 pub struct ContractLocation {
 	pub(crate) para_id: ParaId,
 	pub(crate) address: [u8; 20],
+	pub(crate) network: Option<NetworkId>,
 }
 impl From<(ParaId, [u8; 20])> for ContractLocation {
 	fn from(value: (ParaId, [u8; 20])) -> Self {
-		ContractLocation { para_id: value.0, address: value.1 }
+		ContractLocation { para_id: value.0, address: value.1, network: None }
+	}
+}
+impl From<(ParaId, [u8; 20], NetworkId)> for ContractLocation {
+	fn from(value: (ParaId, [u8; 20], NetworkId)) -> Self {
+		ContractLocation { para_id: value.0, address: value.1, network: Some(value.2) }
 	}
 }
 
-impl Into<MultiLocation> for ContractLocation {
-	fn into(self) -> MultiLocation {
+impl From<ContractLocation> for MultiLocation {
+	fn from(value: ContractLocation) -> Self {
 		MultiLocation {
 			parents: 1,
-			interior: X2(Parachain(self.para_id), AccountKey20 { network: Any, key: self.address }),
+			interior: X2(
+				Parachain(value.para_id),
+				AccountKey20 { network: value.network, key: value.address },
+			),
 		}
 	}
 }
@@ -132,10 +142,10 @@ pub(crate) fn transact<T: Config>(call: Vec<u8>, gas_limit: u64) -> Xcm<()> {
 	// Construct xcm message
 	Xcm(vec![
 		WithdrawAsset(asset.clone().into()),
-		BuyExecution { fees: asset, weight_limit: Limited(total_weight.ref_time()) },
+		BuyExecution { fees: asset, weight_limit: Limited(total_weight) },
 		Transact {
-			origin_type: OriginKind::SovereignAccount,
-			require_weight_at_most: transact_extrinsic_weight.ref_time(),
+			origin_kind: OriginKind::SovereignAccount,
+			require_weight_at_most: transact_extrinsic_weight,
 			call: call.into(),
 		},
 	])
@@ -145,7 +155,7 @@ pub(crate) fn gas_to_weight(gas_limit: u64) -> Weight {
 	// https://github.com/PureStake/moonbeam/blob/master/runtime/moonbase/src/lib.rs#L371-L375
 	const GAS_PER_SECOND: u64 = 40_000_000;
 	const WEIGHT_PER_GAS: u64 = WEIGHT_REF_TIME_PER_SECOND / GAS_PER_SECOND;
-	Weight::from_ref_time(gas_limit.saturating_mul(WEIGHT_PER_GAS))
+	Weight::from_parts(gas_limit.saturating_mul(WEIGHT_PER_GAS), 0)
 }
 
 /// The weight of a XCM message.
@@ -153,11 +163,11 @@ pub(crate) fn weigh() -> Weight {
 	// Standard database weight
 	let db_weight = frame_support::weights::constants::RocksDbWeight::get();
 	// Moonbase Alpha benchmarked instruction weights
-	const DESCEND_ORIGIN: Weight = Weight::from_ref_time(10_084_000); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L169
-	const WITHDRAW_ASSET: Weight = Weight::from_ref_time(200_000_000); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_fungible.rs#L28
+	const DESCEND_ORIGIN: Weight = Weight::from_parts(10_084_000, 0); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L169
+	const WITHDRAW_ASSET: Weight = Weight::from_parts(200_000_000, 0); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_fungible.rs#L28
 	let buy_execution: Weight =
-		Weight::from_ref_time(158_702_000).saturating_add(db_weight.reads(4)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L136
-	let transact: Weight = Weight::from_ref_time(34_785_000).saturating_add(db_weight.reads(1)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L148
+		Weight::from_parts(158_702_000, 0).saturating_add(db_weight.reads(4)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L136
+	let transact: Weight = Weight::from_parts(34_785_000, 0).saturating_add(db_weight.reads(1)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L148
 
 	// Calculate combined weight of xcm instructions
 	DESCEND_ORIGIN
@@ -179,13 +189,13 @@ impl<T: Config> FeeLocation<T> {
 	}
 
 	fn convert(
-		interior: Junctions,
+		interior: InteriorMultiLocation,
 		dest: &MultiLocation,
 		para_id: ParaId,
 	) -> Result<MultiLocation, DispatchError> {
-		let mut interior = interior.into();
+		let mut interior: MultiLocation = interior.into();
 		interior
-			.reanchor(dest, &MultiLocation::new(1, X1(Parachain(para_id))))
+			.reanchor(dest, Parachain(para_id).into())
 			.map_err(|_| Error::<T>::JunctionOverflow)?;
 		Ok(interior)
 	}
@@ -208,7 +218,17 @@ mod tests {
 	fn contract_location_from_tuple() {
 		let address = Address::random().0;
 		let location: ContractLocation = (PARA_ID, address).into();
-		assert_eq!(location, ContractLocation { para_id: PARA_ID, address });
+		assert_eq!(location, ContractLocation { para_id: PARA_ID, address, network: None });
+	}
+
+	#[test]
+	fn contract_location_from_tuple_with_network() {
+		let address = Address::random().0;
+		let location: ContractLocation = (PARA_ID, address, Polkadot).into();
+		assert_eq!(
+			location,
+			ContractLocation { para_id: PARA_ID, address, network: Some(Polkadot) }
+		);
 	}
 
 	#[test]
@@ -261,9 +281,9 @@ mod tests {
 	fn gas_to_weight() {
 		// https://docs.moonbeam.network/builders/interoperability/xcm/remote-evm-calls/#differences-regular-remote-evm
 		const WEIGHT_PER_GAS: u64 = 25_000;
-		assert_eq!(super::gas_to_weight(1), Weight::from_ref_time(WEIGHT_PER_GAS));
+		assert_eq!(super::gas_to_weight(1), Weight::from_parts(WEIGHT_PER_GAS, 0));
 		const MAX_GAS_LIMIT: u64 = 720_000;
-		assert_eq!(super::gas_to_weight(MAX_GAS_LIMIT), Weight::from_ref_time(18_000_000_000));
+		assert_eq!(super::gas_to_weight(MAX_GAS_LIMIT), Weight::from_parts(18_000_000_000, 0));
 	}
 
 	#[test]
@@ -280,10 +300,10 @@ mod tests {
 			super::transact::<Test>(vec![], GAS_LIMIT),
 			Xcm(vec![
 				WithdrawAsset(fees.clone().into()),
-				BuyExecution { fees, weight_limit: Limited(total_weight.ref_time()) },
+				BuyExecution { fees, weight_limit: Limited(total_weight) },
 				Transact {
-					origin_type: OriginKind::SovereignAccount,
-					require_weight_at_most: xt_weight.ref_time(),
+					origin_kind: OriginKind::SovereignAccount,
+					require_weight_at_most: xt_weight,
 					call: vec![].into(),
 				},
 			]),
@@ -295,11 +315,12 @@ mod tests {
 		let read = frame_support::weights::constants::RocksDbWeight::get().read;
 		assert_eq!(
 			super::weigh(),
-			Weight::from_ref_time(
+			Weight::from_parts(
 				10_084_000 + // DescendOrigin
 					200_000_000 + // WithdrawAsset
 					(158_702_000 + read * 4) + // BuyExecution
-					(34_785_000 + 1 * read) // Transact
+					(34_785_000 + 1 * read), // Transact
+				0
 			)
 		);
 	}
@@ -307,6 +328,6 @@ mod tests {
 	#[test]
 	fn weight_to_fee() {
 		const WEIGHT_FEE: u128 = 50_000;
-		assert_eq!(super::weight_to_fee::<Test>(Weight::from_ref_time(1)), WEIGHT_FEE);
+		assert_eq!(super::weight_to_fee::<Test>(Weight::from_parts(1, 0)), WEIGHT_FEE);
 	}
 }
