@@ -28,6 +28,7 @@ use sp_core::{bounded::BoundedVec, bounded_vec, keccak_256};
 use sp_runtime::traits::{BadOrigin, Convert};
 
 type Fee = <Test as Config>::Fee;
+type Tips = crate::pallet::Tips<Test>;
 
 #[test]
 fn claim_tip_ensures() {
@@ -1223,6 +1224,9 @@ fn claim_onetime_tip() {
 				bounded_vec![timestamp]
 			));
 			assert_eq!(Tellor::get_current_tip(query_id), 0, "tip should be correct");
+			for tip in Tips::get(query_id).unwrap() {
+				assert_eq!(tip.amount, 0);
+			}
 			let final_balance = Balances::balance(&reporter);
 			assert_eq!(final_balance - start_balance, token(99), "balance should change correctly")
 		});

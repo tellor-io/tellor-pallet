@@ -802,7 +802,6 @@ impl<T: Config> Pallet<T> {
 					ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
 					ensure!(min_tip.amount > Zero::zero(), Error::<T>::TipAlreadyClaimed);
 
-					// todo: add test to ensure storage updated accordingly
 					let mut tip_amount = min_tip.amount;
 					min_tip.amount = Zero::zero();
 					let min_backup = min;
