@@ -131,7 +131,6 @@ pub trait UsingTellor<AccountId> {
 /// Helper trait for benchmarks
 #[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper<AccountId> {
-
 	/// Set the current time.
 	/// # Arguments
 	/// * `time_in_secs` - Time in seconds

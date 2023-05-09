@@ -15,7 +15,9 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate as tellor;
-use crate::{constants::HOURS, types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking};
+use crate::{
+	constants::HOURS, types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
+};
 use frame_support::{
 	assert_ok, log, parameter_types,
 	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},

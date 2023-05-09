@@ -54,8 +54,8 @@ mod contracts;
 mod impls;
 pub mod traits;
 mod types;
-pub mod xcm;
 pub mod weights;
+pub mod xcm;
 pub use weights::*;
 
 #[allow(clippy::too_many_arguments)]
@@ -225,7 +225,6 @@ pub mod pallet {
 
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
-
 	}
 
 	// AutoPay
@@ -628,7 +627,6 @@ pub mod pallet {
 			// Check for any pending votes due to be sent to governance controller contract for tallying
 			let _ = <Pallet<T>>::do_send_votes(timestamp, 3);
 
-			// todo: calculate actual weight
 			<T as Config>::WeightInfo::on_initialize()
 		}
 	}
@@ -728,7 +726,7 @@ pub mod pallet {
 										.ok_or(ArithmeticError::Overflow)?,
 								),
 							);
-							<QueryIdsWithFundingIndex<T>>::remove(query_id.clone());
+							<QueryIdsWithFundingIndex<T>>::remove(query_id);
 							query_ids_with_funding.pop();
 							Ok(())
 						},
@@ -740,7 +738,11 @@ pub mod pallet {
 				amount: cumulative_reward,
 				reporter,
 			});
-			Ok(Some(T::WeightInfo::claim_onetime_tip(Self::get_new_value_count_by_query_id(query_id), timestamps.len() as u32)).into())
+			Ok(Some(T::WeightInfo::claim_onetime_tip(
+				Self::get_new_value_count_by_query_id(query_id),
+				timestamps.len() as u32,
+			))
+			.into())
 		}
 
 		/// Allows Tellor reporters to claim their tips in batches.
@@ -1013,7 +1015,11 @@ pub mod pallet {
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
 			let query_data_len = query_data.len();
 			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
-			Ok(Some(T::WeightInfo::tip(Self::get_new_value_count_by_query_id(query_id), query_data_len as u32)).into())
+			Ok(Some(T::WeightInfo::tip(
+				Self::get_new_value_count_by_query_id(query_id),
+				query_data_len as u32,
+			))
+			.into())
 		}
 
 		/// Funds the staking account with staking rewards.
@@ -1342,7 +1348,11 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::send_votes(u8::MAX.into()))]
 		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
-			Ok(Some(T::WeightInfo::vote_on_multiple_disputes(Self::do_send_votes(Self::now(), max_votes)?)).into())
+			Ok(Some(T::WeightInfo::vote_on_multiple_disputes(Self::do_send_votes(
+				Self::now(),
+				max_votes,
+			)?))
+			.into())
 		}
 
 		/// Reports a stake deposited by a reporter.
@@ -1625,11 +1635,15 @@ pub mod pallet {
 		/// - `dispute_id`: The identifier of the dispute.
 		#[pallet::call_index(18)]
 		#[pallet::weight(<T as Config>::WeightInfo::report_vote_executed(u8::MAX.into()))]
-		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResultWithPostInfo {
+		pub fn report_vote_executed(
+			origin: OriginFor<T>,
+			dispute_id: DisputeId,
+		) -> DispatchResultWithPostInfo {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
 			// execute vote & return consumed weight info
-			Ok(Some(T::WeightInfo::report_vote_executed(Self::execute_vote(dispute_id)? as u32)).into())
+			Ok(Some(T::WeightInfo::report_vote_executed(Self::execute_vote(dispute_id)? as u32))
+				.into())
 		}
 	}
 }

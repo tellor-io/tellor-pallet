@@ -44,7 +44,7 @@ impl<T: Config> Pallet<T> {
 		if !cfg!(feature = "runtime-benchmarks") {
 			T::Xcm::send_xcm(interior, dest, message).map_err(|e| match e {
 				SendError::Fees => Error::<T>::FeesNotMet,
-			SendError::NotApplicable => Error::<T>::Unreachable,
+				SendError::NotApplicable => Error::<T>::Unreachable,
 				_ => Error::<T>::SendFailure,
 			})?;
 		}

@@ -16,23 +16,20 @@
 
 //! Benchmarking setup for tellor
 
-use ethabi::{Bytes, Token, Uint};
 use super::*;
+use ethabi::{Bytes, Token, Uint};
 
 #[allow(unused)]
 use crate::Pallet as Tellor;
-use frame_benchmarking::{benchmarks, account, BenchmarkError};
-use frame_system::{RawOrigin};
-use types::{Address, Timestamp};
-use crate::constants::DECIMALS;
-use crate::types::QueryDataOf;
-use sp_core::{bounded::BoundedVec};
-use crate::traits::BenchmarkHelper;
-use frame_support::traits::OnInitialize;
-use scale_info::prelude::string::String;
+use crate::{constants::DECIMALS, traits::BenchmarkHelper, types::QueryDataOf};
 use codec::alloc::{string::ToString, vec};
-use frame_support::log;
+use frame_benchmarking::{account, benchmarks, BenchmarkError};
+use frame_support::{log, traits::OnInitialize};
+use frame_system::RawOrigin;
+use scale_info::prelude::string::String;
+use sp_core::bounded::BoundedVec;
 use sp_runtime::traits::{Hash, Keccak256};
+use types::{Address, Timestamp};
 
 type RuntimeOrigin<T> = <T as frame_system::Config>::RuntimeOrigin;
 const TRB: u128 = 10u128.pow(DECIMALS);
@@ -72,13 +69,18 @@ fn spot_price(asset: impl Into<String>, currency: impl Into<String>) -> Bytes {
 	])
 }
 
-fn deposit_stake<T: Config>(reporter: AccountIdOf<T>, amount: Tributes, address: Address) -> Result<RuntimeOrigin<T>, BenchmarkError>{
+fn deposit_stake<T: Config>(
+	reporter: AccountIdOf<T>,
+	amount: Tributes,
+	address: Address,
+) -> Result<RuntimeOrigin<T>, BenchmarkError> {
 	match T::StakingOrigin::try_successful_origin() {
 		Ok(origin) => {
 			Tellor::<T>::report_stake_deposited(origin.clone(), reporter, amount, address)
 				.map_err(|_| BenchmarkError::Weightless)?;
 			Ok(origin)
-		} Err(_) => Err(BenchmarkError::Weightless)
+		},
+		Err(_) => Err(BenchmarkError::Weightless),
 	}
 }
 
@@ -105,8 +107,9 @@ fn create_feed<T: Config>(
 		price_threshold,
 		reward_increase_per_second,
 		query_data.clone(),
-		amount
-	).unwrap();
+		amount,
+	)
+	.unwrap();
 	let feed_id = Keccak256::hash(&ethabi::encode(&vec![
 		Token::FixedBytes(query_id.0.into()),
 		Token::Uint(reward.into()),
@@ -116,7 +119,7 @@ fn create_feed<T: Config>(
 		Token::Uint(price_threshold.into()),
 		Token::Uint(reward_increase_per_second.into()),
 	]))
-		.into();
+	.into();
 	feed_id
 }
 
@@ -126,9 +129,8 @@ fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeI
 		Token::FixedBytes(query_id.0.to_vec()),
 		Token::Uint(timestamp.into()),
 	]))
-		.into()
+	.into()
 }
-
 
 benchmarks! {
 
@@ -242,7 +244,7 @@ benchmarks! {
 		let address = Address::zero();
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
-        T::BenchmarkHelper::set_time(HOURS);
+		T::BenchmarkHelper::set_time(HOURS);
 	}: _(RawOrigin::Signed(reporter.clone()), query_id, value, 0, query_data.clone())
 	verify {
 		assert!(<StakerDetails<T>>::get(reporter).is_some());
@@ -413,8 +415,8 @@ benchmarks! {
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 		let address = Address::zero();
-        deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
-        deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
+		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
+		deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(another_reporter.clone(), 1000);
 
 		T::BenchmarkHelper::set_time(HOURS);
@@ -556,7 +558,7 @@ benchmarks! {
 		let reporter = account::<AccountIdOf<T>>("account", 256, SEED);
 		let user = account::<AccountIdOf<T>>("account", 257, SEED);
 		let address = Address::zero();
-        deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
+		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
 		for i in 1..=s {
 			let another_reporter = account::<AccountIdOf<T>>("account", i, SEED);
@@ -596,8 +598,8 @@ benchmarks! {
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 		let address = Address::zero();
 		let mut votes: BoundedVec<(DisputeId, Option<bool>), T::MaxVotes> = BoundedVec::default();
-        deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
-        deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
+		deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
+		deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
 		T::BenchmarkHelper::set_balance(another_reporter.clone(), 1000);
 		for i in 1..=s {
@@ -608,7 +610,7 @@ benchmarks! {
 			let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
 			if i % 2 == 0 {
 				Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, timestamp, None)?;
-                let _ = votes.try_push((dispute_id, Some(true)));
+				let _ = votes.try_push((dispute_id, Some(true)));
 			} else {
 				Tellor::<T>::begin_dispute(RawOrigin::Signed(another_reporter.clone()).into(), query_id, timestamp, None)?;
 				let _ = votes.try_push((dispute_id, Some(false)));
@@ -616,7 +618,7 @@ benchmarks! {
 		}
 	}: _(RawOrigin::Signed(reporter), votes)
 
-    on_initialize {
+	on_initialize {
 		let staking_token_price_query_data: QueryDataOf<T> =
 			spot_price("trb", "gbp").try_into().unwrap();
 		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
