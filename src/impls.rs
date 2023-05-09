@@ -270,7 +270,8 @@ impl<T: Config> Pallet<T> {
 			.filter(|(_, (_, scheduled))| &timestamp >= scheduled)
 			.collect();
 		pending_votes.sort_by_key(|(_, (_, scheduled))| *scheduled);
-		for (dispute_id, (vote_round, _)) in pending_votes.clone().into_iter().take(max.into()) {
+		let pending_votes_len = pending_votes.len();
+		for (dispute_id, (vote_round, _)) in pending_votes.into_iter().take(max.into()) {
 			let _ = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
 				let vote = maybe.as_mut().ok_or(Error::<T>::InvalidVote)?;
 				ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
@@ -307,7 +308,7 @@ impl<T: Config> Pallet<T> {
 				Ok(())
 			});
 		}
-		Ok(pending_votes.len() as u32)
+		Ok(pending_votes_len as u32)
 	}
 
 	// Updates the stake amount after retrieving the latest token price from oracle.

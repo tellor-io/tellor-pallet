@@ -223,6 +223,7 @@ pub mod pallet {
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: BenchmarkHelper<Self::AccountId>;
 
+		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 
 	}
@@ -920,16 +921,17 @@ pub mod pallet {
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);
 			<DataFeeds<T>>::insert(query_id, feed_id, feed);
+			let query_date_len = query_data.len();
 			Self::deposit_event(Event::NewDataFeed {
 				query_id,
 				feed_id,
-				query_data: query_data.clone(),
+				query_data,
 				feed_creator: feed_creator.clone(),
 			});
 			if amount > Zero::zero() {
 				Self::do_fund_feed(feed_creator, feed_id, query_id, amount)?;
 			}
-			Ok(Some(T::WeightInfo::setup_data_feed(query_data.len() as u32)).into())
+			Ok(Some(T::WeightInfo::setup_data_feed(query_date_len as u32)).into())
 		}
 
 		/// Function to run a single tip.
@@ -1009,8 +1011,9 @@ pub mod pallet {
 			}
 			T::Asset::transfer(&tipper, &Self::tips(), amount, true)?;
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
-			Self::deposit_event(Event::TipAdded { query_id, amount, query_data: query_data.clone(), tipper });
-			Ok(Some(T::WeightInfo::tip(Self::get_new_value_count_by_query_id(query_id), query_data.len() as u32)).into())
+			let query_data_len = query_data.len();
+			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
+			Ok(Some(T::WeightInfo::tip(Self::get_new_value_count_by_query_id(query_id), query_data_len as u32)).into())
 		}
 
 		/// Funds the staking account with staking rewards.
@@ -1116,15 +1119,17 @@ pub mod pallet {
 				reports.saturating_inc();
 			});
 			<StakerDetails<T>>::insert(&reporter, staker);
+			let query_data_len = query_data.len();
+			let value_len = value.len();
 			Self::deposit_event(Event::NewReport {
 				query_id,
 				time: timestamp,
-				value: value.clone(),
+				value,
 				nonce,
-				query_data: query_data.clone(),
+				query_data,
 				reporter,
 			});
-			Ok(Some(T::WeightInfo::submit_value(query_data.len() as u32, value.len() as u32)).into())
+			Ok(Some(T::WeightInfo::submit_value(query_data_len as u32, value_len as u32)).into())
 		}
 
 		/// Updates the stake amount after retrieving the latest token price from oracle.
@@ -1316,9 +1321,9 @@ pub mod pallet {
 
 		/// Enables the caller to cast votes for multiple disputes.
 		///
-		/// - `disputes`: The votes for disputes, containing the dispute identifier and whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
+		/// - `votes`: The votes for disputes, containing the dispute identifier and whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
 		#[pallet::call_index(11)]
-		#[pallet::weight(<T as Config>::WeightInfo::vote_on_multiple_disputes(T::MaxDisputeVotes::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::vote_on_multiple_disputes(T::MaxVotes::get()))]
 		pub fn vote_on_multiple_disputes(
 			origin: OriginFor<T>,
 			votes: BoundedVec<(DisputeId, Option<bool>), T::MaxVotes>,
@@ -1337,10 +1342,7 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::send_votes(u8::MAX.into()))]
 		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
-			match Self::do_send_votes(Self::now(), max_votes) {
-				Ok(vote_count) => Ok(Some(T::WeightInfo::vote_on_multiple_disputes(vote_count)).into()),
-				Err(error) => Err(error.into()),
-			}
+			Ok(Some(T::WeightInfo::vote_on_multiple_disputes(Self::do_send_votes(Self::now(), max_votes)?)).into())
 		}
 
 		/// Reports a stake deposited by a reporter.
@@ -1626,11 +1628,8 @@ pub mod pallet {
 		pub fn report_vote_executed(origin: OriginFor<T>, dispute_id: DisputeId) -> DispatchResultWithPostInfo {
 			// ensure origin is governance controller contract
 			T::GovernanceOrigin::ensure_origin(origin)?;
-			// execute vote
-			match Self::execute_vote(dispute_id) {
-				Ok(vote_round) => Ok(Some(T::WeightInfo::report_vote_executed(vote_round as u32)).into()),
-				Err(error) => Err(error.into()),
-			}
+			// execute vote & return consumed weight info
+			Ok(Some(T::WeightInfo::report_vote_executed(Self::execute_vote(dispute_id)? as u32)).into())
 		}
 	}
 }

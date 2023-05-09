@@ -589,13 +589,13 @@ benchmarks! {
 
 	vote_on_multiple_disputes {
 		// Maximum votes for disputes are used in order to measure the maximum weight
-		let s in 2..T::MaxDisputeVotes::get();
+		let s in 2..T::MaxVotes::get();
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 		let address = Address::zero();
-		let mut votes: BoundedVec<(DisputeId, Option<bool>), T::MaxDisputeVotes> = BoundedVec::default();
+		let mut votes: BoundedVec<(DisputeId, Option<bool>), T::MaxVotes> = BoundedVec::default();
         deposit_stake::<T>(reporter.clone(), trb(1200), address)?;
         deposit_stake::<T>(another_reporter.clone(), trb(1200), address)?;
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1000);
