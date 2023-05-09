@@ -56,6 +56,7 @@ pub mod traits;
 mod types;
 pub mod xcm;
 
+#[allow(clippy::too_many_arguments)]
 #[frame_support::pallet]
 pub mod pallet {
 	use super::{
