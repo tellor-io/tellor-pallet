@@ -1,0 +1,4 @@
+/.github/
+**/target/
+**/Cargo.lock
+**/*.rs.bk

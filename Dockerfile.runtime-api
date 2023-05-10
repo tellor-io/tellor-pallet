@@ -1,0 +1,8 @@
+FROM rust:slim as test
+RUN cargo install cargo-nextest --locked && cargo install cargo-cache && cargo cache -r all
+
+FROM test
+WORKDIR /pallet
+COPY . .
+RUN cd runtime-api && cargo nextest run --all --release
+ENTRYPOINT cd runtime-api && cargo nextest run --all --release
