@@ -14,7 +14,7 @@ Reporters are required to first stake Tellor Tributes (TRB) into the Tellor para
 Anyone can then dispute a reported value, provided they lock a dispute fee.
 Votes are collated and sent to the Tellor parachain governance contract for tallying and execution.
 A successful dispute results in a disputed reporter being slashed and the slash amount being awarded to the dispute initiator.
-The dispute fee is awarded to the disputed reporter if the dispute is unsuccessful.
+The dispute fee is awarded to the disputed reporter if the dispute is unsuccessful, but given back to initiator if tallied and executed as an invalid dispute.
 
 ### Terminology
 - Data Feed: a request for recurring reports to the oracle.
@@ -37,7 +37,7 @@ The dispute fee is awarded to the disputed reporter if the dispute is unsuccessf
 - `add_staking_rewards` - Funds the pallet with staking rewards, which can be used to incentivize oracle usage.
 - `begin_dispute` - Initialises a dispute/vote in the system. Requires a dispute fee to be paid.
 - `fund_feed` - Allows a data feed to be funded with tokens.
-- `send_votes` - Sends any dispute votes due to be sent to the governance controller contract for tallying.
+- `send_votes` - Sends any dispute votes to the governance controller contract for tallying, provided the voting period hasn't elapsed.
 - `setup_data_feed` - Initializes a data feed for recurring reports.
 - `tip` - Adds a tip for a onetime request.
 - `update_stake_amount` - Updates the stake amount after retrieving the latest token price from oracle.
