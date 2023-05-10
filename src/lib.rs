@@ -927,7 +927,7 @@ pub mod pallet {
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);
 			<DataFeeds<T>>::insert(query_id, feed_id, feed);
-			let query_date_len = query_data.len();
+			let query_data_len = query_data.len();
 			Self::deposit_event(Event::NewDataFeed {
 				query_id,
 				feed_id,
@@ -937,7 +937,7 @@ pub mod pallet {
 			if amount > Zero::zero() {
 				Self::do_fund_feed(feed_creator, feed_id, query_id, amount)?;
 			}
-			Ok(Some(T::WeightInfo::setup_data_feed(query_date_len as u32)).into())
+			Ok(Some(T::WeightInfo::setup_data_feed(query_data_len as u32)).into())
 		}
 
 		/// Function to run a single tip.

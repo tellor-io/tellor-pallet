@@ -137,11 +137,6 @@ benchmarks! {
 	register {
 
 	}: _(RawOrigin::Root)
-	verify {
-		assert_last_event::<T>(
-				Event::RegistrationSent { para_id: 2_000, contract_address: T::Registry::get().address.into() }.into(),
-			);
-	}
 
 	report_stake_deposited {
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
@@ -160,7 +155,7 @@ benchmarks! {
 		let address = Address::zero();
 		let amount = trb(100);
 		let caller = deposit_stake::<T>(reporter.clone(), amount, address)?;
-	}: _<RuntimeOrigin<T>>(caller, reporter.clone(), amount, address)
+	}: _<RuntimeOrigin<T>>(caller, reporter, amount, address)
 	verify {
 		let staking_contract = T::Staking::get();
 		assert_last_event::<T>(
@@ -206,7 +201,7 @@ benchmarks! {
 				token::<T>(1_000u64)
 		);
 
-	}: _(RawOrigin::Signed(feed_creator.clone()), query_id, token::<T>(10u64), T::Time::now().as_secs(), 600, 60, 0, token::<T>(0u64), query_data.clone(), token::<T>(1_000u64))
+	}: _(RawOrigin::Signed(feed_creator), query_id, token::<T>(10u64), T::Time::now().as_secs(), 600, 60, 0, token::<T>(0u64), query_data.clone(), token::<T>(1_000u64))
 
 	fund_feed{
 		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
@@ -222,11 +217,11 @@ benchmarks! {
 				60,
 				0,
 				token::<T>(0u64),
-				query_data.clone(),
+				query_data,
 				token::<T>(1000u64)
 		);
 
-	}: _(RawOrigin::Signed(feed_creator.clone()), feed_id, query_id, token::<T>(10u64))
+	}: _(RawOrigin::Signed(feed_creator), feed_id, query_id, token::<T>(10u64))
 	verify {
 		assert!(<DataFeeds<T>>::get(query_id, feed_id).is_some());
 	}
@@ -244,7 +239,7 @@ benchmarks! {
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
 		T::BenchmarkHelper::set_time(HOURS);
-	}: _(RawOrigin::Signed(reporter.clone()), query_id, value, 0, query_data.clone())
+	}: _(RawOrigin::Signed(reporter.clone()), query_id, value, 0, query_data)
 	verify {
 		assert!(<StakerDetails<T>>::get(reporter).is_some());
 	}
@@ -271,7 +266,7 @@ benchmarks! {
 			staking_token_price_query_id,
 			uint_value::<T>(50 * 10u128.pow(18)),
 			0,
-			staking_token_price_query_data.clone())?;
+			staking_token_price_query_data)?;
 		T::BenchmarkHelper::set_time(12 * HOURS);
 
 		Tellor::<T>::submit_value(
@@ -316,7 +311,7 @@ benchmarks! {
 			}
 		}
 		let amount = token::<T>(100u64);
-	}: _(RawOrigin::Signed(reporter.clone()), query_id, amount, query_data.clone())
+	}: _(RawOrigin::Signed(reporter), query_id, amount, query_data)
 
 	claim_onetime_tip {
 		// Maximum submissions in order to measure maximum weight as this extrinsic iterates over all the report submissions
@@ -374,11 +369,9 @@ benchmarks! {
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let feed_creator = account::<AccountIdOf<T>>("account", 2, SEED);
-		let another_reporter = account::<AccountIdOf<T>>("account", 3, SEED);
 		let address = Address::zero();
 
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
-		T::BenchmarkHelper::set_balance(another_reporter.clone(), 10_000);
 		T::BenchmarkHelper::set_time(MINUTES);
 
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), 1_000);
@@ -396,7 +389,6 @@ benchmarks! {
 
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
-		deposit_stake::<T>(another_reporter.clone(), trb(1_200), address)?;
 
 		for i in 1..=s {
 			let _ = Tellor::<T>::tip(RawOrigin::Signed(reporter.clone()).into(), query_id, token::<T>(10u64), query_data.clone());
@@ -432,11 +424,11 @@ benchmarks! {
 		T::BenchmarkHelper::set_balance(another_reporter.clone(), 1_000);
 
 		T::BenchmarkHelper::set_time(HOURS);
-		Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(),
+		Tellor::<T>::submit_value(RawOrigin::Signed(reporter).into(),
 			query_id,
 			uint_value::<T>(4_000),
 			0,
-			query_data.clone()
+			query_data
 		)?;
 
 		let report_timestamps = <TimeOfLastNewValue<T>>::get().unwrap();
@@ -461,7 +453,7 @@ benchmarks! {
 			query_id,
 			uint_value::<T>(4_000),
 			0,
-			query_data.clone())?;
+			query_data)?;
 
 		let disputed_timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
 
@@ -472,7 +464,7 @@ benchmarks! {
 	}: _(RawOrigin::Signed(reporter.clone()), dispute_id, Some(true))
 	verify {
 		assert_last_event::<T>(
-				Event::Voted { dispute_id, supports: Some(true), voter: reporter.clone()}.into(),
+				Event::Voted { dispute_id, supports: Some(true), voter: reporter}.into(),
 			);
 	}
 
@@ -489,7 +481,7 @@ benchmarks! {
 			query_id,
 			uint_value::<T>(4_000),
 			0,
-			query_data.clone())?;
+			query_data)?;
 		let disputed_timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
 		Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, disputed_timestamp, None)?;

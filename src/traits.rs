@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
-#![allow(unused_imports)]
 use crate::types::{QueryId, Timestamp, U256};
+#[cfg(feature = "runtime-benchmarks")]
 use frame_support::BoundedVec;
 use sp_std::vec::Vec;
 use xcm::latest::prelude::*;
