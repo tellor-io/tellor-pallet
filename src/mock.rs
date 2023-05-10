@@ -20,8 +20,8 @@ use crate::{
 };
 use frame_support::{
 	assert_ok, log, parameter_types,
-	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},
-	Hashable, PalletId,
+	traits::{ConstU16, ConstU64, Currency, OnFinalize, UnixTime},
+	BoundedVec, Hashable, PalletId,
 };
 use frame_system as system;
 use once_cell::sync::Lazy;
@@ -157,7 +157,7 @@ impl tellor::Config for Test {
 	type XcmFeesAsset = XcmFeesAsset;
 	type XcmWeightToAsset = ConstU128<50_000>; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
 	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = ();
+	type BenchmarkHelper = TestBenchmarkHelper;
 	type WeightInfo = ();
 }
 
@@ -190,6 +190,72 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		let xcm_hash = message.twox_256();
 		SENT_XCM.with(|q| q.borrow_mut().push((dest.into(), message)));
 		Ok(xcm_hash)
+	}
+}
+
+pub struct TestBenchmarkHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl<MaxQueryDataLength: sp_core::Get<u32>>
+	tellor::traits::BenchmarkHelper<AccountId, MaxQueryDataLength> for TestBenchmarkHelper
+{
+	fn set_time(time_in_secs: u64) {
+		let block = System::block_number();
+		match block {
+			0 => {
+				System::set_block_number(1);
+				let timestamp = (<Timestamp as UnixTime>::now() +
+					Duration::from_secs(1 + time_in_secs))
+				.as_millis() as u64;
+				pallet_timestamp::Now::<Test>::put(timestamp);
+			},
+			_ => {
+				System::set_block_number(block + 1);
+				let timestamp = (<Timestamp as UnixTime>::now() +
+					Duration::from_secs(1 + time_in_secs))
+				.as_millis() as u64;
+				pallet_timestamp::Now::<Test>::put(timestamp);
+			},
+		}
+	}
+
+	fn set_balance(account_id: AccountId, amount: u128) {
+		Balances::make_free_balance_be(&account_id, Balance::from_be(amount));
+	}
+
+	fn get_staking_token_price_query_data() -> BoundedVec<u8, MaxQueryDataLength> {
+		BoundedVec::truncate_from(vec![
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 83, 112, 111, 116, 80, 114, 105, 99, 101, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 3, 116, 114, 98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 103, 98, 112, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		])
+	}
+
+	fn get_staking_to_local_token_price_query_data() -> BoundedVec<u8, MaxQueryDataLength> {
+		BoundedVec::truncate_from(vec![
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 83, 112, 111, 116, 80, 114, 105, 99, 101, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 3, 116, 114, 98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 111, 99, 112, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		])
 	}
 }
 

@@ -33,7 +33,6 @@ use types::{Address, Timestamp};
 
 type RuntimeOrigin<T> = <T as frame_system::Config>::RuntimeOrigin;
 const TRB: u128 = 10u128.pow(DECIMALS);
-const PARA_ID: u32 = 1000;
 const SEED: u32 = 0;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
@@ -256,11 +255,9 @@ benchmarks! {
 	}: _(RawOrigin::Signed(reporter), token::<T>(100u64))
 
 	update_stake_amount {
-		let staking_token_price_query_data: QueryDataOf<T> =
-			spot_price("trb", "usd").try_into().unwrap();
+		let staking_token_price_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_token_price_query_data();
 		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
-		let staking_to_local_token_query_data: QueryDataOf<T> =
-			spot_price("trb", "ocp").try_into().unwrap();
+		let staking_to_local_token_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_to_local_token_price_query_data();
 		let staking_to_local_token_query_id: QueryId =
 			Keccak256::hash(staking_to_local_token_query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
@@ -471,7 +468,7 @@ benchmarks! {
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
 		Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, disputed_timestamp, None)?;
 
-		let dispute_id = dispute_id(PARA_ID, query_id, disputed_timestamp);
+		let dispute_id = dispute_id(T::ParachainId::get(), query_id, disputed_timestamp);
 	}: _(RawOrigin::Signed(reporter.clone()), dispute_id, Some(true))
 	verify {
 		assert_last_event::<T>(
@@ -496,7 +493,7 @@ benchmarks! {
 		let disputed_timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
 		Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, disputed_timestamp, None)?;
-		let dispute_id = dispute_id(PARA_ID, query_id, disputed_timestamp);
+		let dispute_id = dispute_id(T::ParachainId::get(), query_id, disputed_timestamp);
 		Tellor::<T>::vote(RawOrigin::Signed(reporter).into(), dispute_id, Some(true))?;
 		T::BenchmarkHelper::set_time(DAYS);
 	}: _<RuntimeOrigin<T>>(caller, dispute_id, VoteResult::Passed)
@@ -530,7 +527,7 @@ benchmarks! {
 		for dispute_initiator in dispute_initiators{
 			Tellor::<T>::begin_dispute(RawOrigin::Signed(dispute_initiator.clone()).into(), query_id, disputed_timestamp, None)?;
 		}
-		let dispute_id = dispute_id(PARA_ID, query_id, disputed_timestamp);
+		let dispute_id = dispute_id(T::ParachainId::get(), query_id, disputed_timestamp);
 		Tellor::<T>::vote(RawOrigin::Signed(reporter).into(), dispute_id, Some(true))?;
 		T::BenchmarkHelper::set_time(WEEKS);
 		Tellor::<T>::report_vote_tallied(caller.clone(), dispute_id, VoteResult::Passed)?;
@@ -552,12 +549,15 @@ benchmarks! {
 		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
 		// begin dispute
 		Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, disputed_timestamp, None)?;
-		let dispute_id = dispute_id(PARA_ID, query_id, disputed_timestamp);
+		let dispute_id = dispute_id(T::ParachainId::get(), query_id, disputed_timestamp);
+
 		// vote in dispute
 		Tellor::<T>::vote(RawOrigin::Signed(reporter.clone()).into(), dispute_id, Some(true))?;
+
 		T::BenchmarkHelper::set_time(DAYS);
 		// tally vote
 		Tellor::<T>::report_vote_tallied(caller.clone(), dispute_id, VoteResult::Passed)?;
+
 	}: _<RuntimeOrigin<T>>(caller, reporter.clone(), trb(100))
 	verify {
 		assert_last_event::<T>(
@@ -588,7 +588,7 @@ benchmarks! {
 				query_data.clone())?;
 
 			let timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
-			let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+			let dispute_id = dispute_id(T::ParachainId::get(), query_id, timestamp);
 			if i % 2 == 0 {
 				Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, timestamp, None)?;
 				Tellor::<T>::vote(RawOrigin::Signed(reporter.clone()).into(), dispute_id, Some(true))?;
@@ -622,7 +622,7 @@ benchmarks! {
 			Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 1_000), 0, query_data.clone())?;
 
 			let timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
-			let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+			let dispute_id = dispute_id(T::ParachainId::get(), query_id, timestamp);
 			if i % 2 == 0 {
 				Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, timestamp, None)?;
 				let _ = votes.try_push((dispute_id, Some(true)));
@@ -634,15 +634,13 @@ benchmarks! {
 	}: _(RawOrigin::Signed(reporter), votes)
 
 	on_initialize {
-		let staking_token_price_query_data: QueryDataOf<T> =
-			spot_price("trb", "gbp").try_into().unwrap();
+		let staking_token_price_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_token_price_query_data();
 		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
-		let staking_to_local_token_query_data: QueryDataOf<T> =
-			spot_price("trb", "ocp").try_into().unwrap();
-		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let staking_to_local_token_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_to_local_token_price_query_data();
 		let staking_to_local_token_query_id: QueryId =
 			Keccak256::hash(staking_to_local_token_query_data.as_ref()).into();
+		let query_data: QueryDataOf<T> = spot_price("dot", "usd").try_into().unwrap();
+		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 		let user = account::<AccountIdOf<T>>("account", 3, SEED);
@@ -677,7 +675,7 @@ benchmarks! {
 				0,
 				query_data.clone())?;
 			let timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
-			let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+			let dispute_id = dispute_id(T::ParachainId::get(), query_id, timestamp);
 			Tellor::<T>::begin_dispute(RawOrigin::Signed(another_reporter.clone()).into(), query_id, timestamp, None)?;
 			Tellor::<T>::vote(RawOrigin::Signed(user.clone()).into(), dispute_id, Some(true))?;
 			T::BenchmarkHelper::set_time(HOURS);

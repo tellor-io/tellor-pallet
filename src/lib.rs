@@ -221,7 +221,7 @@ pub mod pallet {
 
 		/// Helper trait for benchmarks.
 		#[cfg(feature = "runtime-benchmarks")]
-		type BenchmarkHelper: BenchmarkHelper<Self::AccountId>;
+		type BenchmarkHelper: BenchmarkHelper<Self::AccountId, Self::MaxQueryDataLength>;
 
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
