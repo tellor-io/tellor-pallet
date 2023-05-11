@@ -17,6 +17,7 @@
 //! Benchmarking setup for tellor
 
 use super::*;
+use codec::Compact;
 use ethabi::{Bytes, Token, Uint};
 
 #[allow(unused)]
@@ -350,11 +351,11 @@ benchmarks! {
 					None)?;
 			}
 		}
-		let mut timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps> = Default::default();
+		let mut timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps> = Default::default();
 		let mut reported_timestamps: Vec<Timestamp> = <ReportedTimestamps<T>>::iter_key_prefix(query_id).collect();
 		reported_timestamps.sort();
 		for timestamp in reported_timestamps.iter().take(t as usize) {
-			timestamps.try_push(*timestamp).unwrap();
+			timestamps.try_push(timestamp.into()).unwrap();
 		}
 		T::BenchmarkHelper::set_time(12 * HOURS);
 	}: _(RawOrigin::Signed(reporter), query_id, timestamps)
@@ -401,13 +402,13 @@ benchmarks! {
 				query_data.clone())?;
 		}
 
-		let mut timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps> = Default::default();
+		let mut timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps> = Default::default();
 		let mut reported_timestamps: Vec<Timestamp> = <ReportedTimestamps<T>>::iter_key_prefix(query_id).collect();
 		reported_timestamps.sort();
 		reported_timestamps.reverse();
 
 		for timestamp in reported_timestamps.iter().take(T::MaxClaimTimestamps::get() as usize)  {
-			timestamps.try_push(*timestamp).unwrap();
+			timestamps.try_push(timestamp.into()).unwrap();
 		}
 
 		T::BenchmarkHelper::set_time(12 * HOURS);
