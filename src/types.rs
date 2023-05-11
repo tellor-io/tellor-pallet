@@ -179,19 +179,17 @@ pub(crate) mod governance {
 		Passed,
 		Invalid,
 	}
+}
 
-	/// Storing weights of extrinsics, required in parachain registration
-	#[derive(
-		Clone, Encode, Decode, Default, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen,
-	)]
-	pub struct Weights {
-		pub report_stake_deposited: u64,
-		pub report_staking_withdraw_request: u64,
-		pub report_stake_withdrawn: u64,
-		pub report_vote_tallied: u64,
-		pub report_vote_executed: u64,
-		pub report_slash: u64,
-	}
+/// Storing weights of extrinsics, required in parachain registration
+#[derive(Clone, Encode, Decode, Default, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct Weights {
+	pub report_stake_deposited: u64,
+	pub report_staking_withdraw_request: u64,
+	pub report_stake_withdrawn: u64,
+	pub report_vote_tallied: u64,
+	pub report_vote_executed: u64,
+	pub report_slash: u64,
 }
 
 pub(super) struct U256ToBalance<T>(PhantomData<T>);

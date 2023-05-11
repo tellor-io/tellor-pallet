@@ -15,7 +15,7 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
-use crate::types::governance::Weights;
+use crate::types::Weights;
 use codec::Encode;
 use ethabi::Token;
 use xcm::latest::{Junction, MultiLocation, NetworkId};
@@ -144,7 +144,7 @@ mod tests {
 	use super::super::tests::*;
 	use crate::{
 		contracts::registry::{encode_junction, encode_network_id},
-		types::governance::Weights,
+		types::Weights,
 	};
 	use ethabi::{Function, ParamType, Token};
 	use sp_core::{bytes::from_hex, H160, H256};

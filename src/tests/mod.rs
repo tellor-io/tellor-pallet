@@ -20,8 +20,8 @@ use crate::{
 	mock,
 	mock::*,
 	types::{
-		governance::Weights, AccountIdOf, Address, BalanceOf, DisputeId, QueryDataOf, QueryId,
-		Timestamp, Tributes, ValueOf,
+		AccountIdOf, Address, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp, Tributes,
+		ValueOf, Weights,
 	},
 	weights::WeightInfo,
 	xcm::{ethereum_xcm, gas_to_weight, weigh, DbWeight},

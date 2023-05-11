@@ -93,7 +93,7 @@ pub mod pallet {
 
 	#[cfg(feature = "runtime-benchmarks")]
 	use crate::traits::BenchmarkHelper;
-	use crate::types::governance::Weights;
+	use crate::types::Weights;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
