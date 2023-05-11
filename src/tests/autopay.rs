@@ -82,7 +82,7 @@ fn claim_tip_ensures() {
 				1,
 				query_data.clone(),
 			));
-			timestamps.try_push(now()).unwrap();
+			timestamps.try_push(now().into()).unwrap();
 		});
 
 		with_block_after(REPORTING_LOCK, || {
@@ -93,7 +93,7 @@ fn claim_tip_ensures() {
 				2,
 				query_data.clone(),
 			));
-			bad_timestamps.try_push(now()).unwrap();
+			bad_timestamps.try_push(now().into()).unwrap();
 		});
 
 		with_block_after(REPORTING_LOCK, || {
@@ -115,8 +115,8 @@ fn claim_tip_ensures() {
 				4,
 				query_data.clone(),
 			));
-			timestamps.try_push(now()).unwrap();
-			bad_timestamps.try_push(now()).unwrap();
+			timestamps.try_push(now().into()).unwrap();
+			bad_timestamps.try_push(now().into()).unwrap();
 		});
 
 		with_block_after(REPORTING_LOCK, || {
@@ -127,7 +127,7 @@ fn claim_tip_ensures() {
 				5,
 				query_data.clone(),
 			));
-			timestamps.try_push(now()).unwrap();
+			timestamps.try_push(now().into()).unwrap();
 		});
 
 		claimed_timestamp
@@ -155,7 +155,7 @@ fn claim_tip_ensures() {
 					RuntimeOrigin::signed(reporter),
 					feed_id,
 					query_id,
-					bounded_vec![12345]
+					bounded_vec![12345.into()]
 				),
 				Error::InsufficientFeedBalance
 			);
@@ -202,14 +202,14 @@ fn claim_tip_ensures() {
 				RuntimeOrigin::signed(reporter),
 				feed_id,
 				query_id,
-				bounded_vec![claimed]
+				bounded_vec![claimed.into()]
 			));
 			assert_noop!(
 				Tellor::claim_tip(
 					RuntimeOrigin::signed(reporter),
 					feed_id,
 					query_id,
-					bounded_vec![claimed]
+					bounded_vec![claimed.into()]
 				),
 				Error::TipAlreadyClaimed
 			);
@@ -240,7 +240,7 @@ fn claim_tip_ensures() {
 					RuntimeOrigin::signed(another_reporter),
 					feed_id,
 					query_id,
-					bounded_vec![timestamp]
+					bounded_vec![timestamp.into()]
 				),
 				Error::InvalidTimestamp
 			);
@@ -285,7 +285,7 @@ fn claim_tip_ensures() {
 					RuntimeOrigin::signed(reporter),
 					feed_id,
 					query_id,
-					bounded_vec![timestamp]
+					bounded_vec![timestamp.into()]
 				),
 				Error::PriceThresholdNotMet
 			);
@@ -314,7 +314,7 @@ fn claim_tip_ensures() {
 					RuntimeOrigin::signed(reporter),
 					feed_id,
 					query_id,
-					bounded_vec![timestamp_1, now()]
+					bounded_vec![timestamp_1.into(), now().into()]
 				),
 				Error::InsufficientFeedBalance
 			);
@@ -327,7 +327,7 @@ fn claim_tip_ensures() {
 					RuntimeOrigin::signed(reporter),
 					feed_id,
 					query_id,
-					bounded_vec![timestamp_2]
+					bounded_vec![timestamp_2.into()]
 				),
 				Error::ClaimPeriodExpired
 			);
@@ -372,7 +372,7 @@ fn claim_tip() {
 				0,
 				query_data.clone(),
 			));
-			timestamps.push(now());
+			timestamps.push(now().into());
 		});
 		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
@@ -382,7 +382,7 @@ fn claim_tip() {
 				1,
 				query_data.clone(),
 			));
-			timestamps.push(now());
+			timestamps.push(now().into());
 		});
 		with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
@@ -392,7 +392,7 @@ fn claim_tip() {
 				2,
 				query_data.clone(),
 			));
-			timestamps.push(now());
+			timestamps.push(now().into());
 		});
 	});
 
@@ -474,7 +474,7 @@ fn do_get_reward_amount() {
 				RuntimeOrigin::signed(reporter),
 				feed_id,
 				query_id,
-				bounded_vec![timestamp]
+				bounded_vec![timestamp.into()]
 			));
 			assert_eq!(Tellor::get_data_feed(feed_id).unwrap().balance, token(99));
 			assert!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp))
@@ -821,7 +821,7 @@ fn get_reward_claimed_status() {
 				RuntimeOrigin::signed(reporter),
 				feed_id,
 				query_id,
-				bounded_vec![timestamp]
+				bounded_vec![timestamp.into()]
 			));
 			assert_eq!(Tellor::get_reward_claimed_status(feed_id, query_id, timestamp), true);
 		});
@@ -1012,7 +1012,7 @@ fn claim_onetime_tip() {
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(reporter),
 					query_id,
-					bounded_vec![timestamp]
+					bounded_vec![timestamp.into()]
 				),
 				Error::ClaimBufferNotPassed
 			);
@@ -1021,7 +1021,7 @@ fn claim_onetime_tip() {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
-				bounded_vec![timestamp]
+				bounded_vec![timestamp.into()]
 			));
 		});
 
@@ -1056,7 +1056,7 @@ fn claim_onetime_tip() {
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
 					query_id,
-					bounded_vec![timestamp]
+					bounded_vec![timestamp.into()]
 				),
 				Error::ValueDisputed
 			);
@@ -1084,7 +1084,7 @@ fn claim_onetime_tip() {
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(reporter),
 					query_id,
-					bounded_vec![timestamp]
+					bounded_vec![timestamp.into()]
 				),
 				Error::InvalidClaimer
 			);
@@ -1124,7 +1124,7 @@ fn claim_onetime_tip() {
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
 					query_id,
-					bounded_vec![timestamp_2]
+					bounded_vec![timestamp_2.into()]
 				),
 				Error::TipAlreadyEarned
 			);
@@ -1133,7 +1133,7 @@ fn claim_onetime_tip() {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
-				bounded_vec![timestamp_1]
+				bounded_vec![timestamp_1.into()]
 			));
 		});
 
@@ -1173,14 +1173,14 @@ fn claim_onetime_tip() {
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
 					query_id,
-					bounded_vec![timestamp_1]
+					bounded_vec![timestamp_1.into()]
 				),
 				Error::TimestampIneligibleForTip
 			);
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
-				bounded_vec![timestamp_2]
+				bounded_vec![timestamp_2.into()]
 			));
 
 			// tip already claimed
@@ -1188,7 +1188,7 @@ fn claim_onetime_tip() {
 				Tellor::claim_onetime_tip(
 					RuntimeOrigin::signed(another_reporter),
 					query_id,
-					bounded_vec![timestamp_2]
+					bounded_vec![timestamp_2.into()]
 				),
 				Error::TipAlreadyClaimed
 			);
@@ -1221,7 +1221,7 @@ fn claim_onetime_tip() {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id,
-				bounded_vec![timestamp]
+				bounded_vec![timestamp.into()]
 			));
 			assert_eq!(Tellor::get_current_tip(query_id), 0, "tip should be correct");
 			for tip in Tips::get(query_id).unwrap() {
@@ -1670,7 +1670,7 @@ fn get_funded_feeds() {
 				RuntimeOrigin::signed(reporter),
 				feed_2,
 				query_id_2,
-				bounded_vec![timestamp]
+				bounded_vec![timestamp.into()]
 			));
 			assert_eq!(Tellor::get_funded_feeds(), vec![feed_1, feed_3], "incorrect funded feeds");
 			for (index, (feed, expected)) in vec![(feed_1, 1), (feed_2, 0), (feed_3, 2)]
@@ -1854,7 +1854,7 @@ fn get_funded_query_ids() {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_1,
-				bounded_vec![timestamp_1]
+				bounded_vec![timestamp_1.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2, query_id_3]);
 			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
@@ -1873,7 +1873,7 @@ fn get_funded_query_ids() {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_2,
-				bounded_vec![timestamp_2]
+				bounded_vec![timestamp_2.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2, query_id_3]);
 			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
@@ -1884,7 +1884,7 @@ fn get_funded_query_ids() {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_3,
-				bounded_vec![timestamp_3]
+				bounded_vec![timestamp_3.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2]);
 			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
@@ -1895,7 +1895,7 @@ fn get_funded_query_ids() {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_4,
-				bounded_vec![timestamp_4]
+				bounded_vec![timestamp_4.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_2]);
 			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
@@ -1919,7 +1919,7 @@ fn get_funded_query_ids() {
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_2,
-				bounded_vec![timestamp_2]
+				bounded_vec![timestamp_2.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![]);
 			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
@@ -2312,7 +2312,7 @@ fn get_reward_claim_status_list() {
 				RuntimeOrigin::signed(reporter_1),
 				feed_id,
 				query_id,
-				bounded_vec![timestamp_1]
+				bounded_vec![timestamp_1.into()]
 			));
 			assert_eq!(
 				Tellor::get_reward_claim_status_list(
@@ -2326,7 +2326,7 @@ fn get_reward_claim_status_list() {
 				RuntimeOrigin::signed(reporter_2),
 				feed_id,
 				query_id,
-				bounded_vec![timestamp_2]
+				bounded_vec![timestamp_2.into()]
 			));
 			assert_eq!(
 				Tellor::get_reward_claim_status_list(
@@ -2340,7 +2340,7 @@ fn get_reward_claim_status_list() {
 				RuntimeOrigin::signed(reporter_3),
 				feed_id,
 				query_id,
-				bounded_vec![timestamp_3]
+				bounded_vec![timestamp_3.into()]
 			));
 			assert_eq!(
 				Tellor::get_reward_claim_status_list(

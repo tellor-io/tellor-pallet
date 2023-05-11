@@ -73,6 +73,7 @@ pub mod pallet {
 		Tip,
 	};
 	use ::xcm::latest::prelude::*;
+	use codec::Compact;
 	use frame_support::{
 		pallet_prelude::*,
 		sp_runtime::traits::{CheckedAdd, CheckedMul, Hash},
@@ -676,7 +677,7 @@ pub mod pallet {
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
-			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
+			timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps>,
 		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
 			ensure!(
@@ -687,7 +688,9 @@ pub mod pallet {
 			let mut cumulative_reward = BalanceOf::<T>::zero();
 			for timestamp in &timestamps {
 				cumulative_reward.saturating_accrue(Self::get_onetime_tip_amount(
-					query_id, *timestamp, &reporter,
+					query_id,
+					timestamp.0,
+					&reporter,
 				)?);
 			}
 			let fee = (cumulative_reward
@@ -756,7 +759,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			feed_id: FeedId,
 			query_id: QueryId,
-			timestamps: BoundedVec<Timestamp, T::MaxClaimTimestamps>,
+			timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps>,
 		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
 
@@ -767,17 +770,20 @@ pub mod pallet {
 			let mut cumulative_reward = BalanceOf::<T>::zero();
 			for timestamp in &timestamps {
 				ensure!(
-					Self::now().checked_sub(*timestamp).ok_or(ArithmeticError::Underflow)? >
+					Self::now().checked_sub(timestamp.0).ok_or(ArithmeticError::Underflow)? >
 						12 * HOURS,
 					Error::<T>::ClaimBufferNotPassed
 				);
 				ensure!(
 					Some(&reporter) ==
-						Self::get_reporter_by_timestamp(query_id, *timestamp).as_ref(),
+						Self::get_reporter_by_timestamp(query_id, timestamp.0).as_ref(),
 					Error::<T>::InvalidClaimer
 				);
-				cumulative_reward
-					.saturating_accrue(Self::do_get_reward_amount(feed_id, query_id, *timestamp)?);
+				cumulative_reward.saturating_accrue(Self::do_get_reward_amount(
+					feed_id,
+					query_id,
+					timestamp.0,
+				)?);
 
 				if cumulative_reward >= balance {
 					ensure!(
@@ -824,7 +830,7 @@ pub mod pallet {
 					})?;
 					feed.feeds_with_funding_index = 0;
 				}
-				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp), true);
+				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp.0), true);
 			}
 
 			feed.balance.saturating_reduce(cumulative_reward);
@@ -866,7 +872,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			feed_id: FeedId,
 			query_id: QueryId,
-			amount: BalanceOf<T>,
+			#[pallet::compact] amount: BalanceOf<T>,
 		) -> DispatchResult {
 			let feed_funder = ensure_signed(origin)?;
 			Self::do_fund_feed(feed_funder, feed_id, query_id, amount)
@@ -888,14 +894,14 @@ pub mod pallet {
 		pub fn setup_data_feed(
 			origin: OriginFor<T>,
 			query_id: QueryId,
-			reward: BalanceOf<T>,
-			start_time: Timestamp,
-			interval: Timestamp,
-			window: Timestamp,
+			#[pallet::compact] reward: BalanceOf<T>,
+			#[pallet::compact] start_time: Timestamp,
+			#[pallet::compact] interval: Timestamp,
+			#[pallet::compact] window: Timestamp,
 			price_threshold: u16,
-			reward_increase_per_second: BalanceOf<T>,
+			#[pallet::compact] reward_increase_per_second: BalanceOf<T>,
 			query_data: QueryDataOf<T>,
-			amount: BalanceOf<T>,
+			#[pallet::compact] amount: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let feed_creator = ensure_signed(origin)?;
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
@@ -950,7 +956,7 @@ pub mod pallet {
 		pub fn tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
-			amount: BalanceOf<T>,
+			#[pallet::compact] amount: BalanceOf<T>,
 			query_data: QueryDataOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let tipper = ensure_signed(origin)?;
@@ -1031,7 +1037,10 @@ pub mod pallet {
 		/// - `amount`: Amount of tokens to fund staking account with.
 		#[pallet::call_index(6)]
 		#[pallet::weight(<T as Config>::WeightInfo::add_staking_rewards())]
-		pub fn add_staking_rewards(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
+		pub fn add_staking_rewards(
+			origin: OriginFor<T>,
+			#[pallet::compact] amount: BalanceOf<T>,
+		) -> DispatchResult {
 			let funder = ensure_signed(origin)?;
 			Self::do_add_staking_rewards(&funder, amount)
 		}
@@ -1048,7 +1057,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			value: ValueOf<T>,
-			nonce: Nonce,
+			#[pallet::compact] nonce: Nonce,
 			query_data: QueryDataOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
@@ -1161,7 +1170,7 @@ pub mod pallet {
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
-			timestamp: Timestamp,
+			#[pallet::compact] timestamp: Timestamp,
 			beneficiary: Option<Address>,
 		) -> DispatchResult {
 			let dispute_initiator = ensure_signed(origin)?;
