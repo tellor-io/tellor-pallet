@@ -142,6 +142,7 @@ impl tellor::Config for Test {
 	type Xcm = TestSendXcm;
 	type XcmFeesAsset = XcmFeesAsset;
 	type XcmWeightToAsset = ();
+	type WeightInfo = ();
 }
 pub struct TestSendXcm;
 impl tellor::traits::SendXcm for TestSendXcm {

@@ -15,6 +15,8 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::types::{QueryId, Timestamp, U256};
+#[cfg(feature = "runtime-benchmarks")]
+use frame_support::BoundedVec;
 use sp_std::vec::Vec;
 use xcm::latest::prelude::*;
 
@@ -126,4 +128,29 @@ pub trait UsingTellor<AccountId> {
 	/// # Returns
 	/// Value for timestamp submitted, if found.
 	fn retrieve_data(query_id: QueryId, timestamp: Timestamp) -> Option<Vec<u8>>;
+}
+
+/// Helper trait for benchmarks
+#[cfg(feature = "runtime-benchmarks")]
+pub trait BenchmarkHelper<AccountId, MaxQueryDataLength> {
+	/// Set the current time.
+	/// # Arguments
+	/// * `time_in_secs` - Time in seconds
+	fn set_time(time_in_secs: u64);
+
+	/// Set balance of the account/
+	/// # Arguments
+	/// * `account_id` - target account
+	/// * `amount` - value to be set as an account balance
+	fn set_balance(account_id: AccountId, amount: u128);
+
+	/// Fetch query data of staking token price
+	/// # Returns
+	/// Bytes of query data
+	fn get_staking_token_price_query_data() -> BoundedVec<u8, MaxQueryDataLength>;
+
+	/// Fetch query data of staking token to local token price
+	/// # Returns
+	/// Bytes of query data
+	fn get_staking_to_local_token_price_query_data() -> BoundedVec<u8, MaxQueryDataLength>;
 }

@@ -262,7 +262,7 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `timestamp` - Data feed unique identifier.
 	/// * `max` - The maximum number of pending dispute votes to be sent.
-	pub(super) fn do_send_votes(timestamp: Timestamp, max: u8) -> DispatchResult {
+	pub(super) fn do_send_votes(timestamp: Timestamp, max: u8) -> Result<u32, DispatchError> {
 		let governance_contract = T::Governance::get();
 		const GAS_LIMIT: u64 = gas_limits::VOTE;
 		// Check for any pending votes to be sent to governance controller contract
@@ -270,7 +270,9 @@ impl<T: Config> Pallet<T> {
 			.filter(|(_, (_, scheduled))| &timestamp >= scheduled)
 			.collect();
 		pending_votes.sort_by_key(|(_, (_, scheduled))| *scheduled);
+		let mut pending_votes_len: u32 = 0;
 		for (dispute_id, (vote_round, _)) in pending_votes.into_iter().take(max.into()) {
+			pending_votes_len.saturating_inc();
 			let _ = <VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
 				let vote = maybe.as_mut().ok_or(Error::<T>::InvalidVote)?;
 				ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
@@ -307,7 +309,7 @@ impl<T: Config> Pallet<T> {
 				Ok(())
 			});
 		}
-		Ok(())
+		Ok(pending_votes_len)
 	}
 
 	// Updates the stake amount after retrieving the latest token price from oracle.
@@ -405,7 +407,7 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `dispute_id` - The identifier of the dispute.
 	#[allow(clippy::identity_op)]
-	pub(super) fn execute_vote(dispute_id: DisputeId) -> DispatchResult {
+	pub(super) fn execute_vote(dispute_id: DisputeId) -> Result<u8, DispatchError> {
 		// Ensure validity of dispute id, vote has been executed, and vote must be tallied
 		ensure!(
 			dispute_id != <DisputeId>::default() &&
@@ -470,7 +472,7 @@ impl<T: Config> Pallet<T> {
 			},
 		)?;
 		Self::deposit_event(Event::VoteExecuted { dispute_id, result });
-		Ok(())
+		Ok(final_vote_round)
 	}
 
 	/// Returns the block number at a given timestamp.
