@@ -20,9 +20,11 @@ use crate::{
 };
 use frame_support::{
 	assert_ok, log, parameter_types,
-	traits::{ConstU16, ConstU64, Currency, OnFinalize, UnixTime},
-	BoundedVec, Hashable, PalletId,
+	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},
+	Hashable, PalletId,
 };
+#[cfg(feature = "runtime-benchmarks")]
+use frame_support::{traits::Currency, BoundedVec};
 use frame_system as system;
 use once_cell::sync::Lazy;
 use sp_core::{ConstU128, ConstU32, ConstU8, H256};
@@ -193,6 +195,7 @@ impl tellor::traits::SendXcm for TestSendXcm {
 	}
 }
 
+#[cfg(feature = "runtime-benchmarks")]
 pub struct TestBenchmarkHelper;
 #[cfg(feature = "runtime-benchmarks")]
 impl<MaxQueryDataLength: sp_core::Get<u32>>
