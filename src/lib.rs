@@ -94,6 +94,7 @@ pub mod pallet {
 
 	#[cfg(feature = "runtime-benchmarks")]
 	use crate::traits::BenchmarkHelper;
+	use crate::types::Weights;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -487,7 +488,7 @@ pub mod pallet {
 
 		// Registration
 		/// Emitted when registration is sent to the controller contracts.
-		RegistrationSent { para_id: u32, contract_address: Address },
+		RegistrationSent { para_id: u32, contract_address: Address, weights: Weights },
 	}
 
 	#[pallet::error]
@@ -642,6 +643,16 @@ pub mod pallet {
 			// Register with parachain registry contract
 			let registry_contract = T::Registry::get();
 			const GAS_LIMIT: u64 = gas_limits::REGISTER;
+			let weights = Weights {
+				report_stake_deposited: T::WeightInfo::report_stake_deposited().ref_time(),
+				report_staking_withdraw_request: T::WeightInfo::report_staking_withdraw_request()
+					.ref_time(),
+				report_stake_withdrawn: T::WeightInfo::report_stake_withdrawn().ref_time(),
+				report_vote_tallied: T::WeightInfo::report_vote_tallied().ref_time(),
+				report_vote_executed: T::WeightInfo::report_vote_executed(u8::MAX.into())
+					.ref_time(),
+				report_slash: T::WeightInfo::report_slash().ref_time(),
+			};
 			let message = xcm::transact::<T>(
 				ethereum_xcm::transact(
 					registry_contract.address,
@@ -650,6 +661,7 @@ pub mod pallet {
 						Pallet::<T>::index() as u8,
 						T::WeightToFee::get(),
 						<xcm::FeeLocation<T>>::get()?,
+						weights.clone(),
 					)
 					.try_into()
 					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
@@ -663,6 +675,7 @@ pub mod pallet {
 				Event::RegistrationSent {
 					para_id: registry_contract.para_id,
 					contract_address: registry_contract.address.into(),
+					weights,
 				},
 			)?;
 			Ok(())

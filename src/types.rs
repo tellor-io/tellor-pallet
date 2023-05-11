@@ -181,6 +181,17 @@ pub(crate) mod governance {
 	}
 }
 
+/// Storing weights of extrinsics, required in parachain registration
+#[derive(Clone, Encode, Decode, Default, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct Weights {
+	pub report_stake_deposited: u64,
+	pub report_staking_withdraw_request: u64,
+	pub report_stake_withdrawn: u64,
+	pub report_vote_tallied: u64,
+	pub report_vote_executed: u64,
+	pub report_slash: u64,
+}
+
 pub(super) struct U256ToBalance<T>(PhantomData<T>);
 impl<T: Config> Convert<U256, BalanceOf<T>> for U256ToBalance<T> {
 	fn convert(a: U256) -> BalanceOf<T> {
