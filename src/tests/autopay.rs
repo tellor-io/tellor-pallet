@@ -28,6 +28,7 @@ use sp_core::{bounded::BoundedVec, bounded_vec, keccak_256};
 use sp_runtime::traits::{BadOrigin, Convert};
 
 type Fee = <Test as Config>::Fee;
+type FeedsWithFunding = crate::pallet::FeedsWithFunding<Test>;
 type Tips = crate::pallet::Tips<Test>;
 
 #[test]
@@ -716,7 +717,7 @@ fn setup_data_feed() {
 			assert_eq!(result.window, 600);
 			assert_eq!(result.price_threshold, 1);
 			assert_eq!(result.reward_increase_per_second, 3);
-			assert_eq!(result.feeds_with_funding_index, 0);
+			assert_eq!(FeedsWithFunding::contains_key(feed_id), false);
 
 			Balances::make_free_balance_be(&feed_creator, token(100));
 			create_feed(
@@ -1273,9 +1274,9 @@ fn get_data_feed() {
 				window: 600,
 				price_threshold: 0,
 				reward_increase_per_second: 0,
-				feeds_with_funding_index: 1,
 			}
 		);
+		assert_eq!(FeedsWithFunding::contains_key(feed_id), true);
 	});
 }
 
@@ -1632,8 +1633,8 @@ fn get_funded_feeds() {
 				token(1),
 			);
 			assert_eq!(
-				Tellor::get_funded_feeds(),
-				vec![feed_1, feed_2, feed_3],
+				sort(Tellor::get_funded_feeds()),
+				sort(vec![feed_1, feed_2, feed_3]),
 				"should be three funded feeds"
 			);
 			(feed_1, feed_2, feed_3)
@@ -1652,18 +1653,11 @@ fn get_funded_feeds() {
 		});
 
 		// Check feed details
-		for (index, feed) in vec![feed_1, feed_2, feed_3]
-			.iter()
-			.map(|feed| Tellor::get_data_feed(*feed).unwrap())
-			.enumerate()
-		{
-			let item = index as u32 + 1;
-			assert_eq!(
-				feed.feeds_with_funding_index, item,
-				"queryId {0} feedsWithFundingIndex should be {0}",
-				item
-			)
-		}
+		assert_eq!(
+			sort(Tellor::get_funded_feeds()),
+			sort(vec![feed_1, feed_2, feed_3]),
+			"incorrect funded feeds"
+		);
 
 		with_block_after(43_200, || {
 			assert_ok!(Tellor::claim_tip(
@@ -1672,20 +1666,11 @@ fn get_funded_feeds() {
 				query_id_2,
 				bounded_vec![timestamp.into()]
 			));
-			assert_eq!(Tellor::get_funded_feeds(), vec![feed_1, feed_3], "incorrect funded feeds");
-			for (index, (feed, expected)) in vec![(feed_1, 1), (feed_2, 0), (feed_3, 2)]
-				.iter()
-				.map(|(feed, expected)| (Tellor::get_data_feed(*feed).unwrap(), *expected))
-				.enumerate()
-			{
-				assert_eq!(
-					feed.feeds_with_funding_index,
-					expected,
-					"queryId {} feedsWithFundingIndex should be {}",
-					index + 1,
-					expected
-				)
-			}
+			assert_eq!(
+				sort(Tellor::get_funded_feeds()),
+				sort(vec![feed_1, feed_3]),
+				"incorrect funded feeds"
+			);
 		});
 	});
 }
@@ -2197,7 +2182,7 @@ fn get_funded_feed_details() {
 	new_test_ext().execute_with(|| {
 		with_block(|| {
 			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
-			create_feed(
+			let feed_id = create_feed(
 				feed_creator,
 				query_id,
 				token(1),
@@ -2219,9 +2204,9 @@ fn get_funded_feed_details() {
 					window: 600,
 					price_threshold: 0,
 					reward_increase_per_second: 0,
-					feeds_with_funding_index: 1,
 				}
 			);
+			assert!(FeedsWithFunding::contains_key(feed_id));
 		});
 	});
 }

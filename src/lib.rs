@@ -246,8 +246,7 @@ pub mod pallet {
 		ValueQuery,
 	>;
 	#[pallet::storage]
-	pub(super) type FeedsWithFunding<T> =
-		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
+	pub(super) type FeedsWithFunding<T> = StorageMap<_, Identity, FeedId, ()>;
 	#[pallet::storage]
 	pub(super) type QueryIdFromDataFeedId<T> = StorageMap<_, Identity, FeedId, QueryId>;
 	#[pallet::storage]
@@ -805,43 +804,7 @@ pub mod pallet {
 					);
 					cumulative_reward = balance;
 					// Adjust currently funded feeds
-					<FeedsWithFunding<T>>::try_mutate(|feeds_with_funding| -> DispatchResult {
-						if feeds_with_funding.len() > 1 {
-							let index = feed
-								.feeds_with_funding_index
-								.checked_sub(1)
-								.ok_or(ArithmeticError::Underflow)?;
-							// Replace unfunded feed in array with last element
-							let fid = *feeds_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
-							feeds_with_funding
-								.get_mut(index as usize)
-								.map(|i| *i = fid)
-								.ok_or(Error::<T>::InvalidIndex)?;
-							let feed_id_last_funded = feeds_with_funding
-								.get(index as usize)
-								.ok_or(Error::<T>::InvalidIndex)?;
-							match <QueryIdFromDataFeedId<T>>::get(feed_id_last_funded) {
-								None => return Err(Error::<T>::InvalidIndex.into()),
-								Some(query_id_last_funded) => {
-									<DataFeeds<T>>::try_mutate(
-										query_id_last_funded,
-										feed_id_last_funded,
-										|f| -> DispatchResult {
-											if let Some(f) = f {
-												f.feeds_with_funding_index = index
-													.checked_add(1)
-													.ok_or(ArithmeticError::Overflow)?
-											}
-											Ok(())
-										},
-									)?;
-								},
-							}
-						}
-						feeds_with_funding.pop();
-						Ok(())
-					})?;
-					feed.feeds_with_funding_index = 0;
+					<FeedsWithFunding<T>>::remove(feed_id);
 				}
 				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp.0), true);
 			}
@@ -941,7 +904,6 @@ pub mod pallet {
 				window,
 				price_threshold,
 				reward_increase_per_second,
-				feeds_with_funding_index: 0,
 			};
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);

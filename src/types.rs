@@ -64,8 +64,6 @@ pub(crate) mod autopay {
 		pub(crate) price_threshold: u16,
 		/// Amount reward increases per second within the window (0 for flat rewards).
 		pub(crate) reward_increase_per_second: Balance,
-		/// Index plus one of data feed identifier in FeedsWithFunding storage (0 if not included).
-		pub(crate) feeds_with_funding_index: u32,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]

@@ -60,7 +60,7 @@ sp_api::decl_runtime_apis! {
 
 		/// Read currently funded feeds.
 		/// # Returns
-		/// The currently funded feeds
+		/// The currently funded feeds, in no particular order.
 		fn get_funded_feeds() -> Vec<FeedId>;
 
 		/// Read query identifiers with current one-time tips.

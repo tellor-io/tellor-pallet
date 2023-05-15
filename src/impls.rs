@@ -18,7 +18,7 @@ use super::*;
 use crate::constants::DECIMALS;
 use frame_support::traits::fungible::Inspect;
 use sp_runtime::{
-	traits::{CheckedAdd, CheckedConversion, CheckedMul, CheckedSub, Hash},
+	traits::{CheckedAdd, CheckedMul, CheckedSub, Hash},
 	ArithmeticError, SaturatedConversion,
 };
 use sp_std::cmp::Ordering;
@@ -152,17 +152,8 @@ impl<T: Config> Pallet<T> {
 		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 		feed.balance.saturating_accrue(amount);
 		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
-		// Add to array of feeds with funding
-		if feed.feeds_with_funding_index == 0 && feed.balance > Zero::zero() {
-			let index = <FeedsWithFunding<T>>::try_mutate(
-				|feeds_with_funding| -> Result<usize, DispatchError> {
-					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-					Ok(feeds_with_funding.len())
-				},
-			)?;
-			feed.feeds_with_funding_index =
-				index.checked_into().ok_or(ArithmeticError::Overflow)?;
-		}
+		// Add to feeds with funding
+		<FeedsWithFunding<T>>::insert(feed_id, ());
 		let feed_details = feed.clone();
 		<DataFeeds<T>>::insert(query_id, feed_id, feed);
 		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
@@ -642,9 +633,9 @@ impl<T: Config> Pallet<T> {
 
 	/// Read currently funded feeds.
 	/// # Returns
-	/// The currently funded feeds
+	/// The currently funded feeds, in no particular order.
 	pub fn get_funded_feeds() -> Vec<FeedId> {
-		<FeedsWithFunding<T>>::get().to_vec()
+		<FeedsWithFunding<T>>::iter_keys().collect()
 	}
 
 	/// Read query identifiers with current one-time tips.
