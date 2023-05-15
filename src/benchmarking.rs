@@ -385,7 +385,7 @@ benchmarks! {
 				1,
 				token::<T>(0u64),
 				query_data.clone(),
-				token::<T>(100u64)
+				token::<T>(1000u64)
 		);
 
 		// report deposit stake
