@@ -511,8 +511,6 @@ pub mod pallet {
 		InvalidTimestamp,
 		/// Window must be less than interval length.
 		InvalidWindow,
-		/// The maximum number of feeds have been funded.
-		MaxFeedsFunded,
 		/// The maximum number of tips has been reached,
 		MaxTipsReached,
 		/// No tips submitted for this query identifier.
