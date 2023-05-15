@@ -138,10 +138,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxClaimTimestamps: Get<u32>;
 
-		/// The maximum number of funded feeds.
-		#[pallet::constant]
-		type MaxFundedFeeds: Get<u32>;
-
 		/// The maximum length of query data.
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
