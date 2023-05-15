@@ -65,7 +65,7 @@ sp_api::decl_runtime_apis! {
 
 		/// Read query identifiers with current one-time tips.
 		/// # Returns
-		/// Query identifiers with current one-time tips.
+		/// Query identifiers with current one-time tips, in no particular order.
 		fn get_funded_query_ids() -> Vec<QueryId>;
 
 		/// Read currently funded single tips with query data.

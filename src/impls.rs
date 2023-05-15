@@ -640,9 +640,9 @@ impl<T: Config> Pallet<T> {
 
 	/// Read query identifiers with current one-time tips.
 	/// # Returns
-	/// Query identifiers with current one-time tips.
+	/// Query identifiers with current one-time tips, in no particular order.
 	pub fn get_funded_query_ids() -> Vec<QueryId> {
-		<QueryIdsWithFunding<T>>::get().to_vec()
+		<QueryIdsWithFunding<T>>::iter_keys().collect()
 	}
 
 	/// Read currently funded single tips with query data.

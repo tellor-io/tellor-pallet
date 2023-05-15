@@ -1735,7 +1735,6 @@ fn get_funded_query_ids() {
 				query_data_1.clone()
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
 			// Tip queryId 1 again
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
@@ -1744,7 +1743,6 @@ fn get_funded_query_ids() {
 				query_data_1.clone()
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
 			// Tip queryId 2
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
@@ -1753,8 +1751,6 @@ fn get_funded_query_ids() {
 				query_data_2.clone()
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1, query_id_2]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
 			// Tip queryId 2 again
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
@@ -1770,10 +1766,10 @@ fn get_funded_query_ids() {
 				token(1),
 				query_data_3.clone()
 			));
-			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1, query_id_2, query_id_3]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
+			assert_eq!(
+				sort(Tellor::get_funded_query_ids()),
+				sort(vec![query_id_1, query_id_2, query_id_3])
+			);
 			// Tip queryId 4
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
@@ -1782,13 +1778,9 @@ fn get_funded_query_ids() {
 				query_data_4.clone()
 			));
 			assert_eq!(
-				Tellor::get_funded_query_ids(),
-				vec![query_id_1, query_id_2, query_id_3, query_id_4]
+				sort(Tellor::get_funded_query_ids()),
+				sort(vec![query_id_1, query_id_2, query_id_3, query_id_4])
 			);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 4);
 		});
 
 		let timestamp_1 = with_block_after(REPORTING_LOCK, || {
@@ -1841,11 +1833,10 @@ fn get_funded_query_ids() {
 				query_id_1,
 				bounded_vec![timestamp_1.into()]
 			));
-			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2, query_id_3]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+			assert_eq!(
+				sort(Tellor::get_funded_query_ids()),
+				sort(vec![query_id_4, query_id_2, query_id_3])
+			);
 
 			// Tip queryId 2
 			assert_ok!(Tellor::tip(
@@ -1860,22 +1851,17 @@ fn get_funded_query_ids() {
 				query_id_2,
 				bounded_vec![timestamp_2.into()]
 			));
-			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2, query_id_3]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+			assert_eq!(
+				sort(Tellor::get_funded_query_ids()),
+				sort(vec![query_id_4, query_id_2, query_id_3])
+			);
 
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_3,
 				bounded_vec![timestamp_3.into()]
 			));
-			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+			assert_eq!(sort(Tellor::get_funded_query_ids()), sort(vec![query_id_4, query_id_2]));
 
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
@@ -1883,10 +1869,6 @@ fn get_funded_query_ids() {
 				bounded_vec![timestamp_4.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_2]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 1);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4), None);
 		});
 
 		let timestamp_2 = with_block(|| {
@@ -1907,10 +1889,6 @@ fn get_funded_query_ids() {
 				bounded_vec![timestamp_2.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4), None);
 
 			// Tip queryId 4
 			assert_ok!(Tellor::tip(
@@ -1920,10 +1898,6 @@ fn get_funded_query_ids() {
 				query_data_4.clone()
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
 		});
 	});
 }
@@ -2370,7 +2344,7 @@ fn get_current_feeds() {
 	});
 }
 
-fn sort(mut feeds: Vec<FeedId>) -> Vec<FeedId> {
+fn sort(mut feeds: Vec<H256>) -> Vec<H256> {
 	feeds.sort();
 	feeds
 }
