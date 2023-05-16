@@ -219,6 +219,7 @@ pub mod pallet {
 	}
 
 	// AutoPay
+	/// Mapping query identifier and feed identifier to feed details
 	#[pallet::storage]
 	pub(super) type DataFeeds<T> =
 		StorageDoubleMap<_, Identity, QueryId, Identity, FeedId, FeedOf<T>>;
@@ -234,17 +235,23 @@ pub mod pallet {
 		bool,
 		ValueQuery,
 	>;
+	/// Feed identifiers that have funding
 	#[pallet::storage]
 	pub(super) type FeedsWithFunding<T> = StorageMap<_, Identity, FeedId, ()>;
+	/// Mapping feed identifier to query identifier
 	#[pallet::storage]
 	pub(super) type QueryIdFromDataFeedId<T> = StorageMap<_, Identity, FeedId, QueryId>;
+	// Query identifiers that have funding
 	#[pallet::storage]
 	pub(super) type QueryIdsWithFunding<T> = StorageMap<_, Identity, QueryId, ()>;
+	/// Mapping query identifier (and index) to tips
 	#[pallet::storage]
 	pub(super) type Tips<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, u128, TipOf<T>>;
+	/// Total tip count per query identifier
 	#[pallet::storage]
 	pub(super) type TipCount<T> = StorageMap<_, Identity, QueryId, u128, ValueQuery>;
+	/// Tracks user tip total per user
 	#[pallet::storage]
 	pub(super) type UserTipsTotal<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, BalanceOf<T>, ValueQuery>;
