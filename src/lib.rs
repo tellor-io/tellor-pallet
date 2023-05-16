@@ -247,10 +247,10 @@ pub mod pallet {
 	/// Mapping query identifier (and index) to tips
 	#[pallet::storage]
 	pub(super) type Tips<T> =
-		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, u128, TipOf<T>>;
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, u32, TipOf<T>>;
 	/// Total tip count per query identifier
 	#[pallet::storage]
-	pub(super) type TipCount<T> = StorageMap<_, Identity, QueryId, u128, ValueQuery>;
+	pub(super) type TipCount<T> = StorageMap<_, Identity, QueryId, u32, ValueQuery>;
 	/// Tracks user tip total per user
 	#[pallet::storage]
 	pub(super) type UserTipsTotal<T> =
@@ -305,7 +305,7 @@ pub mod pallet {
 	/// Mapping of reporter and query identifier to number of reports submitted.
 	#[pallet::storage]
 	pub(super) type StakerReportsSubmittedByQueryId<T> =
-		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Identity, QueryId, u128, ValueQuery>;
+		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Identity, QueryId, u32, ValueQuery>;
 	/// The time of last update to AccumulatedRewardPerShare.
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_allocation)]
@@ -323,7 +323,7 @@ pub mod pallet {
 	pub(super) type TotalStakeAmount<T> = StorageValue<_, Tributes, ValueQuery>;
 	/// Total number of stakers with at least StakeAmount staked, not exact.
 	#[pallet::storage]
-	pub(super) type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
+	pub(super) type TotalStakers<T> = StorageValue<_, u64, ValueQuery>;
 	/// Amount locked for withdrawal.
 	#[pallet::storage]
 	pub(super) type ToWithdraw<T> = StorageValue<_, Tributes, ValueQuery>;
@@ -340,13 +340,13 @@ pub mod pallet {
 	pub(super) type DisputeInfo<T> = StorageMap<_, Identity, DisputeId, DisputeOf<T>>;
 	/// Mapping of a query identifier to the number of corresponding open disputes.
 	#[pallet::storage]
-	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Identity, QueryId, u128>;
+	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Identity, QueryId, u32>;
 	/// Any pending votes which are queued to be sent to the governance controller contract for tallying.
 	#[pallet::storage]
 	pub(super) type PendingVotes<T> = StorageMap<_, Identity, DisputeId, (u8, Timestamp)>;
 	/// Total number of votes initiated.
 	#[pallet::storage]
-	pub(super) type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
+	pub(super) type VoteCount<T> = StorageValue<_, u64, ValueQuery>;
 	/// Mapping of dispute identifiers to the details of the vote round.
 	#[pallet::storage]
 	pub(super) type VoteInfo<T> =
@@ -369,7 +369,7 @@ pub mod pallet {
 	/// Mapping of addresses to the number of votes they have cast.
 	#[pallet::storage]
 	pub(super) type VoteTallyByAddress<T> =
-		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
+		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u32, ValueQuery>;
 	// Query Data
 	#[pallet::storage]
 	pub(super) type QueryData<T> = StorageMap<_, Identity, QueryId, QueryDataOf<T>>;

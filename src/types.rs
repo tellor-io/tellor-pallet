@@ -97,11 +97,11 @@ pub(crate) mod oracle {
 		/// Timestamp of reporter's last reported value.
 		pub(crate) reporter_last_timestamp: Timestamp,
 		/// Total number of reports submitted by reporter.
-		pub(crate) reports_submitted: u128,
+		pub(crate) reports_submitted: u32,
 		/// Total number of governance votes when stake deposited.
-		pub(crate) start_vote_count: u128,
+		pub(crate) start_vote_count: u64,
 		/// Staker vote tally when stake deposited.
-		pub(crate) start_vote_tally: u128,
+		pub(crate) start_vote_tally: u32,
 		/// Used to keep track of total stakers.
 		pub(crate) staked: bool,
 	}

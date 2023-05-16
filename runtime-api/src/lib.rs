@@ -78,7 +78,7 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
 		/// The number of past tips.
-		fn get_past_tip_count(query_id: QueryId) -> u128;
+		fn get_past_tip_count(query_id: QueryId) -> u32;
 
 		/// Read the past tips for a query identifier.
 		/// # Arguments
@@ -93,7 +93,7 @@ sp_api::decl_runtime_apis! {
 		/// * `index` - The index of the tip.
 		/// # Returns
 		/// The past tip, if found.
-		fn get_past_tip_by_index(query_id: QueryId, index: u128) -> Option<Tip<Balance>>;
+		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Balance>>;
 
 		/// Look up a query identifier from a data feed identifier.
 		/// # Arguments
@@ -202,7 +202,7 @@ sp_api::decl_runtime_apis! {
 		/// * `reporter` - The identifier of the reporter.
 		/// # Returns
 		/// The number of values submitted by the given reporter.
-		fn get_reports_submitted_by_address(reporter: AccountId) -> u128;
+		fn get_reports_submitted_by_address(reporter: AccountId) -> u32;
 
 		/// Returns the number of values submitted to a specific query identifier by a specific reporter.
 		/// # Arguments
@@ -210,7 +210,7 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of the specific data feed.
 		/// # Returns
 		/// The number of values submitted by the given reporter to the given query identifier.
-		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u128;
+		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u32;
 
 		/// Returns the amount required to report oracle values.
 		/// # Returns
@@ -261,7 +261,7 @@ sp_api::decl_runtime_apis! {
 		/// Returns the total number of current stakers.
 		/// # Returns
 		/// The total number of current stakers.
-		fn get_total_stakers() -> u128;
+		fn get_total_stakers() -> u64;
 
 		/// Returns whether a given value is disputed.
 		/// # Arguments
@@ -317,12 +317,12 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of a specific data feed.
 		/// # Returns
 		/// The number of open disputes for the query identifier.
-		fn get_open_disputes_on_id(query_id: QueryId) -> u128;
+		fn get_open_disputes_on_id(query_id: QueryId) -> u32;
 
 		/// Returns the total number of votes
 		/// # Returns
 		/// The total number of votes.
-		fn get_vote_count() -> u128;
+		fn get_vote_count() -> u64;
 
 		/// Returns info on a vote for a given dispute identifier.
 		/// # Arguments
@@ -345,6 +345,6 @@ sp_api::decl_runtime_apis! {
 		/// * `voter` - The account of the voter to check for.
 		/// # Returns
 		/// The total number of votes cast by the voter.
-		fn get_vote_tally_by_address(voter: AccountId) -> u128;
+		fn get_vote_tally_by_address(voter: AccountId) -> u32;
 	}
 }

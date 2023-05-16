@@ -373,15 +373,15 @@ impl<T: Config> Pallet<T> {
 					match supports {
 						// Invalid
 						None => {
-							vote.reporters.invalid_query.saturating_accrue(reports);
+							vote.reporters.invalid_query.saturating_accrue(reports.into());
 							vote.users.invalid_query.saturating_accrue(user_tips);
 						},
 						Some(supports) =>
 							if supports {
-								vote.reporters.does_support.saturating_accrue(reports);
+								vote.reporters.does_support.saturating_accrue(reports.into());
 								vote.users.does_support.saturating_accrue(user_tips);
 							} else {
-								vote.reporters.against.saturating_accrue(reports);
+								vote.reporters.against.saturating_accrue(reports.into());
 								vote.users.against.saturating_accrue(user_tips);
 							},
 					};
@@ -865,7 +865,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of a specific data feed.
 	/// # Returns
 	/// The number of open disputes for the query identifier.
-	pub fn get_open_disputes_on_id(query_id: QueryId) -> u128 {
+	pub fn get_open_disputes_on_id(query_id: QueryId) -> u32 {
 		<OpenDisputesOnId<T>>::get(query_id).unwrap_or_default()
 	}
 
@@ -874,7 +874,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
 	/// The number of past tips.
-	pub fn get_past_tip_count(query_id: QueryId) -> u128 {
+	pub fn get_past_tip_count(query_id: QueryId) -> u32 {
 		<TipCount<T>>::get(query_id)
 	}
 
@@ -893,7 +893,7 @@ impl<T: Config> Pallet<T> {
 	/// * `index` - The index of the tip.
 	/// # Returns
 	/// The past tip, if found.
-	pub fn get_past_tip_by_index(query_id: QueryId, index: u128) -> Option<Tip<BalanceOf<T>>> {
+	pub fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<BalanceOf<T>>> {
 		<Tips<T>>::get(query_id, index)
 	}
 
@@ -958,7 +958,7 @@ impl<T: Config> Pallet<T> {
 	/// * `reporter` - The identifier of the reporter.
 	/// # Returns
 	/// The number of values submitted by the given reporter.
-	pub fn get_reports_submitted_by_address(reporter: &AccountIdOf<T>) -> u128 {
+	pub fn get_reports_submitted_by_address(reporter: &AccountIdOf<T>) -> u32 {
 		<StakerDetails<T>>::get(reporter)
 			.map(|stake_info| stake_info.reports_submitted)
 			.unwrap_or_default()
@@ -973,7 +973,7 @@ impl<T: Config> Pallet<T> {
 	pub fn get_reports_submitted_by_address_and_query_id(
 		reporter: AccountIdOf<T>,
 		query_id: QueryId,
-	) -> u128 {
+	) -> u32 {
 		<StakerReportsSubmittedByQueryId<T>>::get(reporter, query_id)
 	}
 
@@ -1104,7 +1104,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the total number of current stakers.
 	/// # Returns
 	/// The total number of current stakers.
-	pub fn get_total_stakers() -> u128 {
+	pub fn get_total_stakers() -> u64 {
 		<TotalStakers<T>>::get()
 	}
 
@@ -1120,7 +1120,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the total number of votes
 	/// # Returns
 	/// The total number of votes.
-	pub fn get_vote_count() -> u128 {
+	pub fn get_vote_count() -> u64 {
 		<VoteCount<T>>::get()
 	}
 
@@ -1149,7 +1149,7 @@ impl<T: Config> Pallet<T> {
 	/// * `voter` - The account of the voter to check for.
 	/// # Returns
 	/// The total number of votes cast by the voter.
-	pub fn get_vote_tally_by_address(voter: &AccountIdOf<T>) -> u128 {
+	pub fn get_vote_tally_by_address(voter: &AccountIdOf<T>) -> u32 {
 		<VoteTallyByAddress<T>>::get(voter)
 	}
 
