@@ -246,7 +246,9 @@ pub mod pallet {
 	pub(super) type QueryIdsWithFunding<T> = StorageMap<_, Identity, QueryId, ()>;
 	#[pallet::storage]
 	pub(super) type Tips<T> =
-		StorageMap<_, Identity, QueryId, BoundedVec<TipOf<T>, <T as Config>::MaxTipsPerQuery>>;
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, u128, TipOf<T>>;
+	#[pallet::storage]
+	pub(super) type TipCount<T> = StorageMap<_, Identity, QueryId, u128, ValueQuery>;
 	#[pallet::storage]
 	pub(super) type UserTipsTotal<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, BalanceOf<T>, ValueQuery>;
@@ -679,10 +681,7 @@ pub mod pallet {
 			timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps>,
 		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
-			ensure!(
-				<Tips<T>>::get(query_id).map_or(false, |t| t.len() > 0),
-				Error::<T>::NoTipsSubmitted
-			);
+			ensure!(<TipCount<T>>::get(query_id) > 0, Error::<T>::NoTipsSubmitted);
 
 			let mut cumulative_reward = BalanceOf::<T>::zero();
 			for timestamp in &timestamps {
@@ -898,52 +897,61 @@ pub mod pallet {
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 
-			<Tips<T>>::try_mutate(query_id, |mut maybe_tips| -> DispatchResult {
-				match &mut maybe_tips {
-					None => {
-						*maybe_tips = Some(
-							BoundedVec::try_from(vec![TipOf::<T> {
+			let tip_count = <TipCount<T>>::get(query_id);
+			if tip_count == 0 {
+				<Tips<T>>::insert(
+					query_id,
+					tip_count,
+					TipOf::<T> {
+						amount,
+						timestamp: Self::now()
+							.checked_add(1u8.into())
+							.ok_or(ArithmeticError::Overflow)?,
+						cumulative_tips: amount,
+					},
+				);
+				<TipCount<T>>::mutate(query_id, |count| count.saturating_inc());
+				Self::store_data(query_id, &query_data);
+			} else {
+				let timestamp_retrieved =
+					Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
+				let last_tip = <Tips<T>>::get(
+					query_id,
+					tip_count.checked_sub(1).expect("tip_count is always greater than zero; qed"),
+				);
+				match last_tip {
+					Some(mut last_tip) if timestamp_retrieved < last_tip.timestamp => {
+						last_tip.timestamp =
+							Self::now().checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?;
+						last_tip.amount.saturating_accrue(amount);
+						last_tip.cumulative_tips.saturating_accrue(amount);
+						<Tips<T>>::insert(
+							query_id,
+							tip_count
+								.checked_sub(1)
+								.expect("tip_count is always greater than zero; qed"),
+							last_tip,
+						);
+					},
+					_ => {
+						let cumulative_tips = last_tip.map_or(Zero::zero(), |t| t.cumulative_tips);
+						<Tips<T>>::insert(
+							query_id,
+							tip_count,
+							Tip {
 								amount,
 								timestamp: Self::now()
 									.checked_add(1u8.into())
 									.ok_or(ArithmeticError::Overflow)?,
-								cumulative_tips: amount,
-							}])
-							.map_err(|_| Error::<T>::MaxTipsReached)?,
+								cumulative_tips: cumulative_tips
+									.checked_add(&amount)
+									.ok_or(ArithmeticError::Overflow)?,
+							},
 						);
-						Self::store_data(query_id, &query_data);
-						Ok(())
-					},
-					Some(tips) => {
-						let timestamp_retrieved =
-							Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
-						match tips.last_mut() {
-							Some(last_tip) if timestamp_retrieved < last_tip.timestamp => {
-								last_tip.timestamp = Self::now()
-									.checked_add(1u8.into())
-									.ok_or(ArithmeticError::Overflow)?;
-								last_tip.amount.saturating_accrue(amount);
-								last_tip.cumulative_tips.saturating_accrue(amount);
-							},
-							_ => {
-								let cumulative_tips =
-									tips.last().map_or(Zero::zero(), |t| t.cumulative_tips);
-								tips.try_push(Tip {
-									amount,
-									timestamp: Self::now()
-										.checked_add(1u8.into())
-										.ok_or(ArithmeticError::Overflow)?,
-									cumulative_tips: cumulative_tips
-										.checked_add(&amount)
-										.ok_or(ArithmeticError::Overflow)?,
-								})
-								.map_err(|_| Error::<T>::MaxTipsReached)?;
-							},
-						}
-						Ok(())
+						<TipCount<T>>::mutate(query_id, |count| count.saturating_inc());
 					},
 				}
-			})?;
+			}
 
 			if Self::get_current_tip(query_id) > Zero::zero() {
 				<QueryIdsWithFunding<T>>::insert(query_id, ());

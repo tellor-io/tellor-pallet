@@ -1225,7 +1225,7 @@ fn claim_onetime_tip() {
 				bounded_vec![timestamp.into()]
 			));
 			assert_eq!(Tellor::get_current_tip(query_id), 0, "tip should be correct");
-			for tip in Tips::get(query_id).unwrap() {
+			for tip in Tips::iter_prefix_values(query_id) {
 				assert_eq!(tip.amount, 0);
 			}
 			let final_balance = Balances::balance(&reporter);
@@ -1362,8 +1362,8 @@ fn get_past_tips() {
 		});
 
 		assert_eq!(
-			Tellor::get_past_tips(query_id),
-			vec![
+			sort_tips(Tellor::get_past_tips(query_id)),
+			sort_tips(vec![
 				TipOf::<Test> {
 					amount: token(100),
 					timestamp: timestamp_1 + 1,
@@ -1374,7 +1374,7 @@ fn get_past_tips() {
 					timestamp: timestamp_2 + 1,
 					cumulative_tips: token(300)
 				}
-			],
+			]),
 			"past tips should be correct"
 		);
 
@@ -1389,8 +1389,8 @@ fn get_past_tips() {
 		});
 
 		assert_eq!(
-			Tellor::get_past_tips(query_id),
-			vec![
+			sort_tips(Tellor::get_past_tips(query_id)),
+			sort_tips(vec![
 				TipOf::<Test> {
 					amount: token(100),
 					timestamp: timestamp_1 + 1,
@@ -1401,7 +1401,7 @@ fn get_past_tips() {
 					timestamp: timestamp_3 + 1,
 					cumulative_tips: token(600)
 				}
-			],
+			]),
 			"past tips should be correct"
 		);
 	});
@@ -2344,9 +2344,14 @@ fn get_current_feeds() {
 	});
 }
 
-fn sort(mut feeds: Vec<H256>) -> Vec<H256> {
-	feeds.sort();
-	feeds
+fn sort(mut items: Vec<H256>) -> Vec<H256> {
+	items.sort();
+	items
+}
+
+fn sort_tips(mut items: Vec<TipOf<Test>>) -> Vec<TipOf<Test>> {
+	items.sort_by_key(|t| t.timestamp);
+	items
 }
 
 // Helper function for creating feeds

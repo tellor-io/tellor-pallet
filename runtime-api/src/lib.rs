@@ -78,13 +78,13 @@ sp_api::decl_runtime_apis! {
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
 		/// The number of past tips.
-		fn get_past_tip_count(query_id: QueryId) -> u32;
+		fn get_past_tip_count(query_id: QueryId) -> u128;
 
 		/// Read the past tips for a query identifier.
 		/// # Arguments
 		/// * `query_id` - Identifier of reported data.
 		/// # Returns
-		/// All past tips.
+		/// All past tips, in no particular order.
 		fn get_past_tips(query_id: QueryId) -> Vec<Tip<Balance>>;
 
 		/// Read a past tip for a query identifier and index.
@@ -93,7 +93,7 @@ sp_api::decl_runtime_apis! {
 		/// * `index` - The index of the tip.
 		/// # Returns
 		/// The past tip, if found.
-		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Balance>>;
+		fn get_past_tip_by_index(query_id: QueryId, index: u128) -> Option<Tip<Balance>>;
 
 		/// Look up a query identifier from a data feed identifier.
 		/// # Arguments

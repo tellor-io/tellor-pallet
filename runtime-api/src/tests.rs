@@ -197,7 +197,7 @@ mock_impl_runtime_apis! {
 			.collect()
 		}
 
-		fn get_past_tip_count(query_id: QueryId) -> u32 {
+		fn get_past_tip_count(query_id: QueryId) -> u128 {
 			tellor::Pallet::<Test>::get_past_tip_count(query_id)
 		}
 
@@ -205,7 +205,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_past_tips(query_id)
 		}
 
-		fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<Balance>>{
+		fn get_past_tip_by_index(query_id: QueryId, index: u128) -> Option<Tip<Balance>>{
 			tellor::Pallet::<Test>::get_past_tip_by_index(query_id, index)
 		}
 
