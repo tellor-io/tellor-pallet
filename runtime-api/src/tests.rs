@@ -122,7 +122,6 @@ impl tellor::Config for Test {
 	type InitialDisputeFee = ();
 	type MaxClaimTimestamps = ();
 	type MaxQueryDataLength = ();
-	type MaxTipsPerQuery = ();
 	type MaxValueLength = MaxValueLength;
 	type MaxVotes = ();
 	type MinimumStakeAmount = ();

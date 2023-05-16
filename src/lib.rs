@@ -142,10 +142,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
 
-		/// The maximum number of tips per query.
-		#[pallet::constant]
-		type MaxTipsPerQuery: Get<u32>;
-
 		/// The maximum length of an individual value submitted to the oracle.
 		#[pallet::constant]
 		type MaxValueLength: Get<u32>;
