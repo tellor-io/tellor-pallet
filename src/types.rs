@@ -64,8 +64,6 @@ pub(crate) mod autopay {
 		pub(crate) price_threshold: u16,
 		/// Amount reward increases per second within the window (0 for flat rewards).
 		pub(crate) reward_increase_per_second: Balance,
-		/// Index plus one of data feed identifier in FeedsWithFunding storage (0 if not included).
-		pub(crate) feeds_with_funding_index: u32,
 	}
 
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -99,11 +97,11 @@ pub(crate) mod oracle {
 		/// Timestamp of reporter's last reported value.
 		pub(crate) reporter_last_timestamp: Timestamp,
 		/// Total number of reports submitted by reporter.
-		pub(crate) reports_submitted: u128,
+		pub(crate) reports_submitted: u32,
 		/// Total number of governance votes when stake deposited.
-		pub(crate) start_vote_count: u128,
+		pub(crate) start_vote_count: u64,
 		/// Staker vote tally when stake deposited.
-		pub(crate) start_vote_tally: u128,
+		pub(crate) start_vote_tally: u32,
 		/// Used to keep track of total stakers.
 		pub(crate) staked: bool,
 	}

@@ -18,7 +18,7 @@ use super::*;
 use crate::constants::DECIMALS;
 use frame_support::traits::fungible::Inspect;
 use sp_runtime::{
-	traits::{CheckedAdd, CheckedConversion, CheckedMul, CheckedSub, Hash},
+	traits::{CheckedAdd, CheckedMul, CheckedSub, Hash},
 	ArithmeticError, SaturatedConversion,
 };
 use sp_std::cmp::Ordering;
@@ -152,17 +152,8 @@ impl<T: Config> Pallet<T> {
 		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 		feed.balance.saturating_accrue(amount);
 		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
-		// Add to array of feeds with funding
-		if feed.feeds_with_funding_index == 0 && feed.balance > Zero::zero() {
-			let index = <FeedsWithFunding<T>>::try_mutate(
-				|feeds_with_funding| -> Result<usize, DispatchError> {
-					feeds_with_funding.try_push(feed_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-					Ok(feeds_with_funding.len())
-				},
-			)?;
-			feed.feeds_with_funding_index =
-				index.checked_into().ok_or(ArithmeticError::Overflow)?;
-		}
+		// Add to feeds with funding
+		<FeedsWithFunding<T>>::insert(feed_id, ());
 		let feed_details = feed.clone();
 		<DataFeeds<T>>::insert(query_id, feed_id, feed);
 		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
@@ -382,15 +373,15 @@ impl<T: Config> Pallet<T> {
 					match supports {
 						// Invalid
 						None => {
-							vote.reporters.invalid_query.saturating_accrue(reports);
+							vote.reporters.invalid_query.saturating_accrue(reports.into());
 							vote.users.invalid_query.saturating_accrue(user_tips);
 						},
 						Some(supports) =>
 							if supports {
-								vote.reporters.does_support.saturating_accrue(reports);
+								vote.reporters.does_support.saturating_accrue(reports.into());
 								vote.users.does_support.saturating_accrue(user_tips);
 							} else {
-								vote.reporters.against.saturating_accrue(reports);
+								vote.reporters.against.saturating_accrue(reports.into());
 								vote.users.against.saturating_accrue(user_tips);
 							},
 					};
@@ -504,8 +495,12 @@ impl<T: Config> Pallet<T> {
 	/// Amount of tip.
 	pub fn get_current_tip(query_id: QueryId) -> BalanceOf<T> {
 		// if no tips, return 0
-		<Tips<T>>::get(query_id)
-			.and_then(|tips| tips.last().cloned())
+		match <TipCount<T>>::get(query_id) {
+			0 => Zero::zero(),
+			tip_count => <Tips<T>>::get(
+				query_id,
+				tip_count.checked_sub(1).expect("tip_count greater than zero; qed"),
+			)
 			.map(|last_tip| {
 				let timestamp_retrieved =
 					Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
@@ -515,7 +510,8 @@ impl<T: Config> Pallet<T> {
 					Zero::zero()
 				}
 			})
-			.unwrap_or_default()
+			.unwrap_or_default(),
+		}
 	}
 
 	/// Returns the current value of a data feed given a specific identifier.
@@ -642,16 +638,16 @@ impl<T: Config> Pallet<T> {
 
 	/// Read currently funded feeds.
 	/// # Returns
-	/// The currently funded feeds
+	/// The currently funded feeds, in no particular order.
 	pub fn get_funded_feeds() -> Vec<FeedId> {
-		<FeedsWithFunding<T>>::get().to_vec()
+		<FeedsWithFunding<T>>::iter_keys().collect()
 	}
 
 	/// Read query identifiers with current one-time tips.
 	/// # Returns
-	/// Query identifiers with current one-time tips.
+	/// Query identifiers with current one-time tips, in no particular order.
 	pub fn get_funded_query_ids() -> Vec<QueryId> {
-		<QueryIdsWithFunding<T>>::get().to_vec()
+		<QueryIdsWithFunding<T>>::iter_keys().collect()
 	}
 
 	/// Read currently funded single tips with query data.
@@ -779,92 +775,89 @@ impl<T: Config> Pallet<T> {
 				.map_or(false, |reporter| claimer == &reporter),
 			Error::<T>::InvalidClaimer
 		);
-		<Tips<T>>::try_mutate(query_id, |maybe_tips| -> Result<BalanceOf<T>, DispatchError> {
-			match maybe_tips {
-				None => Err(Error::<T>::NoTipsSubmitted.into()),
-				Some(tips) => {
-					let mut min = 0;
-					let mut max = tips.len();
+		let tip_count = <TipCount<T>>::get(query_id);
+		if tip_count == 0 {
+			return Err(Error::<T>::NoTipsSubmitted.into())
+		} else {
+			let mut min = 0;
+			let mut max = tip_count;
+			let mut mid;
+			while max.checked_sub(min).ok_or(ArithmeticError::Underflow)? > 1 {
+				mid = (max.checked_add(min).ok_or(ArithmeticError::Overflow)?)
+					.checked_div(2)
+					.expect("divisor is non-zero");
+				if <Tips<T>>::get(query_id, mid).map_or(0, |t| t.timestamp) > timestamp {
+					max = mid;
+				} else {
+					min = mid;
+				}
+			}
+
+			let (_, timestamp_before) =
+				Self::get_data_before(query_id, timestamp).unwrap_or_default();
+			let min_tip = &mut <Tips<T>>::get(query_id, min).ok_or(Error::<T>::InvalidIndex)?;
+			ensure!(timestamp_before < min_tip.timestamp, Error::<T>::TipAlreadyEarned);
+			ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
+			ensure!(min_tip.amount > Zero::zero(), Error::<T>::TipAlreadyClaimed);
+
+			let mut tip_amount = min_tip.amount;
+			min_tip.amount = Zero::zero();
+			<Tips<T>>::insert(query_id, min, min_tip);
+			let min_backup = min;
+
+			// check whether eligible for previous tips in array due to disputes
+			let index_now = Self::get_index_for_data_before(
+				query_id,
+				timestamp.checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?,
+			);
+			let index_before = Self::get_index_for_data_before(
+				query_id,
+				timestamp_before.checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?,
+			);
+			if index_now
+				.unwrap_or_default()
+				.checked_sub(index_before.unwrap_or_default())
+				.ok_or(ArithmeticError::Underflow)? >
+				1 || index_before.is_none()
+			{
+				if index_before.is_none() {
+					tip_amount = <Tips<T>>::get(query_id, min_backup)
+						.ok_or(Error::<T>::InvalidIndex)?
+						.cumulative_tips;
+				} else {
+					max = min;
+					min = 0;
 					let mut mid;
 					while max.checked_sub(min).ok_or(ArithmeticError::Underflow)? > 1 {
 						mid = (max.checked_add(min).ok_or(ArithmeticError::Overflow)?)
 							.checked_div(2)
 							.expect("divisor is non-zero");
-						if tips.get(mid).map_or(0, |t| t.timestamp) > timestamp {
+						if <Tips<T>>::get(query_id, mid).ok_or(Error::<T>::InvalidIndex)?.timestamp >
+							timestamp_before
+						{
 							max = mid;
 						} else {
 							min = mid;
 						}
 					}
-
-					let (_, timestamp_before) =
-						Self::get_data_before(query_id, timestamp).unwrap_or_default();
-					let min_tip = &mut tips.get_mut(min).ok_or(Error::<T>::InvalidIndex)?;
-					ensure!(timestamp_before < min_tip.timestamp, Error::<T>::TipAlreadyEarned);
-					ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
-					ensure!(min_tip.amount > Zero::zero(), Error::<T>::TipAlreadyClaimed);
-
-					let mut tip_amount = min_tip.amount;
-					min_tip.amount = Zero::zero();
-					let min_backup = min;
-
-					// check whether eligible for previous tips in array due to disputes
-					let index_now = Self::get_index_for_data_before(
-						query_id,
-						timestamp.checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?,
-					);
-					let index_before = Self::get_index_for_data_before(
-						query_id,
-						timestamp_before
-							.checked_add(1u8.into())
-							.ok_or(ArithmeticError::Overflow)?,
-					);
-					if index_now
-						.unwrap_or_default()
-						.checked_sub(index_before.unwrap_or_default())
-						.ok_or(ArithmeticError::Underflow)? >
-						1 || index_before.is_none()
-					{
-						if index_before.is_none() {
-							tip_amount = tips
-								.get(min_backup)
-								.ok_or(Error::<T>::InvalidIndex)?
-								.cumulative_tips;
-						} else {
-							max = min;
-							min = 0;
-							let mut mid;
-							while max.checked_sub(min).ok_or(ArithmeticError::Underflow)? > 1 {
-								mid = (max.checked_add(min).ok_or(ArithmeticError::Overflow)?)
-									.checked_div(2)
-									.expect("divisor is non-zero");
-								if tips.get(mid).ok_or(Error::<T>::InvalidIndex)?.timestamp >
-									timestamp_before
-								{
-									max = mid;
-								} else {
-									min = mid;
-								}
-							}
-							min.saturating_inc();
-							if min < min_backup {
-								let min_backup_tip =
-									tips.get(min_backup).ok_or(Error::<T>::InvalidIndex)?;
-								let min_tip = tips.get(min).ok_or(Error::<T>::InvalidIndex)?;
-								tip_amount = min_backup_tip
-									.cumulative_tips
-									.checked_sub(&min_tip.cumulative_tips)
-									.ok_or(ArithmeticError::Underflow)?
-									.checked_add(&min_tip.amount)
-									.ok_or(ArithmeticError::Overflow)?;
-							}
-						}
+					min.saturating_inc();
+					if min < min_backup {
+						let min_backup_tip =
+							<Tips<T>>::get(query_id, min_backup).ok_or(Error::<T>::InvalidIndex)?;
+						let min_tip =
+							<Tips<T>>::get(query_id, min).ok_or(Error::<T>::InvalidIndex)?;
+						tip_amount = min_backup_tip
+							.cumulative_tips
+							.checked_sub(&min_tip.cumulative_tips)
+							.ok_or(ArithmeticError::Underflow)?
+							.checked_add(&min_tip.amount)
+							.ok_or(ArithmeticError::Overflow)?;
 					}
-
-					Ok(tip_amount)
-				},
+				}
 			}
-		})
+
+			Ok(tip_amount)
+		}
 	}
 
 	/// Returns the number of open disputes for a specific query identifier.
@@ -872,7 +865,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of a specific data feed.
 	/// # Returns
 	/// The number of open disputes for the query identifier.
-	pub fn get_open_disputes_on_id(query_id: QueryId) -> u128 {
+	pub fn get_open_disputes_on_id(query_id: QueryId) -> u32 {
 		<OpenDisputesOnId<T>>::get(query_id).unwrap_or_default()
 	}
 
@@ -882,16 +875,16 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The number of past tips.
 	pub fn get_past_tip_count(query_id: QueryId) -> u32 {
-		<Tips<T>>::get(query_id).map_or(0, |t| t.len() as u32)
+		<TipCount<T>>::get(query_id)
 	}
 
 	/// Read the past tips for a query identifier.
 	/// # Arguments
 	/// * `query_id` - Identifier of reported data.
 	/// # Returns
-	/// All past tips.
+	/// All past tips, in no particular order.
 	pub fn get_past_tips(query_id: QueryId) -> Vec<Tip<BalanceOf<T>>> {
-		<Tips<T>>::get(query_id).map_or_else(Vec::default, |t| t.to_vec())
+		<Tips<T>>::iter_prefix_values(query_id).collect()
 	}
 
 	/// Read a past tip for a query identifier and index.
@@ -901,7 +894,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The past tip, if found.
 	pub fn get_past_tip_by_index(query_id: QueryId, index: u32) -> Option<Tip<BalanceOf<T>>> {
-		<Tips<T>>::get(query_id).and_then(|t| t.get(index as usize).cloned())
+		<Tips<T>>::get(query_id, index)
 	}
 
 	pub fn get_query_data(query_id: QueryId) -> Option<QueryDataOf<T>> {
@@ -965,7 +958,7 @@ impl<T: Config> Pallet<T> {
 	/// * `reporter` - The identifier of the reporter.
 	/// # Returns
 	/// The number of values submitted by the given reporter.
-	pub fn get_reports_submitted_by_address(reporter: &AccountIdOf<T>) -> u128 {
+	pub fn get_reports_submitted_by_address(reporter: &AccountIdOf<T>) -> u32 {
 		<StakerDetails<T>>::get(reporter)
 			.map(|stake_info| stake_info.reports_submitted)
 			.unwrap_or_default()
@@ -980,7 +973,7 @@ impl<T: Config> Pallet<T> {
 	pub fn get_reports_submitted_by_address_and_query_id(
 		reporter: AccountIdOf<T>,
 		query_id: QueryId,
-	) -> u128 {
+	) -> u32 {
 		<StakerReportsSubmittedByQueryId<T>>::get(reporter, query_id)
 	}
 
@@ -1111,7 +1104,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the total number of current stakers.
 	/// # Returns
 	/// The total number of current stakers.
-	pub fn get_total_stakers() -> u128 {
+	pub fn get_total_stakers() -> u64 {
 		<TotalStakers<T>>::get()
 	}
 
@@ -1127,7 +1120,7 @@ impl<T: Config> Pallet<T> {
 	/// Returns the total number of votes
 	/// # Returns
 	/// The total number of votes.
-	pub fn get_vote_count() -> u128 {
+	pub fn get_vote_count() -> u64 {
 		<VoteCount<T>>::get()
 	}
 
@@ -1156,7 +1149,7 @@ impl<T: Config> Pallet<T> {
 	/// * `voter` - The account of the voter to check for.
 	/// # Returns
 	/// The total number of votes cast by the voter.
-	pub fn get_vote_tally_by_address(voter: &AccountIdOf<T>) -> u128 {
+	pub fn get_vote_tally_by_address(voter: &AccountIdOf<T>) -> u32 {
 		<VoteTallyByAddress<T>>::get(voter)
 	}
 

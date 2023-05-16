@@ -121,9 +121,7 @@ impl tellor::Config for Test {
 	type GovernanceOrigin = EnsureGovernance;
 	type InitialDisputeFee = ();
 	type MaxClaimTimestamps = ();
-	type MaxFundedFeeds = ();
 	type MaxQueryDataLength = ();
-	type MaxTipsPerQuery = ();
 	type MaxValueLength = MaxValueLength;
 	type MaxVotes = ();
 	type MinimumStakeAmount = ();
@@ -264,11 +262,11 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_reporting_lock()
 		}
 
-		fn get_reports_submitted_by_address(reporter: AccountId) -> u128 {
+		fn get_reports_submitted_by_address(reporter: AccountId) -> u32 {
 			tellor::Pallet::<Test>::get_reports_submitted_by_address(&reporter)
 		}
 
-		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u128 {
+		fn get_reports_submitted_by_address_and_query_id(reporter: AccountId, query_id: QueryId) -> u32 {
 			tellor::Pallet::<Test>::get_reports_submitted_by_address_and_query_id(reporter, query_id)
 		}
 
@@ -300,7 +298,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_total_stake_amount()
 		}
 
-		fn get_total_stakers() -> u128 {
+		fn get_total_stakers() -> u64 {
 			tellor::Pallet::<Test>::get_total_stakers()
 		}
 
@@ -330,11 +328,11 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_dispute_info(dispute_id)
 		}
 
-		fn get_open_disputes_on_id(query_id: QueryId) -> u128 {
+		fn get_open_disputes_on_id(query_id: QueryId) -> u32 {
 			tellor::Pallet::<Test>::get_open_disputes_on_id(query_id)
 		}
 
-		fn get_vote_count() -> u128 {
+		fn get_vote_count() -> u64 {
 			tellor::Pallet::<Test>::get_vote_count()
 		}
 
@@ -362,7 +360,7 @@ mock_impl_runtime_apis! {
 			tellor::Pallet::<Test>::get_vote_rounds(dispute_id)
 		}
 
-		fn get_vote_tally_by_address(voter: AccountId) -> u128 {
+		fn get_vote_tally_by_address(voter: AccountId) -> u32 {
 			tellor::Pallet::<Test>::get_vote_tally_by_address(&voter)
 		}
 	}

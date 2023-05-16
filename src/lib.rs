@@ -86,10 +86,7 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_core::U256;
-	use sp_runtime::{
-		traits::{CheckedConversion, CheckedSub},
-		ArithmeticError, SaturatedConversion,
-	};
+	use sp_runtime::{traits::CheckedSub, ArithmeticError, SaturatedConversion};
 	use sp_std::{prelude::*, result};
 
 	#[cfg(feature = "runtime-benchmarks")]
@@ -141,17 +138,9 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxClaimTimestamps: Get<u32>;
 
-		/// The maximum number of funded feeds.
-		#[pallet::constant]
-		type MaxFundedFeeds: Get<u32>;
-
 		/// The maximum length of query data.
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
-
-		/// The maximum number of tips per query.
-		#[pallet::constant]
-		type MaxTipsPerQuery: Get<u32>;
 
 		/// The maximum length of an individual value submitted to the oracle.
 		#[pallet::constant]
@@ -230,6 +219,7 @@ pub mod pallet {
 	}
 
 	// AutoPay
+	/// Mapping query identifier and feed identifier to feed details
 	#[pallet::storage]
 	pub(super) type DataFeeds<T> =
 		StorageDoubleMap<_, Identity, QueryId, Identity, FeedId, FeedOf<T>>;
@@ -245,20 +235,23 @@ pub mod pallet {
 		bool,
 		ValueQuery,
 	>;
+	/// Feed identifiers that have funding
 	#[pallet::storage]
-	pub(super) type FeedsWithFunding<T> =
-		StorageValue<_, BoundedVec<FeedId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
+	pub(super) type FeedsWithFunding<T> = StorageMap<_, Identity, FeedId, ()>;
+	/// Mapping feed identifier to query identifier
 	#[pallet::storage]
 	pub(super) type QueryIdFromDataFeedId<T> = StorageMap<_, Identity, FeedId, QueryId>;
+	// Query identifiers that have funding
 	#[pallet::storage]
-	pub(super) type QueryIdsWithFunding<T> =
-		StorageValue<_, BoundedVec<QueryId, <T as Config>::MaxFundedFeeds>, ValueQuery>;
-	#[pallet::storage]
-	#[pallet::getter(fn query_ids_with_funding_index)]
-	pub(super) type QueryIdsWithFundingIndex<T> = StorageMap<_, Identity, QueryId, u32>;
+	pub(super) type QueryIdsWithFunding<T> = StorageMap<_, Identity, QueryId, ()>;
+	/// Mapping query identifier (and index) to tips
 	#[pallet::storage]
 	pub(super) type Tips<T> =
-		StorageMap<_, Identity, QueryId, BoundedVec<TipOf<T>, <T as Config>::MaxTipsPerQuery>>;
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, u32, TipOf<T>>;
+	/// Total tip count per query identifier
+	#[pallet::storage]
+	pub(super) type TipCount<T> = StorageMap<_, Identity, QueryId, u32, ValueQuery>;
+	/// Tracks user tip total per user
 	#[pallet::storage]
 	pub(super) type UserTipsTotal<T> =
 		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, BalanceOf<T>, ValueQuery>;
@@ -312,7 +305,7 @@ pub mod pallet {
 	/// Mapping of reporter and query identifier to number of reports submitted.
 	#[pallet::storage]
 	pub(super) type StakerReportsSubmittedByQueryId<T> =
-		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Identity, QueryId, u128, ValueQuery>;
+		StorageDoubleMap<_, Blake2_128Concat, AccountIdOf<T>, Identity, QueryId, u32, ValueQuery>;
 	/// The time of last update to AccumulatedRewardPerShare.
 	#[pallet::storage]
 	#[pallet::getter(fn time_of_last_allocation)]
@@ -330,7 +323,7 @@ pub mod pallet {
 	pub(super) type TotalStakeAmount<T> = StorageValue<_, Tributes, ValueQuery>;
 	/// Total number of stakers with at least StakeAmount staked, not exact.
 	#[pallet::storage]
-	pub(super) type TotalStakers<T> = StorageValue<_, u128, ValueQuery>;
+	pub(super) type TotalStakers<T> = StorageValue<_, u64, ValueQuery>;
 	/// Amount locked for withdrawal.
 	#[pallet::storage]
 	pub(super) type ToWithdraw<T> = StorageValue<_, Tributes, ValueQuery>;
@@ -347,13 +340,13 @@ pub mod pallet {
 	pub(super) type DisputeInfo<T> = StorageMap<_, Identity, DisputeId, DisputeOf<T>>;
 	/// Mapping of a query identifier to the number of corresponding open disputes.
 	#[pallet::storage]
-	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Identity, QueryId, u128>;
+	pub(super) type OpenDisputesOnId<T> = StorageMap<_, Identity, QueryId, u32>;
 	/// Any pending votes which are queued to be sent to the governance controller contract for tallying.
 	#[pallet::storage]
 	pub(super) type PendingVotes<T> = StorageMap<_, Identity, DisputeId, (u8, Timestamp)>;
 	/// Total number of votes initiated.
 	#[pallet::storage]
-	pub(super) type VoteCount<T> = StorageValue<_, u128, ValueQuery>;
+	pub(super) type VoteCount<T> = StorageValue<_, u64, ValueQuery>;
 	/// Mapping of dispute identifiers to the details of the vote round.
 	#[pallet::storage]
 	pub(super) type VoteInfo<T> =
@@ -376,7 +369,7 @@ pub mod pallet {
 	/// Mapping of addresses to the number of votes they have cast.
 	#[pallet::storage]
 	pub(super) type VoteTallyByAddress<T> =
-		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u128, ValueQuery>;
+		StorageMap<_, Blake2_128Concat, AccountIdOf<T>, u32, ValueQuery>;
 	// Query Data
 	#[pallet::storage]
 	pub(super) type QueryData<T> = StorageMap<_, Identity, QueryId, QueryDataOf<T>>;
@@ -519,10 +512,6 @@ pub mod pallet {
 		InvalidTimestamp,
 		/// Window must be less than interval length.
 		InvalidWindow,
-		/// The maximum number of feeds have been funded.
-		MaxFeedsFunded,
-		/// The maximum number of tips has been reached,
-		MaxTipsReached,
 		/// No tips submitted for this query identifier.
 		NoTipsSubmitted,
 		/// Price threshold not met.
@@ -693,10 +682,7 @@ pub mod pallet {
 			timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps>,
 		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
-			ensure!(
-				<Tips<T>>::get(query_id).map_or(false, |t| t.len() > 0),
-				Error::<T>::NoTipsSubmitted
-			);
+			ensure!(<TipCount<T>>::get(query_id) > 0, Error::<T>::NoTipsSubmitted);
 
 			let mut cumulative_reward = BalanceOf::<T>::zero();
 			for timestamp in &timestamps {
@@ -720,34 +706,7 @@ pub mod pallet {
 			)?;
 			Self::do_add_staking_rewards(tips, fee)?;
 			if Self::get_current_tip(query_id) == Zero::zero() {
-				let index = <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default();
-				if index != 0 {
-					let idx = (index as usize).checked_sub(1).ok_or(Error::<T>::InvalidIndex)?;
-					// Replace unfunded feed in array with last element
-					<QueryIdsWithFunding<T>>::try_mutate(
-						|query_ids_with_funding| -> DispatchResult {
-							let qid =
-								*query_ids_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
-							query_ids_with_funding
-								.get_mut(idx)
-								.map(|i| *i = qid)
-								.ok_or(Error::<T>::InvalidIndex)?;
-							let query_id_last_funded =
-								query_ids_with_funding.get(idx).ok_or(Error::<T>::InvalidIndex)?;
-							<QueryIdsWithFundingIndex<T>>::set(
-								query_id_last_funded,
-								Some(
-									(idx.checked_add(1).ok_or(ArithmeticError::Overflow)?)
-										.checked_into()
-										.ok_or(ArithmeticError::Overflow)?,
-								),
-							);
-							<QueryIdsWithFundingIndex<T>>::remove(query_id);
-							query_ids_with_funding.pop();
-							Ok(())
-						},
-					)?;
-				}
+				<QueryIdsWithFunding<T>>::remove(query_id);
 			}
 			Self::deposit_event(Event::OneTimeTipClaimed {
 				query_id,
@@ -805,43 +764,7 @@ pub mod pallet {
 					);
 					cumulative_reward = balance;
 					// Adjust currently funded feeds
-					<FeedsWithFunding<T>>::try_mutate(|feeds_with_funding| -> DispatchResult {
-						if feeds_with_funding.len() > 1 {
-							let index = feed
-								.feeds_with_funding_index
-								.checked_sub(1)
-								.ok_or(ArithmeticError::Underflow)?;
-							// Replace unfunded feed in array with last element
-							let fid = *feeds_with_funding.last().ok_or(Error::<T>::InvalidIndex)?;
-							feeds_with_funding
-								.get_mut(index as usize)
-								.map(|i| *i = fid)
-								.ok_or(Error::<T>::InvalidIndex)?;
-							let feed_id_last_funded = feeds_with_funding
-								.get(index as usize)
-								.ok_or(Error::<T>::InvalidIndex)?;
-							match <QueryIdFromDataFeedId<T>>::get(feed_id_last_funded) {
-								None => return Err(Error::<T>::InvalidIndex.into()),
-								Some(query_id_last_funded) => {
-									<DataFeeds<T>>::try_mutate(
-										query_id_last_funded,
-										feed_id_last_funded,
-										|f| -> DispatchResult {
-											if let Some(f) = f {
-												f.feeds_with_funding_index = index
-													.checked_add(1)
-													.ok_or(ArithmeticError::Overflow)?
-											}
-											Ok(())
-										},
-									)?;
-								},
-							}
-						}
-						feeds_with_funding.pop();
-						Ok(())
-					})?;
-					feed.feeds_with_funding_index = 0;
+					<FeedsWithFunding<T>>::remove(feed_id);
 				}
 				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp.0), true);
 			}
@@ -941,7 +864,6 @@ pub mod pallet {
 				window,
 				price_threshold,
 				reward_increase_per_second,
-				feeds_with_funding_index: 0,
 			};
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);
@@ -976,63 +898,64 @@ pub mod pallet {
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 
-			<Tips<T>>::try_mutate(query_id, |mut maybe_tips| -> DispatchResult {
-				match &mut maybe_tips {
-					None => {
-						*maybe_tips = Some(
-							BoundedVec::try_from(vec![TipOf::<T> {
+			let tip_count = <TipCount<T>>::get(query_id);
+			if tip_count == 0 {
+				<Tips<T>>::insert(
+					query_id,
+					tip_count,
+					TipOf::<T> {
+						amount,
+						timestamp: Self::now()
+							.checked_add(1u8.into())
+							.ok_or(ArithmeticError::Overflow)?,
+						cumulative_tips: amount,
+					},
+				);
+				<TipCount<T>>::mutate(query_id, |count| count.saturating_inc());
+				Self::store_data(query_id, &query_data);
+			} else {
+				let timestamp_retrieved =
+					Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
+				let last_tip = <Tips<T>>::get(
+					query_id,
+					tip_count.checked_sub(1).expect("tip_count is always greater than zero; qed"),
+				);
+				match last_tip {
+					Some(mut last_tip) if timestamp_retrieved < last_tip.timestamp => {
+						last_tip.timestamp =
+							Self::now().checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?;
+						last_tip.amount.saturating_accrue(amount);
+						last_tip.cumulative_tips.saturating_accrue(amount);
+						<Tips<T>>::insert(
+							query_id,
+							tip_count
+								.checked_sub(1)
+								.expect("tip_count is always greater than zero; qed"),
+							last_tip,
+						);
+					},
+					_ => {
+						let cumulative_tips = last_tip.map_or(Zero::zero(), |t| t.cumulative_tips);
+						<Tips<T>>::insert(
+							query_id,
+							tip_count,
+							Tip {
 								amount,
 								timestamp: Self::now()
 									.checked_add(1u8.into())
 									.ok_or(ArithmeticError::Overflow)?,
-								cumulative_tips: amount,
-							}])
-							.map_err(|_| Error::<T>::MaxTipsReached)?,
+								cumulative_tips: cumulative_tips
+									.checked_add(&amount)
+									.ok_or(ArithmeticError::Overflow)?,
+							},
 						);
-						Self::store_data(query_id, &query_data);
-						Ok(())
-					},
-					Some(tips) => {
-						let timestamp_retrieved =
-							Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
-						match tips.last_mut() {
-							Some(last_tip) if timestamp_retrieved < last_tip.timestamp => {
-								last_tip.timestamp = Self::now()
-									.checked_add(1u8.into())
-									.ok_or(ArithmeticError::Overflow)?;
-								last_tip.amount.saturating_accrue(amount);
-								last_tip.cumulative_tips.saturating_accrue(amount);
-							},
-							_ => {
-								let cumulative_tips =
-									tips.last().map_or(Zero::zero(), |t| t.cumulative_tips);
-								tips.try_push(Tip {
-									amount,
-									timestamp: Self::now()
-										.checked_add(1u8.into())
-										.ok_or(ArithmeticError::Overflow)?,
-									cumulative_tips: cumulative_tips
-										.checked_add(&amount)
-										.ok_or(ArithmeticError::Overflow)?,
-								})
-								.map_err(|_| Error::<T>::MaxTipsReached)?;
-							},
-						}
-						Ok(())
+						<TipCount<T>>::mutate(query_id, |count| count.saturating_inc());
 					},
 				}
-			})?;
+			}
 
-			if <QueryIdsWithFundingIndex<T>>::get(query_id).unwrap_or_default() == 0 &&
-				Self::get_current_tip(query_id) > Zero::zero()
-			{
-				let len = <QueryIdsWithFunding<T>>::try_mutate(
-					|query_ids| -> Result<u32, DispatchError> {
-						query_ids.try_push(query_id).map_err(|_| Error::<T>::MaxFeedsFunded)?;
-						Ok(query_ids.len() as u32)
-					},
-				)?;
-				<QueryIdsWithFundingIndex<T>>::set(query_id, Some(len));
+			if Self::get_current_tip(query_id) > Zero::zero() {
+				<QueryIdsWithFunding<T>>::insert(query_id, ());
 			}
 			T::Asset::transfer(&tipper, &Self::tips(), amount, true)?;
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));

@@ -28,6 +28,7 @@ use sp_core::{bounded::BoundedVec, bounded_vec, keccak_256};
 use sp_runtime::traits::{BadOrigin, Convert};
 
 type Fee = <Test as Config>::Fee;
+type FeedsWithFunding = crate::pallet::FeedsWithFunding<Test>;
 type Tips = crate::pallet::Tips<Test>;
 
 #[test]
@@ -716,7 +717,7 @@ fn setup_data_feed() {
 			assert_eq!(result.window, 600);
 			assert_eq!(result.price_threshold, 1);
 			assert_eq!(result.reward_increase_per_second, 3);
-			assert_eq!(result.feeds_with_funding_index, 0);
+			assert_eq!(FeedsWithFunding::contains_key(feed_id), false);
 
 			Balances::make_free_balance_be(&feed_creator, token(100));
 			create_feed(
@@ -1224,7 +1225,7 @@ fn claim_onetime_tip() {
 				bounded_vec![timestamp.into()]
 			));
 			assert_eq!(Tellor::get_current_tip(query_id), 0, "tip should be correct");
-			for tip in Tips::get(query_id).unwrap() {
+			for tip in Tips::iter_prefix_values(query_id) {
 				assert_eq!(tip.amount, 0);
 			}
 			let final_balance = Balances::balance(&reporter);
@@ -1273,9 +1274,9 @@ fn get_data_feed() {
 				window: 600,
 				price_threshold: 0,
 				reward_increase_per_second: 0,
-				feeds_with_funding_index: 1,
 			}
 		);
+		assert_eq!(FeedsWithFunding::contains_key(feed_id), true);
 	});
 }
 
@@ -1361,8 +1362,8 @@ fn get_past_tips() {
 		});
 
 		assert_eq!(
-			Tellor::get_past_tips(query_id),
-			vec![
+			sort_tips(Tellor::get_past_tips(query_id)),
+			sort_tips(vec![
 				TipOf::<Test> {
 					amount: token(100),
 					timestamp: timestamp_1 + 1,
@@ -1373,7 +1374,7 @@ fn get_past_tips() {
 					timestamp: timestamp_2 + 1,
 					cumulative_tips: token(300)
 				}
-			],
+			]),
 			"past tips should be correct"
 		);
 
@@ -1388,8 +1389,8 @@ fn get_past_tips() {
 		});
 
 		assert_eq!(
-			Tellor::get_past_tips(query_id),
-			vec![
+			sort_tips(Tellor::get_past_tips(query_id)),
+			sort_tips(vec![
 				TipOf::<Test> {
 					amount: token(100),
 					timestamp: timestamp_1 + 1,
@@ -1400,7 +1401,7 @@ fn get_past_tips() {
 					timestamp: timestamp_3 + 1,
 					cumulative_tips: token(600)
 				}
-			],
+			]),
 			"past tips should be correct"
 		);
 	});
@@ -1632,8 +1633,8 @@ fn get_funded_feeds() {
 				token(1),
 			);
 			assert_eq!(
-				Tellor::get_funded_feeds(),
-				vec![feed_1, feed_2, feed_3],
+				sort(Tellor::get_funded_feeds()),
+				sort(vec![feed_1, feed_2, feed_3]),
 				"should be three funded feeds"
 			);
 			(feed_1, feed_2, feed_3)
@@ -1652,18 +1653,11 @@ fn get_funded_feeds() {
 		});
 
 		// Check feed details
-		for (index, feed) in vec![feed_1, feed_2, feed_3]
-			.iter()
-			.map(|feed| Tellor::get_data_feed(*feed).unwrap())
-			.enumerate()
-		{
-			let item = index as u32 + 1;
-			assert_eq!(
-				feed.feeds_with_funding_index, item,
-				"queryId {0} feedsWithFundingIndex should be {0}",
-				item
-			)
-		}
+		assert_eq!(
+			sort(Tellor::get_funded_feeds()),
+			sort(vec![feed_1, feed_2, feed_3]),
+			"incorrect funded feeds"
+		);
 
 		with_block_after(43_200, || {
 			assert_ok!(Tellor::claim_tip(
@@ -1672,20 +1666,11 @@ fn get_funded_feeds() {
 				query_id_2,
 				bounded_vec![timestamp.into()]
 			));
-			assert_eq!(Tellor::get_funded_feeds(), vec![feed_1, feed_3], "incorrect funded feeds");
-			for (index, (feed, expected)) in vec![(feed_1, 1), (feed_2, 0), (feed_3, 2)]
-				.iter()
-				.map(|(feed, expected)| (Tellor::get_data_feed(*feed).unwrap(), *expected))
-				.enumerate()
-			{
-				assert_eq!(
-					feed.feeds_with_funding_index,
-					expected,
-					"queryId {} feedsWithFundingIndex should be {}",
-					index + 1,
-					expected
-				)
-			}
+			assert_eq!(
+				sort(Tellor::get_funded_feeds()),
+				sort(vec![feed_1, feed_3]),
+				"incorrect funded feeds"
+			);
 		});
 	});
 }
@@ -1750,7 +1735,6 @@ fn get_funded_query_ids() {
 				query_data_1.clone()
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
 			// Tip queryId 1 again
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
@@ -1759,7 +1743,6 @@ fn get_funded_query_ids() {
 				query_data_1.clone()
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
 			// Tip queryId 2
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
@@ -1768,8 +1751,6 @@ fn get_funded_query_ids() {
 				query_data_2.clone()
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1, query_id_2]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
 			// Tip queryId 2 again
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
@@ -1785,10 +1766,10 @@ fn get_funded_query_ids() {
 				token(1),
 				query_data_3.clone()
 			));
-			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_1, query_id_2, query_id_3]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
+			assert_eq!(
+				sort(Tellor::get_funded_query_ids()),
+				sort(vec![query_id_1, query_id_2, query_id_3])
+			);
 			// Tip queryId 4
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
@@ -1797,13 +1778,9 @@ fn get_funded_query_ids() {
 				query_data_4.clone()
 			));
 			assert_eq!(
-				Tellor::get_funded_query_ids(),
-				vec![query_id_1, query_id_2, query_id_3, query_id_4]
+				sort(Tellor::get_funded_query_ids()),
+				sort(vec![query_id_1, query_id_2, query_id_3, query_id_4])
 			);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1).unwrap(), 1);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 4);
 		});
 
 		let timestamp_1 = with_block_after(REPORTING_LOCK, || {
@@ -1856,11 +1833,10 @@ fn get_funded_query_ids() {
 				query_id_1,
 				bounded_vec![timestamp_1.into()]
 			));
-			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2, query_id_3]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+			assert_eq!(
+				sort(Tellor::get_funded_query_ids()),
+				sort(vec![query_id_4, query_id_2, query_id_3])
+			);
 
 			// Tip queryId 2
 			assert_ok!(Tellor::tip(
@@ -1875,22 +1851,17 @@ fn get_funded_query_ids() {
 				query_id_2,
 				bounded_vec![timestamp_2.into()]
 			));
-			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2, query_id_3]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3).unwrap(), 3);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+			assert_eq!(
+				sort(Tellor::get_funded_query_ids()),
+				sort(vec![query_id_4, query_id_2, query_id_3])
+			);
 
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
 				query_id_3,
 				bounded_vec![timestamp_3.into()]
 			));
-			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4, query_id_2]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 2);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
+			assert_eq!(sort(Tellor::get_funded_query_ids()), sort(vec![query_id_4, query_id_2]));
 
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(reporter),
@@ -1898,10 +1869,6 @@ fn get_funded_query_ids() {
 				bounded_vec![timestamp_4.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_2]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2).unwrap(), 1);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4), None);
 		});
 
 		let timestamp_2 = with_block(|| {
@@ -1922,10 +1889,6 @@ fn get_funded_query_ids() {
 				bounded_vec![timestamp_2.into()]
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4), None);
 
 			// Tip queryId 4
 			assert_ok!(Tellor::tip(
@@ -1935,10 +1898,6 @@ fn get_funded_query_ids() {
 				query_data_4.clone()
 			));
 			assert_eq!(Tellor::get_funded_query_ids(), vec![query_id_4]);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_1), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_2), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_3), None);
-			assert_eq!(Tellor::query_ids_with_funding_index(query_id_4).unwrap(), 1);
 		});
 	});
 }
@@ -2197,7 +2156,7 @@ fn get_funded_feed_details() {
 	new_test_ext().execute_with(|| {
 		with_block(|| {
 			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
-			create_feed(
+			let feed_id = create_feed(
 				feed_creator,
 				query_id,
 				token(1),
@@ -2219,9 +2178,9 @@ fn get_funded_feed_details() {
 					window: 600,
 					price_threshold: 0,
 					reward_increase_per_second: 0,
-					feeds_with_funding_index: 1,
 				}
 			);
+			assert!(FeedsWithFunding::contains_key(feed_id));
 		});
 	});
 }
@@ -2385,9 +2344,14 @@ fn get_current_feeds() {
 	});
 }
 
-fn sort(mut feeds: Vec<FeedId>) -> Vec<FeedId> {
-	feeds.sort();
-	feeds
+fn sort(mut items: Vec<H256>) -> Vec<H256> {
+	items.sort();
+	items
+}
+
+fn sort_tips(mut items: Vec<TipOf<Test>>) -> Vec<TipOf<Test>> {
+	items.sort_by_key(|t| t.timestamp);
+	items
 }
 
 // Helper function for creating feeds
