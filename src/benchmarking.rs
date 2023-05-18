@@ -284,10 +284,10 @@ benchmarks! {
 	}: _(RawOrigin::Signed(feed_creator), query_id, token::<T>(10u64), T::Time::now().as_secs(), 600, 60, 0, token::<T>(0u64), query_data.clone(), token::<T>(1_000u64))
 
 	tip {
-		// Maximum value for query data in order to measure the maximum weight
-		let q in 1..T::MaxQueryDataLength::get();
 		// Maximum submissions in order to measure maximum weight as this extrinsic iterates over all the report submissions
 		let s in 2..5_000;
+		// Maximum value for query data in order to measure the maximum weight
+		let q in 1..T::MaxQueryDataLength::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![1u8; q as usize]).unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
