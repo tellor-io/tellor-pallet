@@ -476,7 +476,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<BlockNumberOf<T>> {
-		<ReportedTimestampsToBlockNumber<T>>::get(query_id, timestamp)
+		<ReportedTimestamps<T>>::get(query_id, timestamp).map(|r| r.block_number)
 	}
 
 	/// Read current data feeds.
@@ -920,8 +920,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<(AccountIdOf<T>, bool)> {
-		<ReportersByTimestamp<T>>::get(query_id, timestamp)
-			.map(|reporter| (reporter, <ReportDisputes<T>>::get(query_id, timestamp)))
+		<ReportedTimestamps<T>>::get(query_id, timestamp).map(|r| (r.reporter, r.is_disputed))
 	}
 
 	/// Returns the reporter who submitted a value for a query identifier at a specific time.
@@ -934,7 +933,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<AccountIdOf<T>> {
-		<ReportersByTimestamp<T>>::get(query_id, timestamp)
+		<ReportedTimestamps<T>>::get(query_id, timestamp).map(|r| r.reporter)
 	}
 
 	/// Returns the timestamp of the reporter's last submission.
@@ -1082,7 +1081,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<u32> {
-		<ReportedTimestamps<T>>::get(query_id, timestamp)
+		<ReportedTimestamps<T>>::get(query_id, timestamp).map(|r| r.index)
 	}
 
 	/// Read the total amount of tips paid by a user.
@@ -1160,7 +1159,9 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Whether the value is disputed.
 	pub fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool {
-		<ReportDisputes<T>>::get(query_id, timestamp)
+		<ReportedTimestamps<T>>::get(query_id, timestamp)
+			.map(|r| r.is_disputed)
+			.unwrap_or_default()
 	}
 
 	/// Returns the duration since UNIX_EPOCH, in seconds.
@@ -1176,15 +1177,22 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
 	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
-		ensure!(!<ReportDisputes<T>>::get(query_id, timestamp), Error::<T>::ValueDisputed);
-		let index = <ReportedTimestamps<T>>::get(query_id, timestamp)
-			.ok_or(Error::<T>::InvalidTimestamp)?;
-		ensure!(
-			Some(timestamp) == <ReportedTimestampsByIndex<T>>::get(query_id, index),
-			Error::<T>::InvalidTimestamp
-		);
+		<ReportedTimestamps<T>>::try_mutate(query_id, timestamp, |maybe| -> DispatchResult {
+			match maybe {
+				None => Err(Error::<T>::InvalidTimestamp.into()),
+				Some(report) => {
+					ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
+					ensure!(
+						Some(timestamp) ==
+							<ReportedTimestampsByIndex<T>>::get(query_id, report.index),
+						Error::<T>::InvalidTimestamp
+					);
+					report.is_disputed = true;
+					Ok(())
+				},
+			}
+		})?;
 		<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
-		<ReportDisputes<T>>::set(query_id, timestamp, true);
 		Self::deposit_event(Event::ValueRemoved { query_id, timestamp });
 		Ok(())
 	}

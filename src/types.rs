@@ -39,6 +39,7 @@ pub(crate) type Nonce = u32;
 pub(crate) type ParaId = u32;
 pub(crate) type QueryDataOf<T> = BoundedVec<u8, <T as Config>::MaxQueryDataLength>;
 pub type QueryId = H256;
+pub(crate) type ReportOf<T> = oracle::Report<AccountIdOf<T>, BlockNumberOf<T>>;
 pub(crate) type StakeInfoOf<T> = oracle::StakeInfo<BalanceOf<T>>;
 pub type Timestamp = u64;
 pub(crate) type TipOf<T> = autopay::Tip<BalanceOf<T>>;
@@ -79,6 +80,18 @@ pub(crate) mod autopay {
 
 pub(crate) mod oracle {
 	use super::*;
+
+	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	pub struct Report<AccountId, BlockNumber> {
+		/// The respective index of the timestamp.
+		pub(crate) index: u32,
+		/// The block number when the timestamp was reported.
+		pub(crate) block_number: BlockNumber,
+		/// The reporter of the timestamp.
+		pub(crate) reporter: AccountId,
+		/// Whether the reported timestamp has been disputed.
+		pub(crate) is_disputed: bool,
+	}
 
 	#[derive(
 		Clone, Default, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen,

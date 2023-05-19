@@ -264,14 +264,10 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn last_stake_amount_update)]
 	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
-	/// Mapping of reported timestamps (by query identifier) to whether they have been disputed.
-	#[pallet::storage]
-	pub(super) type ReportDisputes<T> =
-		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, bool, ValueQuery>;
-	/// Mapping of reported timestamps (by query identifier) to index.
+	/// Mapping of reported timestamps (by query identifier).
 	#[pallet::storage]
 	pub(super) type ReportedTimestamps<T> =
-		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, u32>;
+		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, ReportOf<T>>;
 	/// Mapping of reported timestamps (by query identifier) to respective indices.
 	#[pallet::storage]
 	pub(super) type ReportedTimestampsByIndex<T> =
@@ -279,18 +275,10 @@ pub mod pallet {
 	/// Mapping of reported timestamp count by query identifier.
 	#[pallet::storage]
 	pub(super) type ReportedTimestampCount<T> = StorageMap<_, Identity, QueryId, u32, ValueQuery>;
-	/// Mapping of reported timestamps (by query identifier) to block number.
-	#[pallet::storage]
-	pub(super) type ReportedTimestampsToBlockNumber<T> =
-		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, BlockNumberOf<T>>;
 	/// Mapping of reported timestamps (by query identifier) to values.
 	#[pallet::storage]
 	pub(super) type ReportedValuesByTimestamp<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, ValueOf<T>>;
-	/// Mapping of reported timestamps (by query identifier) to reporters.
-	#[pallet::storage]
-	pub(super) type ReportersByTimestamp<T> =
-		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, AccountIdOf<T>>;
 	/// Total staking rewards released per second.
 	#[pallet::storage]
 	#[pallet::getter(fn reward_rate)]
@@ -1034,7 +1022,7 @@ pub mod pallet {
 			staker.reporter_last_timestamp = timestamp;
 			// Checks for no double reporting of timestamps
 			ensure!(
-				<ReportersByTimestamp<T>>::get(query_id, timestamp).is_none(),
+				<ReportedTimestamps<T>>::get(query_id, timestamp).is_none(),
 				Error::<T>::TimestampAlreadyReported
 			);
 
@@ -1045,14 +1033,17 @@ pub mod pallet {
 				index
 			});
 			<ReportedTimestampsByIndex<T>>::insert(query_id, index, timestamp);
-			<ReportedTimestamps<T>>::insert(query_id, timestamp, index);
-			<ReportedTimestampsToBlockNumber<T>>::insert(
+			<ReportedTimestamps<T>>::insert(
 				query_id,
 				timestamp,
-				frame_system::Pallet::<T>::block_number(),
+				ReportOf::<T> {
+					index,
+					block_number: frame_system::Pallet::<T>::block_number(),
+					reporter: reporter.clone(),
+					is_disputed: false,
+				},
 			);
 			<ReportedValuesByTimestamp<T>>::insert(query_id, timestamp, value.clone());
-			<ReportersByTimestamp<T>>::insert(query_id, timestamp, reporter.clone());
 
 			// backlog: Disperse Time Based Reward
 			// uint256 _reward = ((block.timestamp - timeOfLastNewValue) * timeBasedReward) / 300; //.5 TRB per 5 minutes
