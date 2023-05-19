@@ -479,7 +479,7 @@ benchmarks! {
 		}
 
 		T::BenchmarkHelper::set_time(HOURS);
-	}: _(RawOrigin::Signed(reporter), u8::MAX)
+	}: _(RawOrigin::Signed(reporter), s as u8)
 
 	report_stake_deposited {
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
