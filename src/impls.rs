@@ -523,20 +523,8 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The latest submitted value for the given identifier.
 	pub fn get_current_value(query_id: QueryId) -> Option<ValueOf<T>> {
-		let mut count = Self::get_new_value_count_by_query_id(query_id);
-		if count == 0 {
-			return None
-		}
-		//loop handles for dispute (value = None if disputed)
-		while count > 0 {
-			count.saturating_dec();
-			let value = Self::get_timestamp_by_query_id_and_index(query_id, count)
-				.and_then(|timestamp| Self::retrieve_data(query_id, timestamp));
-			if value.is_some() {
-				return value
-			}
-		}
-		None
+		<LastReportedTimestamp<T>>::get(query_id)
+			.and_then(|t| <ReportedValuesByTimestamp<T>>::get(query_id, t))
 	}
 
 	/// Retrieves the latest value for the query identifier before the specified timestamp.
