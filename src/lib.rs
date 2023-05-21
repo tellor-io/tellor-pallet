@@ -1473,7 +1473,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Reports a slashing of a reporter, due to a passing vote.
+		/// Reports a slashing of a reporter.
 		///
 		/// - `reporter`: The address of the slashed reporter.
 		/// - `amount`: The slashed amount.
