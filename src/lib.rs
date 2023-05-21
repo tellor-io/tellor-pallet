@@ -260,6 +260,9 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn accumulated_reward_per_share)]
 	pub(super) type AccumulatedRewardPerShare<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+	/// The last (non-disputed) reported timestamp (by query identifier).
+	#[pallet::storage]
+	pub(super) type LastReportedTimestamp<T> = StorageMap<_, Identity, QueryId, Timestamp>;
 	/// A timestamp at which the stake amount was last updated.
 	#[pallet::storage]
 	#[pallet::getter(fn last_stake_amount_update)]
@@ -903,7 +906,7 @@ pub mod pallet {
 				Self::store_data(query_id, &query_data);
 			} else {
 				let timestamp_retrieved =
-					Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
+					<LastReportedTimestamp<T>>::get(query_id).unwrap_or_default();
 				let last_tip = <Tips<T>>::get(
 					query_id,
 					tip_count.checked_sub(1).expect("tip_count is always greater than zero; qed"),
@@ -1041,8 +1044,10 @@ pub mod pallet {
 					block_number: frame_system::Pallet::<T>::block_number(),
 					reporter: reporter.clone(),
 					is_disputed: false,
+					previous: <LastReportedTimestamp<T>>::get(query_id),
 				},
 			);
+			<LastReportedTimestamp<T>>::insert(query_id, timestamp);
 			<ReportedValuesByTimestamp<T>>::insert(query_id, timestamp, value.clone());
 
 			// backlog: Disperse Time Based Reward

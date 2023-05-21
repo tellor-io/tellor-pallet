@@ -503,7 +503,7 @@ impl<T: Config> Pallet<T> {
 			)
 			.map(|last_tip| {
 				let timestamp_retrieved =
-					Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
+					<LastReportedTimestamp<T>>::get(query_id).unwrap_or_default();
 				if timestamp_retrieved < last_tip.timestamp {
 					last_tip.amount
 				} else {
@@ -529,32 +529,6 @@ impl<T: Config> Pallet<T> {
 			count.saturating_dec();
 			let value = Self::get_timestamp_by_query_id_and_index(query_id, count)
 				.and_then(|timestamp| Self::retrieve_data(query_id, timestamp));
-			if value.is_some() {
-				return value
-			}
-		}
-		None
-	}
-
-	/// Allows the user to get the latest value for the query identifier specified.
-	/// # Arguments
-	/// * `query_id` - Identifier to look up the value for
-	/// # Returns
-	/// The value retrieved, along with its timestamp, if found.
-	pub(super) fn get_current_value_and_timestamp(
-		query_id: QueryId,
-	) -> Option<(ValueOf<T>, Timestamp)> {
-		let mut count = Self::get_new_value_count_by_query_id(query_id);
-		if count == 0 {
-			return None
-		}
-		//loop handles for dispute (value = None if disputed)
-		while count > 0 {
-			count.saturating_dec();
-			let value =
-				Self::get_timestamp_by_query_id_and_index(query_id, count).and_then(|timestamp| {
-					Self::retrieve_data(query_id, timestamp).map(|value| (value, timestamp))
-				});
 			if value.is_some() {
 				return value
 			}
@@ -769,12 +743,10 @@ impl<T: Config> Pallet<T> {
 			Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? > 12 * HOURS,
 			Error::<T>::ClaimBufferNotPassed
 		);
-		ensure!(!Self::is_in_dispute(query_id, timestamp), Error::<T>::ValueDisputed);
-		ensure!(
-			Self::get_reporter_by_timestamp(query_id, timestamp)
-				.map_or(false, |reporter| claimer == &reporter),
-			Error::<T>::InvalidClaimer
-		);
+		let report = <ReportedTimestamps<T>>::get(query_id, timestamp)
+			.ok_or(Error::<T>::InvalidTimestamp)?;
+		ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
+		ensure!(claimer == &report.reporter, Error::<T>::InvalidClaimer);
 		let tip_count = <TipCount<T>>::get(query_id);
 		if tip_count == 0 {
 			return Err(Error::<T>::NoTipsSubmitted.into())
@@ -793,8 +765,7 @@ impl<T: Config> Pallet<T> {
 				}
 			}
 
-			let (_, timestamp_before) =
-				Self::get_data_before(query_id, timestamp).unwrap_or_default();
+			let timestamp_before = report.previous.unwrap_or_default();
 			let min_tip = &mut <Tips<T>>::get(query_id, min).ok_or(Error::<T>::InvalidIndex)?;
 			ensure!(timestamp_before < min_tip.timestamp, Error::<T>::TipAlreadyEarned);
 			ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
@@ -806,16 +777,10 @@ impl<T: Config> Pallet<T> {
 			let min_backup = min;
 
 			// check whether eligible for previous tips in array due to disputes
-			let index_now = Self::get_index_for_data_before(
-				query_id,
-				timestamp.checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?,
-			);
-			let index_before = Self::get_index_for_data_before(
-				query_id,
-				timestamp_before.checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?,
-			);
-			if index_now
-				.unwrap_or_default()
+			let index_before =
+				<ReportedTimestamps<T>>::get(query_id, timestamp_before).map(|r| r.index);
+			if report
+				.index
 				.checked_sub(index_before.unwrap_or_default())
 				.ok_or(ArithmeticError::Underflow)? >
 				1 || index_before.is_none()
@@ -1178,19 +1143,38 @@ impl<T: Config> Pallet<T> {
 	/// * `timestamp` - The timestamp of the value to remove.
 	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
 		<ReportedTimestamps<T>>::try_mutate(query_id, timestamp, |maybe| -> DispatchResult {
-			match maybe {
-				None => Err(Error::<T>::InvalidTimestamp.into()),
-				Some(report) => {
-					ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
-					ensure!(
-						Some(timestamp) ==
-							<ReportedTimestampsByIndex<T>>::get(query_id, report.index),
-						Error::<T>::InvalidTimestamp
-					);
-					report.is_disputed = true;
-					Ok(())
+			let Some(report) = maybe else { return Err(Error::<T>::InvalidTimestamp.into()) };
+			ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
+			ensure!(
+				Some(timestamp) == <ReportedTimestampsByIndex<T>>::get(query_id, report.index),
+				Error::<T>::InvalidTimestamp
+			);
+			report.is_disputed = true;
+
+			// Update last reported timestamp, if applicable
+			let _ = <LastReportedTimestamp<T>>::try_mutate(query_id, |lrt| match lrt {
+				// Check if last reported timestamp value is being removed
+				Some(last_reported_timestamp) if *last_reported_timestamp == timestamp => {
+					*lrt = report.previous; // set last reported to previous
+					return Ok(())
 				},
+				_ => Err(()), // No mutation
+			});
+
+			// Update next valid timestamp in series to point to previous valid timestamp (before one being removed)
+			const MAX: u32 = 1_000;
+			for index in report.index + 1..=report.index + MAX {
+				let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index) else { break };
+				let mut next_report = <ReportedTimestamps<T>>::get(query_id, timestamp)
+					.ok_or(Error::<T>::InvalidTimestamp)?;
+				if !next_report.is_disputed {
+					next_report.previous = report.previous;
+					<ReportedTimestamps<T>>::insert(query_id, timestamp, next_report);
+					break
+				}
 			}
+
+			Ok(())
 		})?;
 		<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
 		Self::deposit_event(Event::ValueRemoved { query_id, timestamp });

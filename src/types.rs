@@ -91,6 +91,8 @@ pub(crate) mod oracle {
 		pub(crate) reporter: AccountId,
 		/// Whether the reported timestamp has been disputed.
 		pub(crate) is_disputed: bool,
+		/// The last (non-disputed) timestamp reported.
+		pub(crate) previous: Option<Timestamp>,
 	}
 
 	#[derive(
