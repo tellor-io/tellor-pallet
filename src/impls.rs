@@ -196,19 +196,22 @@ impl<T: Config> Pallet<T> {
 			.start_time
 			.checked_add(feed.interval.checked_mul(n).ok_or(ArithmeticError::Overflow)?)
 			.ok_or(ArithmeticError::Overflow)?; // finds start timestamp c of interval n
-		let value_retrieved = Self::retrieve_data(query_id, timestamp);
-		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
-		let (value_retrieved_before, timestamp_before) =
-			Self::get_data_before(query_id, timestamp).unwrap_or_default();
+		let report = <ReportedTimestamps<T>>::get(query_id, timestamp)
+			.ok_or(Error::<T>::InvalidTimestamp)?;
+		ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
+		let timestamp_before = report.previous.unwrap_or_default();
 		let mut price_change = 0; // price change from last value to current value
 		if feed.price_threshold != 0 {
 			// v1 is value retrieved at supplied timestamp
-			let v1 = BytesToU256::convert(
-				value_retrieved.expect("value retrieved checked above; qed").into_inner(),
-			)
-			.ok_or(Error::<T>::ValueConversionError)?;
+			let value = <ReportedValuesByTimestamp<T>>::get(query_id, timestamp)
+				.ok_or(Error::<T>::InvalidValue)?;
+			ensure!(value.len() != 0, Error::<T>::InvalidValue);
+			let v1 =
+				BytesToU256::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)?;
 			// v2 is latest value retrieved BEFORE supplied timestamp
-			let v2 = BytesToU256::convert(value_retrieved_before.into_inner())
+			let value_before =
+				<ReportedValuesByTimestamp<T>>::get(query_id, timestamp_before).unwrap_or_default();
+			let v2 = BytesToU256::convert(value_before.into_inner())
 				.ok_or(Error::<T>::ValueConversionError)?;
 			if v2 == U256::zero() {
 				price_change = 10_000;
@@ -955,7 +958,8 @@ impl<T: Config> Pallet<T> {
 	) -> BalanceOf<T> {
 		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return Zero::zero()};
 		let mut cumulative_reward = <BalanceOf<T>>::zero();
-		for timestamp in timestamps.into_iter().take(100) {
+		const MAX_TIMESTAMPS: usize = 100;
+		for timestamp in timestamps.into_iter().take(MAX_TIMESTAMPS) {
 			cumulative_reward.saturating_accrue(
 				Self::do_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
 			)
@@ -996,9 +1000,10 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
 	) -> Vec<bool> {
+		const MAX_TIMESTAMPS: usize = 100;
 		timestamps
 			.into_iter()
-			.take(100)
+			.take(MAX_TIMESTAMPS)
 			.map(|timestamp| <DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)))
 			.collect()
 	}

@@ -243,7 +243,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bounded_vec![timestamp.into()]
 				),
-				Error::InvalidTimestamp
+				Error::ValueDisputed
 			);
 		});
 		// price threshold not met
