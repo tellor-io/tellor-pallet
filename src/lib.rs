@@ -905,14 +905,14 @@ pub mod pallet {
 				<TipCount<T>>::mutate(query_id, |count| count.saturating_inc());
 				Self::store_data(query_id, &query_data);
 			} else {
-				let timestamp_retrieved =
+				let last_reported_timestamp =
 					<LastReportedTimestamp<T>>::get(query_id).unwrap_or_default();
 				let last_tip = <Tips<T>>::get(
 					query_id,
 					tip_count.checked_sub(1).expect("tip_count is always greater than zero; qed"),
 				);
 				match last_tip {
-					Some(mut last_tip) if timestamp_retrieved < last_tip.timestamp => {
+					Some(mut last_tip) if last_reported_timestamp < last_tip.timestamp => {
 						last_tip.timestamp =
 							Self::now().checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?;
 						last_tip.amount.saturating_accrue(amount);

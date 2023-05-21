@@ -505,9 +505,9 @@ impl<T: Config> Pallet<T> {
 				tip_count.checked_sub(1).expect("tip_count greater than zero; qed"),
 			)
 			.map(|last_tip| {
-				let timestamp_retrieved =
+				let last_reported_timestamp =
 					<LastReportedTimestamp<T>>::get(query_id).unwrap_or_default();
-				if timestamp_retrieved < last_tip.timestamp {
+				if last_reported_timestamp < last_tip.timestamp {
 					last_tip.amount
 				} else {
 					Zero::zero()
