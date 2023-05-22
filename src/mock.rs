@@ -200,23 +200,10 @@ impl<MaxQueryDataLength: sp_core::Get<u32>>
 	tellor::traits::BenchmarkHelper<AccountId, MaxQueryDataLength> for TestBenchmarkHelper
 {
 	fn set_time(time_in_secs: u64) {
-		let block = System::block_number();
-		match block {
-			0 => {
-				System::set_block_number(1);
-				let timestamp = (<Timestamp as UnixTime>::now() +
-					Duration::from_secs(1 + time_in_secs))
-				.as_millis() as u64;
-				pallet_timestamp::Now::<Test>::put(timestamp);
-			},
-			_ => {
-				System::set_block_number(block + 1);
-				let timestamp = (<Timestamp as UnixTime>::now() +
-					Duration::from_secs(1 + time_in_secs))
-				.as_millis() as u64;
-				pallet_timestamp::Now::<Test>::put(timestamp);
-			},
-		}
+		System::set_block_number(System::block_number() + 1);
+		let timestamp = (<Timestamp as UnixTime>::now() + Duration::from_secs(1 + time_in_secs))
+			.as_millis() as u64;
+		pallet_timestamp::Now::<Test>::put(timestamp);
 	}
 
 	fn set_balance(account_id: AccountId, amount: u128) {

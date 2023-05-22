@@ -1297,11 +1297,7 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::send_votes(u8::MAX.into()))]
 		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
-			Ok(Some(T::WeightInfo::vote_on_multiple_disputes(Self::do_send_votes(
-				Self::now(),
-				max_votes,
-			)?))
-			.into())
+			Ok(Some(T::WeightInfo::send_votes(Self::do_send_votes(Self::now(), max_votes)?)).into())
 		}
 
 		/// Reports a stake deposited by a reporter.
