@@ -138,6 +138,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxClaimTimestamps: Get<u32>;
 
+		/// The maximum number of sequential disputed timestamps.
+		#[pallet::constant]
+		type MaxDisputedTimeSeries: Get<u32>;
+
 		/// The maximum length of query data.
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
@@ -267,9 +271,9 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn last_stake_amount_update)]
 	pub(super) type LastStakeAmountUpdate<T> = StorageValue<_, Timestamp, ValueQuery>;
-	/// Mapping of reported timestamps (by query identifier).
+	/// Mapping of reports by query identifier and timestamp.
 	#[pallet::storage]
-	pub(super) type ReportedTimestamps<T> =
+	pub(super) type Reports<T> =
 		StorageDoubleMap<_, Identity, QueryId, Blake2_128Concat, Timestamp, ReportOf<T>>;
 	/// Mapping of reported timestamps (by query identifier) to respective indices.
 	#[pallet::storage]
@@ -530,6 +534,8 @@ pub mod pallet {
 		InvalidStakingTokenPrice,
 		/// Value must be submitted.
 		InvalidValue,
+		/// The maximum sequential disputed timestamps has been reached.
+		MaxDisputedTimeSeriesReached,
 		/// Reporter not locked for withdrawal.
 		NoWithdrawalRequested,
 		/// Still in reporter time lock, please wait!
@@ -1025,7 +1031,7 @@ pub mod pallet {
 			staker.reporter_last_timestamp = timestamp;
 			// Checks for no double reporting of timestamps
 			ensure!(
-				!<ReportedTimestamps<T>>::contains_key(query_id, timestamp),
+				!<Reports<T>>::contains_key(query_id, timestamp),
 				Error::<T>::TimestampAlreadyReported
 			);
 
@@ -1036,7 +1042,7 @@ pub mod pallet {
 				index
 			});
 			<ReportedTimestampsByIndex<T>>::insert(query_id, index, timestamp);
-			<ReportedTimestamps<T>>::insert(
+			<Reports<T>>::insert(
 				query_id,
 				timestamp,
 				ReportOf::<T> {
@@ -1113,10 +1119,7 @@ pub mod pallet {
 				.ok_or(Error::<T>::NotReporter)?;
 
 			// Ensure value actually exists
-			ensure!(
-				<ReportedTimestamps<T>>::contains_key(query_id, timestamp),
-				Error::<T>::NoValueExists
-			);
+			ensure!(<Reports<T>>::contains_key(query_id, timestamp), Error::<T>::NoValueExists);
 			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&[
 				Abi::Uint(T::ParachainId::get().into()),
 				Abi::FixedBytes(query_id.0.into()),

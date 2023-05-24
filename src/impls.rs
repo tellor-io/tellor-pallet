@@ -195,8 +195,7 @@ impl<T: Config> Pallet<T> {
 			.start_time
 			.checked_add(feed.interval.checked_mul(n).ok_or(ArithmeticError::Overflow)?)
 			.ok_or(ArithmeticError::Overflow)?; // finds start timestamp c of interval n
-		let report = <ReportedTimestamps<T>>::get(query_id, timestamp)
-			.ok_or(Error::<T>::InvalidTimestamp)?;
+		let report = <Reports<T>>::get(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
 		ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
 		let timestamp_before = report.previous.unwrap_or_default();
 		let mut price_change = 0; // price change from last value to current value
@@ -478,7 +477,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<BlockNumberOf<T>> {
-		<ReportedTimestamps<T>>::get(query_id, timestamp).map(|r| r.block_number)
+		<Reports<T>>::get(query_id, timestamp).map(|r| r.block_number)
 	}
 
 	/// Read current data feeds.
@@ -733,8 +732,7 @@ impl<T: Config> Pallet<T> {
 			Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? > 12 * HOURS,
 			Error::<T>::ClaimBufferNotPassed
 		);
-		let report = <ReportedTimestamps<T>>::get(query_id, timestamp)
-			.ok_or(Error::<T>::InvalidTimestamp)?;
+		let report = <Reports<T>>::get(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
 		ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
 		ensure!(claimer == &report.reporter, Error::<T>::InvalidClaimer);
 		let tip_count = <TipCount<T>>::get(query_id);
@@ -767,8 +765,7 @@ impl<T: Config> Pallet<T> {
 			let min_backup = min;
 
 			// check whether eligible for previous tips in array due to disputes
-			let index_before =
-				<ReportedTimestamps<T>>::get(query_id, timestamp_before).map(|r| r.index);
+			let index_before = <Reports<T>>::get(query_id, timestamp_before).map(|r| r.index);
 			if report
 				.index
 				.checked_sub(index_before.unwrap_or_default())
@@ -875,7 +872,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<(AccountIdOf<T>, bool)> {
-		<ReportedTimestamps<T>>::get(query_id, timestamp).map(|r| (r.reporter, r.is_disputed))
+		<Reports<T>>::get(query_id, timestamp).map(|r| (r.reporter, r.is_disputed))
 	}
 
 	/// Returns the reporter who submitted a value for a query identifier at a specific time.
@@ -888,7 +885,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<AccountIdOf<T>> {
-		<ReportedTimestamps<T>>::get(query_id, timestamp).map(|r| r.reporter)
+		<Reports<T>>::get(query_id, timestamp).map(|r| r.reporter)
 	}
 
 	/// Returns the timestamp of the reporter's last submission.
@@ -945,8 +942,7 @@ impl<T: Config> Pallet<T> {
 	) -> BalanceOf<T> {
 		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return Zero::zero()};
 		let mut cumulative_reward = <BalanceOf<T>>::zero();
-		const MAX_TIMESTAMPS: usize = 100;
-		for timestamp in timestamps.into_iter().take(MAX_TIMESTAMPS) {
+		for timestamp in timestamps.into_iter().take(T::MaxClaimTimestamps::get() as usize) {
 			cumulative_reward.saturating_accrue(
 				Self::do_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
 			)
@@ -987,10 +983,9 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
 	) -> Vec<bool> {
-		const MAX_TIMESTAMPS: usize = 100;
 		timestamps
 			.into_iter()
-			.take(MAX_TIMESTAMPS)
+			.take(T::MaxClaimTimestamps::get() as usize)
 			.map(|timestamp| <DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)))
 			.collect()
 	}
@@ -1038,7 +1033,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<u32> {
-		<ReportedTimestamps<T>>::get(query_id, timestamp).map(|r| r.index)
+		<Reports<T>>::get(query_id, timestamp).map(|r| r.index)
 	}
 
 	/// Read the total amount of tips paid by a user.
@@ -1116,7 +1111,7 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Whether the value is disputed.
 	pub fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool {
-		<ReportedTimestamps<T>>::get(query_id, timestamp)
+		<Reports<T>>::get(query_id, timestamp)
 			.map(|r| r.is_disputed)
 			.unwrap_or_default()
 	}
@@ -1134,7 +1129,7 @@ impl<T: Config> Pallet<T> {
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
 	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
-		<ReportedTimestamps<T>>::try_mutate(query_id, timestamp, |maybe| -> DispatchResult {
+		<Reports<T>>::try_mutate(query_id, timestamp, |maybe| -> DispatchResult {
 			let Some(report) = maybe else { return Err(Error::<T>::InvalidTimestamp.into()) };
 			ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
 			ensure!(
@@ -1154,18 +1149,23 @@ impl<T: Config> Pallet<T> {
 			});
 
 			// Update next valid timestamp in series to point to previous valid timestamp (before one being removed)
-			const MAX: u32 = 1_000;
-			for index in report.index + 1..=report.index + MAX {
+			let start = report.index.checked_add(1).ok_or(ArithmeticError::Overflow)?;
+			let end =
+				report.index.saturating_add(T::MaxDisputedTimeSeries::get().saturating_sub(1));
+			for index in start..=end {
 				let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index) else { break };
-				let mut next_report = <ReportedTimestamps<T>>::get(query_id, timestamp)
-					.ok_or(Error::<T>::InvalidTimestamp)?;
+				let mut next_report =
+					<Reports<T>>::get(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
 				if !next_report.is_disputed {
 					next_report.previous = report.previous;
-					<ReportedTimestamps<T>>::insert(query_id, timestamp, next_report);
+					<Reports<T>>::insert(query_id, timestamp, next_report);
 					break
 				}
+				if end.checked_sub(index).ok_or(ArithmeticError::Underflow)? == 0 {
+					return Err(Error::<T>::MaxDisputedTimeSeriesReached.into())
+				}
 			}
-
+			report.previous = None;
 			Ok(())
 		})?;
 		<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);

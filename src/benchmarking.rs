@@ -164,7 +164,7 @@ benchmarks! {
 			}
 		}
 		let mut timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps> = Default::default();
-		let mut reported_timestamps: Vec<Timestamp> = <ReportedTimestamps<T>>::iter_key_prefix(query_id).collect();
+		let mut reported_timestamps: Vec<Timestamp> = <Reports<T>>::iter_key_prefix(query_id).collect();
 		reported_timestamps.sort();
 		for timestamp in reported_timestamps.iter().take(t as usize) {
 			timestamps.try_push(timestamp.into()).unwrap();
@@ -214,7 +214,7 @@ benchmarks! {
 		}
 
 		let mut timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps> = Default::default();
-		let mut reported_timestamps: Vec<Timestamp> = <ReportedTimestamps<T>>::iter_key_prefix(query_id).collect();
+		let mut reported_timestamps: Vec<Timestamp> = <Reports<T>>::iter_key_prefix(query_id).collect();
 		reported_timestamps.sort();
 		reported_timestamps.reverse();
 

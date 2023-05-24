@@ -34,6 +34,7 @@ hex = "0.4"
 once_cell = "1"
 pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.40" }
 pallet-timestamp = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.40" }
+rand = { version ="0.8", features = ["alloc"] }
 sp-io = { version = "7.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.40" }
 
 [features]
