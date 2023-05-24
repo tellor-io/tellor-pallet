@@ -2383,7 +2383,14 @@ fn update_rewards() {
 		});
 
 		let (timestamp_3, expected_staking_rewards_balance) = with_block(|| {
-			let staker_info = Tellor::get_staker_info(reporter).unwrap();
+			// calculating current accumulated_reward_per_share before update_rewards(),
+			// as pending_rewards are calculated before updating accumulated_reward_per_share
+			let total_stake_amount = Tellor::convert(Tellor::get_total_stake_amount()).unwrap();
+			let total_reward_debt = Tellor::total_reward_debt();
+			let previous_accumulated_reward_per_share = expected_accumulated_reward_per_share +
+				(u128::from(now() - timestamp_2) * u128::from(expected_reward_rate) * unit /
+					(100 * unit));
+
 			// deposit another stake
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
@@ -2391,16 +2398,9 @@ fn update_rewards() {
 				trb(50),
 				address
 			));
+			assert_ok!(Tellor::update_rewards());
 
 			let timestamp = now();
-			// calculating accumulated_reward_per_share before update_reward() as pending_rewards are
-			// calculated before updating accumulated_reward_per_share
-			let previous_accumulated_reward_per_share = expected_accumulated_reward_per_share +
-				(u128::from(timestamp - timestamp_2) * u128::from(expected_reward_rate) * unit /
-					(100 * unit));
-
-			// update reward
-			assert_ok!(Tellor::update_rewards());
 			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
 			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
 			let expected_accumulated_reward_per_share = expected_accumulated_reward_per_share +
@@ -2410,16 +2410,15 @@ fn update_rewards() {
 				Tellor::accumulated_reward_per_share(),
 				expected_accumulated_reward_per_share
 			);
-
-			let staking_rewards_balance = Balances::free_balance(staking_rewards_account);
-			let staked_balance = Tellor::convert(staker_info.staked_balance).unwrap();
 			let expected_staking_rewards_balance = U256ToBalance::convert(
 				U256::from(staking_rewards) -
-					(staked_balance * U256::from(previous_accumulated_reward_per_share) /
-						U256::from(unit) - U256::from(staker_info.reward_debt)),
+					(total_stake_amount * U256::from(previous_accumulated_reward_per_share) /
+						U256::from(unit) - U256::from(total_reward_debt)),
 			);
-			assert_eq!(staking_rewards_balance, expected_staking_rewards_balance);
-
+			assert_eq!(
+				Balances::free_balance(staking_rewards_account),
+				expected_staking_rewards_balance
+			);
 			(timestamp, expected_staking_rewards_balance)
 		});
 
@@ -2441,11 +2440,9 @@ fn update_rewards() {
 					(U256::from(timestamp - timestamp_3) *
 						U256::from(reward_rate) * U256::from(unit)) /
 						U256::from(Tellor::get_total_stake_amount());
-
 				let accumulated_reward = (new_accumulated_reward_per_share *
 					U256::from(Tellor::get_total_stake_amount())) /
 					U256::from(unit) - U256::from(Tellor::total_reward_debt());
-
 				assert!(accumulated_reward >= U256::from(expected_staking_rewards_balance));
 				let total_stake_amount = Tellor::convert(Tellor::get_total_stake_amount());
 				let new_pending_rewards = U256::from(expected_staking_rewards_balance) -
@@ -2457,12 +2454,10 @@ fn update_rewards() {
 						(new_pending_rewards * U256::from(unit)) /
 							U256::from(Tellor::get_total_stake_amount()),
 					);
-
 				assert_eq!(
 					Tellor::accumulated_reward_per_share(),
 					expected_accumulated_reward_per_share
 				);
-
 				(timestamp, expected_accumulated_reward_per_share, expected_staking_rewards_balance)
 			});
 
