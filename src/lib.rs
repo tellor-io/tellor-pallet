@@ -1025,7 +1025,7 @@ pub mod pallet {
 			staker.reporter_last_timestamp = timestamp;
 			// Checks for no double reporting of timestamps
 			ensure!(
-				<ReportedTimestamps<T>>::get(query_id, timestamp).is_none(),
+				!<ReportedTimestamps<T>>::contains_key(query_id, timestamp),
 				Error::<T>::TimestampAlreadyReported
 			);
 
