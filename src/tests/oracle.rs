@@ -2458,6 +2458,10 @@ fn update_rewards() {
 					Tellor::accumulated_reward_per_share(),
 					expected_accumulated_reward_per_share
 				);
+				assert_eq!(
+					Balances::free_balance(staking_rewards_account),
+					expected_staking_rewards_balance
+				);
 				(timestamp, expected_accumulated_reward_per_share, expected_staking_rewards_balance)
 			});
 
