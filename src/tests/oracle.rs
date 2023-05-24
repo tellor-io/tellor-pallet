@@ -2448,36 +2448,19 @@ fn update_rewards() {
 					U256::from(unit) - U256::from(Tellor::total_reward_debt());
 
 				assert!(accumulated_reward >= U256::from(expected_staking_rewards_balance));
-
-				// Calculation of new_pending_rewards based on actual update_rewards() implementation
-
-				/*let new_pending_rewards =  U256::from(staking_rewards_balance) -
-					(U256::from(Tellor::accumulated_reward_per_share()) *
-						U256::from(Tellor::get_total_stake_amount()) /
+				let total_stake_amount = Tellor::convert(Tellor::get_total_stake_amount());
+				let new_pending_rewards =  U256::from(expected_staking_rewards_balance) -
+					((U256::from(Tellor::accumulated_reward_per_share()) * total_stake_amount.unwrap()) /
 						U256::from(unit) -
 						U256::from(Tellor::total_reward_debt())
 					);
-				let expected_accumulated_reward_per_share1 = Tellor::accumulated_reward_per_share() +
+				let expected_accumulated_reward_per_share = Tellor::accumulated_reward_per_share() +
 					U256ToBalance::convert((new_pending_rewards * U256::from(unit)) / U256::from(Tellor::get_total_stake_amount()));
-				*/
-
-				// Calculation of new_pending_rewards based tellorFlex's test case.
-				// Question: Why we are using hard-coded (150 * unit) instead of using actual business logic for calculating new_pending_rewards?
-				let new_pending_rewards = U256::from(expected_staking_rewards_balance) -
-					((U256::from(accumulated_reward_per_share) * U256::from(150 * unit)) /
-						U256::from(unit) - U256::from(Tellor::total_reward_debt()));
-
-				let expected_accumulated_reward_per_share =
-					U256::from(accumulated_reward_per_share) +
-						(new_pending_rewards * U256::from(unit)) / U256::from(150 * unit);
 
 				assert_eq!(
-					U256::from(Tellor::accumulated_reward_per_share()),
+					Tellor::accumulated_reward_per_share(),
 					expected_accumulated_reward_per_share
 				);
-				let expected_accumulated_reward_per_share =
-					U256::from(accumulated_reward_per_share) +
-						(new_pending_rewards * U256::from(unit)) / U256::from(150 * unit);
 
 				(timestamp, expected_accumulated_reward_per_share, expected_staking_rewards_balance)
 			});
@@ -2498,7 +2481,7 @@ fn update_rewards() {
 				expected_staking_rewards_balance
 			);
 			assert_eq!(
-				U256::from(Tellor::accumulated_reward_per_share()),
+				Tellor::accumulated_reward_per_share(),
 				expected_accumulated_reward_per_share
 			); // shouldn't change
 		});
