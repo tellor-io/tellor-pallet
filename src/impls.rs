@@ -777,7 +777,7 @@ impl<T: Config> Pallet<T> {
 		);
 		let tip_count = <TipCount<T>>::get(query_id);
 		if tip_count == 0 {
-			return Err(Error::<T>::NoTipsSubmitted.into())
+			Err(Error::<T>::NoTipsSubmitted.into())
 		} else {
 			let mut min = 0;
 			let mut max = tip_count;

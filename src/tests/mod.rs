@@ -154,7 +154,7 @@ fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> (MultiLocat
 
 #[test]
 fn converts_token() {
-	assert_eq!(token(2.97), 2_970_000_000_000)
+	assert_eq!(token(2.97), 2_970_000_000_000_000_000)
 }
 
 #[test]

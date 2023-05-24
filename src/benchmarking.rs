@@ -45,9 +45,9 @@ fn trb(amount: impl Into<f64>) -> Tributes {
 	Tributes::from((amount.into() * TRB as f64) as u128)
 }
 
-fn token<T: Config>(amount: impl Into<u64>) -> BalanceOf<T> {
+fn token<T: Config>(amount: impl Into<u128>) -> BalanceOf<T> {
 	// consumer parachain token
-	(amount.into() * unit::<T>() as u64).into()
+	(amount.into() * unit::<T>() as u128).into()
 }
 
 fn unit<T: Config>() -> u128 {

@@ -130,12 +130,12 @@ impl tellor::Config for Test {
 	type RuntimeOrigin = RuntimeOrigin;
 	type Asset = Balances;
 	type Balance = Balance;
-	type Decimals = ConstU8<12>;
+	type Decimals = ConstU8<18>;
 	type Fee = ConstU16<10>; // 1%
 	type FeeLocation = FeeLocation;
 	type Governance = TellorGovernance;
 	type GovernanceOrigin = EnsureGovernance;
-	type InitialDisputeFee = ConstU128<{ 50 * 10u128.pow(12) }>; // (100 TRB / 10) * 5, where TRB 1:5 OCP
+	type InitialDisputeFee = ConstU128<{ 50 * 10u128.pow(18) }>; // (100 TRB / 10) * 5, where TRB 1:5 OCP
 	type MaxClaimTimestamps = ConstU32<100>; // 100 timestamps per claim
 	type MaxQueryDataLength = ConstU32<1024>;
 	type MaxValueLength = ConstU32<256>;
