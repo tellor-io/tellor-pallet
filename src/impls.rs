@@ -154,15 +154,14 @@ impl<T: Config> Pallet<T> {
 		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
 		// Add to feeds with funding
 		<FeedsWithFunding<T>>::insert(feed_id, ());
-		let feed_details = feed.clone();
-		<DataFeeds<T>>::insert(query_id, feed_id, feed);
+		<DataFeeds<T>>::insert(query_id, feed_id, &feed);
 		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
 		Self::deposit_event(Event::DataFeedFunded {
 			feed_id,
 			query_id,
 			amount,
 			feed_funder,
-			feed_details,
+			feed_details: feed,
 		});
 		Ok(())
 	}

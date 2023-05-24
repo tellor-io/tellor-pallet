@@ -641,7 +641,7 @@ pub mod pallet {
 						Pallet::<T>::index() as u8,
 						T::WeightToFee::get(),
 						<xcm::FeeLocation<T>>::get()?,
-						weights.clone(),
+						&weights,
 					)
 					.try_into()
 					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
@@ -1048,7 +1048,7 @@ pub mod pallet {
 				},
 			);
 			<LastReportedTimestamp<T>>::insert(query_id, timestamp);
-			<ReportedValuesByTimestamp<T>>::insert(query_id, timestamp, value.clone());
+			<ReportedValuesByTimestamp<T>>::insert(query_id, timestamp, &value);
 
 			// backlog: Disperse Time Based Reward
 			// uint256 _reward = ((block.timestamp - timeOfLastNewValue) * timeBasedReward) / 300; //.5 TRB per 5 minutes

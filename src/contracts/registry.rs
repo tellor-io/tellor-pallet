@@ -25,7 +25,7 @@ pub(crate) fn register(
 	pallet_index: u8,
 	weight_to_fee: u128,
 	fee_location: MultiLocation,
-	weights: Weights,
+	weights: &Weights,
 ) -> Vec<u8> {
 	call(
 		&[96, 114, 55, 127],
@@ -227,7 +227,7 @@ mod tests {
 					])
 				])
 				.unwrap()[..],
-			super::register(para_id, pallet_index, weight_to_fee, fee_location, weights)[..]
+			super::register(para_id, pallet_index, weight_to_fee, fee_location, &weights)[..]
 		)
 	}
 

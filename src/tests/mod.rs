@@ -67,7 +67,7 @@ fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeI
 }
 
 // Returns the timestamp for the current block.
-fn now() -> crate::types::Timestamp {
+fn now() -> Timestamp {
 	<mock::Timestamp as UnixTime>::now().as_secs()
 }
 
@@ -242,7 +242,7 @@ fn registers() {
 							PALLET_INDEX,
 							<Test as crate::Config>::WeightToFee::get(),
 							crate::xcm::FeeLocation::<Test>::get().unwrap(),
-							weights.clone()
+							&weights
 						)
 						.try_into()
 						.unwrap(),
