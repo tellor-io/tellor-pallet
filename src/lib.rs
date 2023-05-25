@@ -1104,13 +1104,13 @@ pub mod pallet {
 		/// - `timestamp`: Timestamp being disputed.
 		/// - 'beneficiary`: address on controller chain to potentially receive the slash amount if dispute successful
 		#[pallet::call_index(9)]
-		#[pallet::weight(<T as Config>::WeightInfo::begin_dispute())]
+		#[pallet::weight(<T as Config>::WeightInfo::begin_dispute(T::MaxDisputedTimeSeries::get()))]
 		pub fn begin_dispute(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			#[pallet::compact] timestamp: Timestamp,
 			beneficiary: Option<Address>,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let dispute_initiator = ensure_signed(origin)?;
 
 			// Lookup dispute initiator's corresponding address on controller chain (if available) when no beneficiary address specified
@@ -1150,7 +1150,7 @@ pub mod pallet {
 				result: None,
 				initiator: dispute_initiator.clone(),
 			};
-			let dispute = if vote_round == 1 {
+			let (dispute, iterations) = if vote_round == 1 {
 				ensure!(
 					Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? <
 						REPORTING_LOCK,
@@ -1187,8 +1187,8 @@ pub mod pallet {
 				};
 				<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 				<DisputeInfo<T>>::insert(dispute_id, &dispute);
-				Self::remove_value(query_id, timestamp)?;
-				dispute
+				let iterations = Self::remove_value(query_id, timestamp)?;
+				(dispute, iterations)
 			} else {
 				let prev_id = vote_round.checked_sub(1).ok_or(ArithmeticError::Underflow)?;
 				let prev_vote =
@@ -1204,7 +1204,7 @@ pub mod pallet {
 				vote.fee = vote.fee.saturating_mul(<BalanceOf<T>>::from(2u8).saturating_pow(
 					vote_round.checked_sub(1).expect("vote round checked above; qed").into(),
 				));
-				<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?
+				(<DisputeInfo<T>>::get(dispute_id).ok_or(Error::<T>::InvalidDispute)?, 0)
 			};
 			let stake_amount = <DisputeFee<T>>::get().saturating_mul(10u8.into());
 			if vote.fee > stake_amount {
@@ -1255,7 +1255,7 @@ pub mod pallet {
 					contract_address: governance_contract.address.into(),
 				},
 			)?;
-			Ok(())
+			Ok(Some(T::WeightInfo::begin_dispute(iterations)).into())
 		}
 
 		/// Enables the caller to cast a vote.

@@ -360,27 +360,42 @@ benchmarks! {
 	}: _(RawOrigin::Signed(reporter))
 
 	begin_dispute {
+		// Maximum number of sequential disputed timestamps
+		let d in 1..T::MaxDisputedTimeSeries::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
-		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let disputer = account::<AccountIdOf<T>>("account", 2, SEED);
-		let address = Address::zero();
-		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
-		T::BenchmarkHelper::set_balance(disputer.clone(), 1_000);
+		let stake_amount = <StakeAmount<T>>::get();
+		let dispute_fees = 10;
 
-		T::BenchmarkHelper::set_time(HOURS);
-		Tellor::<T>::submit_value(RawOrigin::Signed(reporter).into(),
-			query_id,
-			uint_value::<T>(4_000),
-			0,
-			query_data
+		T::BenchmarkHelper::set_time(REPORTING_LOCK);
+
+		let reporter = account::<AccountIdOf<T>>("account", 0, SEED);
+		deposit_stake::<T>(reporter.clone(), stake_amount, Address::zero())?;
+		T::BenchmarkHelper::set_balance(reporter.clone(), dispute_fees);
+		Tellor::<T>::submit_value(
+			RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(10), 0, query_data.clone()
 		)?;
 
-		let report_timestamps = <TimeOfLastNewValue<T>>::get().unwrap();
+		for i in 1..d - 1 {
+			// Use new accounts to avoid reporting lock
+			T::BenchmarkHelper::set_time(1);
+			let reporter = account::<AccountIdOf<T>>("account", i, SEED);
+			deposit_stake::<T>(reporter.clone(), stake_amount, Address::zero())?;
+			T::BenchmarkHelper::set_balance(reporter.clone(), dispute_fees);
+			Tellor::<T>::submit_value(
+				RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 10), i, query_data.clone()
+			)?;
+			Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter).into(),
+				query_id,
+				<ReportedTimestampsByIndex<T>>::get(query_id, i).unwrap(),
+				None)?;
+		}
 
-	}: _(RawOrigin::Signed(disputer), query_id, report_timestamps, Some(Address::zero()))
+		let timestamp = <ReportedTimestampsByIndex<T>>::get(query_id, 0).unwrap();
+	}: _(RawOrigin::Signed(reporter), query_id, timestamp, None)
 	verify {
 		let governance_contract = T::Governance::get();
+		assert!(<LastReportedTimestamp<T>>::get(query_id).is_none());
 		assert_last_event::<T>(
 				Event::NewDisputeSent { para_id: governance_contract.para_id, contract_address: governance_contract.address.into()}.into(),
 			);

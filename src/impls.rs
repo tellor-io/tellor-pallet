@@ -1128,49 +1128,55 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
-	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
-		<Reports<T>>::try_mutate(query_id, timestamp, |maybe| -> DispatchResult {
-			let Some(report) = maybe else { return Err(Error::<T>::InvalidTimestamp.into()) };
-			ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
-			ensure!(
-				Some(timestamp) == <ReportedTimestampsByIndex<T>>::get(query_id, report.index),
-				Error::<T>::InvalidTimestamp
-			);
-			report.is_disputed = true;
+	pub(super) fn remove_value(
+		query_id: QueryId,
+		timestamp: Timestamp,
+	) -> Result<u32, DispatchError> {
+		let iterations =
+			<Reports<T>>::try_mutate(query_id, timestamp, |maybe| -> Result<u32, DispatchError> {
+				let Some(report) = maybe else { return Err(Error::<T>::InvalidTimestamp.into()) };
+				ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
+				ensure!(
+					Some(timestamp) == <ReportedTimestampsByIndex<T>>::get(query_id, report.index),
+					Error::<T>::InvalidTimestamp
+				);
+				report.is_disputed = true;
 
-			// Update last reported timestamp, if applicable
-			let _ = <LastReportedTimestamp<T>>::try_mutate(query_id, |lrt| match lrt {
-				// Check if last reported timestamp value is being removed
-				Some(last_reported_timestamp) if *last_reported_timestamp == timestamp => {
-					*lrt = report.previous; // set last reported to previous
-					return Ok(())
-				},
-				_ => Err(()), // No mutation
-			});
+				// Update last reported timestamp, if applicable
+				let _ = <LastReportedTimestamp<T>>::try_mutate(query_id, |lrt| match lrt {
+					// Check if last reported timestamp value is being removed
+					Some(last_reported_timestamp) if *last_reported_timestamp == timestamp => {
+						*lrt = report.previous; // set last reported to previous
+						return Ok(())
+					},
+					_ => Err(()), // No mutation
+				});
 
-			// Update next valid timestamp in series to point to previous valid timestamp (before one being removed)
-			let start = report.index.checked_add(1).ok_or(ArithmeticError::Overflow)?;
-			let end =
-				report.index.saturating_add(T::MaxDisputedTimeSeries::get().saturating_sub(1));
-			for index in start..=end {
-				let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index) else { break };
-				let mut next_report =
-					<Reports<T>>::get(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
-				if !next_report.is_disputed {
-					next_report.previous = report.previous;
-					<Reports<T>>::insert(query_id, timestamp, next_report);
-					break
+				// Update next valid timestamp in series to point to previous valid timestamp (before one being removed)
+				let start = report.index.checked_add(1).ok_or(ArithmeticError::Overflow)?;
+				let end =
+					report.index.saturating_add(T::MaxDisputedTimeSeries::get().saturating_sub(1));
+				let mut iterations = 0;
+				for index in start..=end {
+					iterations.saturating_inc();
+					let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index) else { break };
+					let mut next_report = <Reports<T>>::get(query_id, timestamp)
+						.ok_or(Error::<T>::InvalidTimestamp)?;
+					if !next_report.is_disputed {
+						next_report.previous = report.previous;
+						<Reports<T>>::insert(query_id, timestamp, next_report);
+						break
+					}
+					if end.checked_sub(index).ok_or(ArithmeticError::Underflow)? == 0 {
+						return Err(Error::<T>::MaxDisputedTimeSeriesReached.into())
+					}
 				}
-				if end.checked_sub(index).ok_or(ArithmeticError::Underflow)? == 0 {
-					return Err(Error::<T>::MaxDisputedTimeSeriesReached.into())
-				}
-			}
-			report.previous = None;
-			Ok(())
-		})?;
+				report.previous = None;
+				Ok(iterations)
+			})?;
 		<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
 		Self::deposit_event(Event::ValueRemoved { query_id, timestamp });
-		Ok(())
+		Ok(iterations)
 	}
 
 	/// Retrieve value from the oracle based on timestamp.
