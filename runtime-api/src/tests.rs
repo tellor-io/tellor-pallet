@@ -121,6 +121,7 @@ impl tellor::Config for Test {
 	type GovernanceOrigin = EnsureGovernance;
 	type InitialDisputeFee = ();
 	type MaxClaimTimestamps = ();
+	type MaxDisputedTimeSeries = ();
 	type MaxQueryDataLength = ();
 	type MaxValueLength = MaxValueLength;
 	type MaxVotes = ();
