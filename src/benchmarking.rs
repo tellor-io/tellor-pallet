@@ -354,17 +354,17 @@ benchmarks! {
 		)?;
 
 		// Create series of disputed timestamps, using new accounts to avoid reporting lock
-		for i in 1..d {
+		for i in 2..d {
 			T::BenchmarkHelper::set_time(1);
 			let reporter = account::<AccountIdOf<T>>("account", i, SEED);
 			deposit_stake::<T>(reporter.clone(), stake_amount, Address::zero())?;
 			T::BenchmarkHelper::set_balance(reporter.clone(), dispute_fees);
 			Tellor::<T>::submit_value(
-				RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 10), i, query_data.clone()
+				RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 10), 0, query_data.clone()
 			)?;
 			Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter).into(),
 				query_id,
-				<ReportedTimestampsByIndex<T>>::get(query_id, i).unwrap(),
+				<ReportedTimestampsByIndex<T>>::get(query_id, i - 1).unwrap(),
 				None)?;
 		}
 
