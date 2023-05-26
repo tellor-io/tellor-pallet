@@ -198,7 +198,7 @@ impl tellor::traits::SendXcm for TestSendXcm {
 pub struct TestBenchmarkHelper;
 #[cfg(feature = "runtime-benchmarks")]
 impl<MaxQueryDataLength: sp_core::Get<u32>>
-	tellor::traits::BenchmarkHelper<AccountId, MaxQueryDataLength> for TestBenchmarkHelper
+	tellor::traits::BenchmarkHelper<AccountId, Balance, MaxQueryDataLength> for TestBenchmarkHelper
 {
 	fn set_time(time_in_secs: u64) {
 		System::set_block_number(System::block_number() + 1);

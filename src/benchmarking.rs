@@ -135,8 +135,8 @@ benchmarks! {
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
-		T::BenchmarkHelper::set_balance(reporter.clone(), 1_00_000);
-		T::BenchmarkHelper::set_balance(another_reporter.clone(), 10_000);
+		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(100_000u32));
+		T::BenchmarkHelper::set_balance(another_reporter.clone(), token::<T>(10_000u16));
 		T::BenchmarkHelper::set_time(MINUTES);
 
 		let address = Address::zero();
@@ -184,9 +184,9 @@ benchmarks! {
 		let feed_creator = account::<AccountIdOf<T>>("account", 2, SEED);
 		let address = Address::zero();
 
-		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(1_000u16));
 		T::BenchmarkHelper::set_time(MINUTES);
-		T::BenchmarkHelper::set_balance(feed_creator.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(feed_creator.clone(), token::<T>(1_000u16));
 		let feed_id = create_feed::<T>(feed_creator.clone(),
 				query_id,
 				token::<T>(10u64),
@@ -230,7 +230,7 @@ benchmarks! {
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let feed_creator = account::<AccountIdOf<T>>("account", 1, SEED);
 
-		T::BenchmarkHelper::set_balance(feed_creator.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(feed_creator.clone(), token::<T>(1_000u16));
 		let feed_id = create_feed::<T>(feed_creator.clone(),
 				query_id,
 				token::<T>(10u64),
@@ -255,7 +255,7 @@ benchmarks! {
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let feed_creator = account::<AccountIdOf<T>>("account", 1, SEED);
 
-		T::BenchmarkHelper::set_balance(feed_creator.clone(), 1000);
+		T::BenchmarkHelper::set_balance(feed_creator.clone(), token::<T>(1_000u16));
 		// create feed
 		create_feed::<T>(
 			feed_creator.clone(),
@@ -273,42 +273,18 @@ benchmarks! {
 	}: _(RawOrigin::Signed(feed_creator), query_id, token::<T>(10u64), T::Time::now().as_secs(), 600, 60, 0, token::<T>(0u64), query_data, token::<T>(1_000u64))
 
 	tip {
-		// Maximum submissions in order to measure maximum weight as this extrinsic iterates over all the report submissions
-		let s in 1..MAX_SUBMISSIONS;
 		// Maximum value for query data in order to measure the maximum weight
 		let q in 1..T::MaxQueryDataLength::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![1u8; q as usize]).unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
-		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
-		let address = Address::zero();
-		T::BenchmarkHelper::set_time(MINUTES);
-		// report deposit stake
-		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
-		deposit_stake::<T>(another_reporter.clone(), trb(1_200), address)?;
-		T::BenchmarkHelper::set_balance(reporter.clone(), 10_000);
-		T::BenchmarkHelper::set_balance(another_reporter.clone(), 10_000);
-		// submitting multiple reports
-		for i in 1..=s {
-			T::BenchmarkHelper::set_time(HOURS);
-			Tellor::<T>::submit_value(
-				RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 1_000), 0, query_data.clone()
-			)?;
-			if i > 1 {
-				let timestamp = <ReportedTimestampsByIndex<T>>::get(query_id, i-1).unwrap();
-				Tellor::<T>::begin_dispute(RawOrigin::Signed(
-					another_reporter.clone()).into(),
-					query_id,
-					timestamp,
-					None)?;
-			}
-		}
-		let amount = token::<T>(100u64);
-	}: _(RawOrigin::Signed(reporter), query_id, amount, query_data)
+		let tipper = account::<AccountIdOf<T>>("account", 1, SEED);
+		let amount = token::<T>(1u8);
+		T::BenchmarkHelper::set_balance(tipper.clone(), amount);
+	}: _(RawOrigin::Signed(tipper), query_id, amount, query_data)
 
 	add_staking_rewards {
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(1_000u16));
 	}: _(RawOrigin::Signed(reporter), token::<T>(100u64))
 
 	submit_value {
@@ -365,7 +341,7 @@ benchmarks! {
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let stake_amount = <StakeAmount<T>>::get();
-		let dispute_fees = 10;
+		let dispute_fees = token::<T>(10u8);
 
 		T::BenchmarkHelper::set_time(REPORTING_LOCK);
 
@@ -418,7 +394,7 @@ benchmarks! {
 
 		let disputed_timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
 
-		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(1_000u16));
 		Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, disputed_timestamp, None)?;
 
 		let dispute_id = dispute_id(T::ParachainId::get(), query_id, disputed_timestamp);
@@ -440,8 +416,8 @@ benchmarks! {
 		let mut votes: BoundedVec<(DisputeId, Option<bool>), T::MaxVotes> = BoundedVec::default();
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
 		deposit_stake::<T>(another_reporter.clone(), trb(1_200), address)?;
-		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
-		T::BenchmarkHelper::set_balance(another_reporter.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(1_000u16));
+		T::BenchmarkHelper::set_balance(another_reporter.clone(), token::<T>(1_000u16));
 		for i in 1..=v {
 			T::BenchmarkHelper::set_time(HOURS);
 			Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(i * 1_000), 0, query_data.clone())?;
@@ -467,11 +443,11 @@ benchmarks! {
 		let user = account::<AccountIdOf<T>>("account", 257, SEED);
 		let address = Address::zero();
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
-		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(1_000u16));
 		for i in 1..=v {
 			let another_reporter = account::<AccountIdOf<T>>("account", i, SEED);
 			deposit_stake::<T>(another_reporter.clone(), trb(1_200), address)?;
-			T::BenchmarkHelper::set_balance(another_reporter.clone(), 100);
+			T::BenchmarkHelper::set_balance(another_reporter.clone(), token::<T>(100u8));
 			T::BenchmarkHelper::set_time(HOURS);
 			Tellor::<T>::submit_value(
 				RawOrigin::Signed(another_reporter.clone()).into(),
@@ -550,7 +526,7 @@ benchmarks! {
 		// submit value
 		Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(4_000), 0, query_data.clone())?;
 		let disputed_timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
-		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(1_000u16));
 		// begin dispute
 		Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, disputed_timestamp, None)?;
 		let dispute_id = dispute_id(T::ParachainId::get(), query_id, disputed_timestamp);
@@ -584,7 +560,7 @@ benchmarks! {
 			0,
 			query_data)?;
 		let disputed_timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
-		T::BenchmarkHelper::set_balance(reporter.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(reporter.clone(),token::<T>(1_000u16));
 		Tellor::<T>::begin_dispute(RawOrigin::Signed(reporter.clone()).into(), query_id, disputed_timestamp, None)?;
 		let dispute_id = dispute_id(T::ParachainId::get(), query_id, disputed_timestamp);
 		Tellor::<T>::vote(RawOrigin::Signed(reporter).into(), dispute_id, Some(true))?;
@@ -614,7 +590,7 @@ benchmarks! {
 		for i in 1..=r {
 			let another_reporter = account::<AccountIdOf<T>>("account", i, SEED);
 			deposit_stake::<T>(another_reporter.clone(), trb(1_200), address)?;
-			T::BenchmarkHelper::set_balance(another_reporter.clone(), 1_000);
+			T::BenchmarkHelper::set_balance(another_reporter.clone(), token::<T>(1_000u16));
 			dispute_initiators.push(another_reporter);
 		}
 		for dispute_initiator in dispute_initiators{
@@ -642,7 +618,7 @@ benchmarks! {
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(10_000), address)?;
 		deposit_stake::<T>(another_reporter.clone(), trb(1_200), address)?;
-		T::BenchmarkHelper::set_balance(another_reporter.clone(), 1_000);
+		T::BenchmarkHelper::set_balance(another_reporter.clone(), token::<T>(1_000u16));
 		T::BenchmarkHelper::set_time(HOURS);
 		// submit value
 		Tellor::<T>::submit_value(

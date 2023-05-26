@@ -216,7 +216,11 @@ pub mod pallet {
 
 		/// Helper trait for benchmarks.
 		#[cfg(feature = "runtime-benchmarks")]
-		type BenchmarkHelper: BenchmarkHelper<Self::AccountId, Self::MaxQueryDataLength>;
+		type BenchmarkHelper: BenchmarkHelper<
+			Self::AccountId,
+			Self::Balance,
+			Self::MaxQueryDataLength,
+		>;
 
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
@@ -884,7 +888,7 @@ pub mod pallet {
 		/// - `amount`: Amount to tip.
 		/// - `query_data`: The data used by reporters to fulfil the query.
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::tip(u32::MAX, T::MaxQueryDataLength::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::tip(T::MaxQueryDataLength::get()))]
 		pub fn tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -923,12 +927,12 @@ pub mod pallet {
 							Self::now().checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?;
 						last_tip.amount.saturating_accrue(amount);
 						last_tip.cumulative_tips.saturating_accrue(amount);
-						<Tips<T>>::insert(
+						<Tips<T>>::set(
 							query_id,
 							tip_count
 								.checked_sub(1)
 								.expect("tip_count is always greater than zero; qed"),
-							last_tip,
+							Some(last_tip),
 						);
 					},
 					_ => {
@@ -958,11 +962,7 @@ pub mod pallet {
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
 			let query_data_len = query_data.len();
 			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
-			Ok(Some(T::WeightInfo::tip(
-				Self::get_new_value_count_by_query_id(query_id),
-				query_data_len as u32,
-			))
-			.into())
+			Ok(Some(T::WeightInfo::tip(query_data_len as u32)).into())
 		}
 
 		/// Funds the staking account with staking rewards.

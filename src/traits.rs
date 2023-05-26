@@ -132,17 +132,17 @@ pub trait UsingTellor<AccountId> {
 
 /// Helper trait for benchmarks
 #[cfg(feature = "runtime-benchmarks")]
-pub trait BenchmarkHelper<AccountId, MaxQueryDataLength> {
+pub trait BenchmarkHelper<AccountId, Balance, MaxQueryDataLength> {
 	/// Set the current time.
 	/// # Arguments
 	/// * `time_in_secs` - Time in seconds
 	fn set_time(time_in_secs: u64);
 
-	/// Set balance of the account/
+	/// Set balance of the account.
 	/// # Arguments
 	/// * `account_id` - target account
 	/// * `amount` - value to be set as an account balance
-	fn set_balance(account_id: AccountId, amount: u128);
+	fn set_balance(account_id: AccountId, amount: Balance);
 
 	/// Fetch query data of staking token price
 	/// # Returns
