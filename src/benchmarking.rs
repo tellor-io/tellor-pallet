@@ -127,25 +127,21 @@ benchmarks! {
 	}: _(RawOrigin::Root)
 
 	claim_onetime_tip {
-		// Maximum submissions in order to measure maximum weight as this extrinsic iterates over all the report submissions
-		let s in 1..MAX_SUBMISSIONS;
 		// Maximum timestamps for claiming tip for measuring maximum weight
 		let t in 1..T::MaxClaimTimestamps::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
-		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
-		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(100_000u32));
-		T::BenchmarkHelper::set_balance(another_reporter.clone(), token::<T>(10_000u16));
-		T::BenchmarkHelper::set_time(MINUTES);
+		let tipper = account::<AccountIdOf<T>>("account", 1, SEED);
+		let reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 
-		let address = Address::zero();
-		// report deposit stake
-		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
-		deposit_stake::<T>(another_reporter.clone(), trb(1_200), address)?;
-		for i in 1..=s {
-			Tellor::<T>::tip(RawOrigin::Signed(reporter.clone()).into(), query_id, token::<T>(1u64), query_data.clone()).unwrap();
-			T::BenchmarkHelper::set_time(HOURS);
+		T::BenchmarkHelper::set_time(REPORTING_LOCK);
+		T::BenchmarkHelper::set_balance(tipper.clone(), token::<T>(1u64 * t as u64));
+		deposit_stake::<T>(reporter.clone(), trb(100), Address::zero())?;
+
+		let mut timestamps = BoundedVec::default();
+		for i in 1..=t {
+			Tellor::<T>::tip(RawOrigin::Signed(tipper.clone()).into(), query_id, token::<T>(1u64), query_data.clone()).unwrap();
+			T::BenchmarkHelper::set_time(REPORTING_LOCK);
 			Tellor::<T>::submit_value(
 				RawOrigin::Signed(reporter.clone()).into(),
 				query_id,
@@ -153,21 +149,7 @@ benchmarks! {
 				0,
 				query_data.clone()
 			)?;
-
-			if i > T::MaxClaimTimestamps::get() {
-				let timestamp = <ReportedTimestampsByIndex<T>>::get(query_id, i-1).unwrap();
-				Tellor::<T>::begin_dispute(RawOrigin::Signed(
-					another_reporter.clone()).into(),
-					query_id,
-					timestamp,
-					None)?;
-			}
-		}
-		let mut timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps> = Default::default();
-		let mut reported_timestamps: Vec<Timestamp> = <Reports<T>>::iter_key_prefix(query_id).collect();
-		reported_timestamps.sort();
-		for timestamp in reported_timestamps.iter().take(t as usize) {
-			timestamps.try_push(timestamp.into()).unwrap();
+			timestamps.try_push(<ReportedTimestampsByIndex<T>>::get(query_id, i - 1).unwrap().into()).unwrap();
 		}
 		T::BenchmarkHelper::set_time(12 * HOURS);
 	}: _(RawOrigin::Signed(reporter), query_id, timestamps)

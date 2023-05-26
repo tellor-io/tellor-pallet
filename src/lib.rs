@@ -676,7 +676,7 @@ pub mod pallet {
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::claim_onetime_tip(u32::MAX, T::MaxClaimTimestamps::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::claim_onetime_tip(T::MaxClaimTimestamps::get()))]
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -714,11 +714,7 @@ pub mod pallet {
 				amount: cumulative_reward,
 				reporter,
 			});
-			Ok(Some(T::WeightInfo::claim_onetime_tip(
-				Self::get_new_value_count_by_query_id(query_id),
-				timestamps.len() as u32,
-			))
-			.into())
+			Ok(Some(T::WeightInfo::claim_onetime_tip(timestamps.len() as u32)).into())
 		}
 
 		/// Allows Tellor reporters to claim their tips in batches.
