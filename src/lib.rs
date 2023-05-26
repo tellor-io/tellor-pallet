@@ -723,7 +723,7 @@ pub mod pallet {
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::claim_tip(u32::MAX, T::MaxClaimTimestamps::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::claim_tip(T::MaxClaimTimestamps::get()))]
 		pub fn claim_tip(
 			origin: OriginFor<T>,
 			feed_id: FeedId,
@@ -787,11 +787,7 @@ pub mod pallet {
 				amount: cumulative_reward,
 				reporter,
 			});
-			Ok(Some(T::WeightInfo::claim_tip(
-				Self::get_new_value_count_by_query_id(query_id),
-				timestamps.len() as u32,
-			))
-			.into())
+			Ok(Some(T::WeightInfo::claim_tip(timestamps.len() as u32)).into())
 		}
 
 		/// Allows data feed account to be filled with tokens.
