@@ -1154,11 +1154,13 @@ impl<T: Config> Pallet<T> {
 
 				// Update next valid timestamp in series to point to previous valid timestamp (before one being removed)
 				let start = report.index.checked_add(1).ok_or(ArithmeticError::Overflow)?;
-				let end =
-					report.index.saturating_add(T::MaxDisputedTimeSeries::get().saturating_sub(1));
+				let end = start.saturating_add(T::MaxDisputedTimeSeries::get());
 				let mut iterations = 0;
 				for index in start..=end {
 					iterations.saturating_inc();
+					if iterations > T::MaxDisputedTimeSeries::get() {
+						return Err(Error::<T>::MaxDisputedTimeSeriesReached.into())
+					}
 					let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index) else { break };
 					let mut next_report = <Reports<T>>::get(query_id, timestamp)
 						.ok_or(Error::<T>::InvalidTimestamp)?;
@@ -1166,9 +1168,6 @@ impl<T: Config> Pallet<T> {
 						next_report.previous = report.previous;
 						<Reports<T>>::insert(query_id, timestamp, next_report);
 						break
-					}
-					if end.checked_sub(index).ok_or(ArithmeticError::Underflow)? == 0 {
-						return Err(Error::<T>::MaxDisputedTimeSeriesReached.into())
 					}
 				}
 				report.previous = None;

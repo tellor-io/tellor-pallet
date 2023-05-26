@@ -1150,7 +1150,7 @@ pub mod pallet {
 				result: None,
 				initiator: dispute_initiator.clone(),
 			};
-			let (dispute, iterations) = if vote_round == 1 {
+			let (dispute, disputed_timestamps) = if vote_round == 1 {
 				ensure!(
 					Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? <
 						REPORTING_LOCK,
@@ -1187,8 +1187,7 @@ pub mod pallet {
 				};
 				<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 				<DisputeInfo<T>>::insert(dispute_id, &dispute);
-				let iterations = Self::remove_value(query_id, timestamp)?;
-				(dispute, iterations)
+				(dispute, Self::remove_value(query_id, timestamp)?)
 			} else {
 				let prev_id = vote_round.checked_sub(1).ok_or(ArithmeticError::Underflow)?;
 				let prev_vote =
@@ -1255,7 +1254,7 @@ pub mod pallet {
 					contract_address: governance_contract.address.into(),
 				},
 			)?;
-			Ok(Some(T::WeightInfo::begin_dispute(iterations)).into())
+			Ok(Some(T::WeightInfo::begin_dispute(disputed_timestamps)).into())
 		}
 
 		/// Enables the caller to cast a vote.

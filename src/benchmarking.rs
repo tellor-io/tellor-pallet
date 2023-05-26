@@ -369,6 +369,7 @@ benchmarks! {
 
 		T::BenchmarkHelper::set_time(REPORTING_LOCK);
 
+		// Create initial timestamp for later dispute in extrinsic call
 		let reporter = account::<AccountIdOf<T>>("account", 0, SEED);
 		deposit_stake::<T>(reporter.clone(), stake_amount, Address::zero())?;
 		T::BenchmarkHelper::set_balance(reporter.clone(), dispute_fees);
@@ -376,8 +377,8 @@ benchmarks! {
 			RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(10), 0, query_data.clone()
 		)?;
 
-		for i in 1..d - 1 {
-			// Use new accounts to avoid reporting lock
+		// Create series of disputed timestamps, using new accounts to avoid reporting lock
+		for i in 1..d {
 			T::BenchmarkHelper::set_time(1);
 			let reporter = account::<AccountIdOf<T>>("account", i, SEED);
 			deposit_stake::<T>(reporter.clone(), stake_amount, Address::zero())?;

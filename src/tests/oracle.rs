@@ -222,7 +222,7 @@ fn remove_values() {
 
 	let max: u32 = MaxDisputedTimeSeries::get();
 	assert_err!(
-		remove_from_time_series(max + 50, (25..(max as usize + 25)).rev()),
+		remove_from_time_series(max + 50, (25..(max as usize + 25 + 1)).rev()),
 		Error::MaxDisputedTimeSeriesReached
 	);
 }
