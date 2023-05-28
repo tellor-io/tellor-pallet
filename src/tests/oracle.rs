@@ -203,8 +203,10 @@ fn remove_value() {
 #[test]
 fn remove_values() {
 	assert_ok!(remove_from_time_series(0, vec![]));
+	assert_ok!(remove_from_time_series(2, vec![0]));
 	assert_ok!(remove_from_time_series(3, vec![0, 2]));
 	assert_ok!(remove_from_time_series(3, vec![1]));
+	assert_ok!(remove_from_time_series(5, vec![1, 0, 3]));
 	assert_ok!(remove_from_time_series(5, vec![1, 3]));
 	assert_ok!(remove_from_time_series(5, vec![1, 2, 3]));
 	assert_ok!(remove_from_time_series(5, 0..5));
@@ -273,7 +275,6 @@ fn remove_from_time_series(size: u32, disputes: impl IntoIterator<Item = usize>)
 			Tellor::remove_value(query_id, timestamp)?;
 			let report = Reports::get(query_id, timestamp).unwrap();
 			assert!(report.is_disputed);
-			assert!(report.previous.is_none());
 			timestamps[i] = None;
 		}
 		print(&timestamps);
@@ -302,6 +303,25 @@ fn remove_from_time_series(size: u32, disputes: impl IntoIterator<Item = usize>)
 				i.saturating_dec();
 			}
 		}
+
+		// Verify every item's previous value remains valid
+		print!("[");
+		for i in 0..size {
+			let timestamp = ReportedTimestampsByIndex::get(query_id, i).unwrap();
+			let report = Reports::get(query_id, timestamp).unwrap();
+			if let Some(previous) = report.previous {
+				assert_eq!(Reports::get(query_id, previous).unwrap().is_disputed, false)
+			} else if i != 0 {
+				let timestamp = ReportedTimestampsByIndex::get(query_id, i - 1).unwrap();
+				assert_eq!(Reports::get(query_id, timestamp).unwrap().is_disputed, true);
+			}
+			print!(
+				"\"{timestamp}{} -> {:?}\", ",
+				if report.is_disputed { "(❌)" } else { "" },
+				report.previous
+			)
+		}
+		println!("]");
 
 		assert_eq!(LastReportedTimestamp::get(query_id), timestamps.last().copied());
 		println!();

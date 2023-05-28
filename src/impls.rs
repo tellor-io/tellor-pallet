@@ -1164,13 +1164,12 @@ impl<T: Config> Pallet<T> {
 					let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index) else { break };
 					let mut next_report = <Reports<T>>::get(query_id, timestamp)
 						.ok_or(Error::<T>::InvalidTimestamp)?;
+					next_report.previous = report.previous;
+					<Reports<T>>::insert(query_id, timestamp, &next_report);
 					if !next_report.is_disputed {
-						next_report.previous = report.previous;
-						<Reports<T>>::insert(query_id, timestamp, next_report);
 						break
 					}
 				}
-				report.previous = None;
 				Ok(iterations)
 			})?;
 		<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
