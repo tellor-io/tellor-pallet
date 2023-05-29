@@ -717,6 +717,78 @@ impl<T: Config> Pallet<T> {
 		None
 	}
 
+	/// Retrieves latest index of data before the specified timestamp for the query identifier.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up the index for.
+	/// * `timestamp` - The timestamp before which to search for the latest index.
+	/// * `start` - The start index at which to to begin the search.
+	/// # Returns
+	/// Whether the index was found along with the latest index found before the supplied timestamp.
+	pub(super) fn get_index_for_data_before_with_start_index(
+		query_id: QueryId,
+		timestamp: Timestamp,
+		start: u32,
+	) -> (Option<u32>, u32) {
+		let mut iterations = 0;
+		// Use closure to simply append iterations to result, whilst retaining clean ? syntax within closure
+		let mut get_index = |query_id, timestamp, mut start| {
+			let last_reported_timestamp = <LastReportedTimestamp<T>>::get(query_id)?;
+			// Checking Boundaries to short-circuit the algorithm
+			let mut time = <ReportedTimestampsByIndex<T>>::get(query_id, start)?;
+			if time >= timestamp {
+				return None
+			}
+			let mut end = <Reports<T>>::get(query_id, last_reported_timestamp)?.index;
+			if last_reported_timestamp < timestamp {
+				return Some(end)
+			}
+			// Since the value is within our boundaries, do a binary search
+			let mut middle;
+			loop {
+				iterations.saturating_inc();
+				middle =
+					(end.checked_sub(start)?).checked_div(2)?.checked_add(1)?.checked_add(start)?;
+				time = <ReportedTimestampsByIndex<T>>::get(query_id, middle)?;
+				if time < timestamp {
+					// get immediate next value
+					let next_time = <ReportedTimestampsByIndex<T>>::get(query_id, middle + 1)?;
+					if next_time >= timestamp {
+						let report = <Reports<T>>::get(query_id, time)?;
+						return if !report.is_disputed {
+							// _time is correct
+							Some(middle)
+						} else {
+							report
+								.previous
+								.and_then(|t| <Reports<T>>::get(query_id, t).map(|r| r.index))
+						}
+					} else {
+						// look from middle + 1(next value) to end
+						start = middle.checked_add(1)?;
+					}
+				} else {
+					let previous_time =
+						<ReportedTimestampsByIndex<T>>::get(query_id, middle.checked_sub(1)?)?;
+					if previous_time < timestamp {
+						let report = <Reports<T>>::get(query_id, previous_time)?;
+						return if !report.is_disputed {
+							// previous_time is correct
+							Some(middle.checked_sub(1)?)
+						} else {
+							report
+								.previous
+								.and_then(|t| <Reports<T>>::get(query_id, t).map(|r| r.index))
+						}
+					} else {
+						// look from start to middle -1(prev value)
+						end = middle.checked_sub(1)?;
+					}
+				}
+			}
+		};
+		(get_index(query_id, timestamp, start), iterations)
+	}
+
 	/// Determines tip eligibility for a given oracle submission.
 	/// # Arguments
 	/// * `query_id` - Identifier of reported data.

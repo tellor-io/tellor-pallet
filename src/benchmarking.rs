@@ -28,6 +28,7 @@ use frame_support::traits::OnInitialize;
 use frame_system::RawOrigin;
 use sp_core::bounded::BoundedVec;
 use sp_runtime::traits::{Hash, Keccak256};
+use sp_std::num::NonZeroU32;
 use types::{Address, Timestamp};
 
 type RuntimeOrigin<T> = <T as frame_system::Config>::RuntimeOrigin;
@@ -621,5 +622,61 @@ benchmarks! {
 		Tellor::<T>::on_initialize(T::BlockNumber::zero())
 	}
 
+	get_index_for_data_before {
+		let i in 2..22;
+		let reports = 2u32.saturating_pow(i);
+		let query_id = QueryId::zero();
+		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
+		let timestamp = create_series::<T>(reports, query_id, reporter);
+	}: {
+		let index_before = Tellor::<T>::get_index_for_data_before(query_id, timestamp);
+		assert_eq!(index_before, Some(0))
+	}
+
+	get_index_for_data_before_with_start_index {
+		let i in 2..22;
+		let reports = 2u32.saturating_pow(i);
+		let query_id = QueryId::zero();
+		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
+		let timestamp = create_series::<T>(reports, query_id, reporter);
+	}: {
+		let (index_before, iterations) = Tellor::<T>::get_index_for_data_before_with_start_index(query_id, timestamp, 0);
+		assert_eq!(index_before, Some(0));
+		assert_eq!(iterations, NonZeroU32::new(reports).unwrap().ilog2() - 1);
+	}
+
 	impl_benchmark_test_suite!(Tellor, crate::mock::new_test_ext(), crate::mock::Test);
+}
+
+fn create_series<T: Config>(
+	reports: u32,
+	query_id: QueryId,
+	reporter: AccountIdOf<T>,
+) -> Timestamp {
+	let block_number = 0u8.into();
+	let mut timestamp = 1_685_196_686;
+	for i in 1..=reports {
+		timestamp.saturating_inc();
+		let index = i - 1;
+		<Reports<T>>::insert(
+			query_id,
+			timestamp,
+			ReportOf::<T> {
+				index,
+				block_number,
+				reporter: reporter.clone(),
+				is_disputed: false,
+				previous: <LastReportedTimestamp<T>>::get(query_id),
+			},
+		);
+		<ReportedTimestampsByIndex<T>>::insert(query_id, index, timestamp);
+		<LastReportedTimestamp<T>>::insert(query_id, timestamp);
+
+		if index > 0 && i < reports {
+			<Tellor<T>>::remove_value(query_id, timestamp).unwrap();
+		}
+	}
+	<ReportedTimestampCount<T>>::insert(query_id, reports);
+	// Return last timestamp
+	<LastReportedTimestamp<T>>::get(query_id).unwrap()
 }

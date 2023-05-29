@@ -15,6 +15,7 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![recursion_limit = "256"]
 
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
 use crate::{constants::REPORTING_LOCK, contracts::gas_limits};
