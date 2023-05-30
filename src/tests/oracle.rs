@@ -1561,7 +1561,7 @@ fn get_index_for_data_before() {
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 		assert_eq!(
-			Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2, 0).0,
+			Tellor::get_index_for_data_before_with_start(query_id, timestamp_2, 0).0,
 			Some(1)
 		);
 
@@ -1570,7 +1570,7 @@ fn get_index_for_data_before() {
 			with_block_after(year * 365 * 86_400, || {
 				assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 				assert_eq!(
-					Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2, 0).0,
+					Tellor::get_index_for_data_before_with_start(query_id, timestamp_2, 0).0,
 					Some(1)
 				);
 			});
@@ -1594,17 +1594,17 @@ fn get_index_for_data_before() {
 			assert_ok!(Tellor::remove_value(query_id, timestamp_52));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_52), Some(51));
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_52, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_52, 0).0,
 				Some(51)
 			);
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2, 0).0,
 				Some(1)
 			);
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), Some(2));
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2 + 1, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 + 1, 0).0,
 				Some(2)
 			);
 
@@ -1612,31 +1612,31 @@ fn get_index_for_data_before() {
 			assert_ok!(Tellor::remove_value(query_id, timestamp_2));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2, 0).0,
 				Some(1)
 			);
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), Some(1));
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2 + 1, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 + 1, 0).0,
 				Some(1)
 			);
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), Some(1));
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_1 + 1, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_1 + 1, 0).0,
 				Some(1)
 			);
 
 			assert_ok!(Tellor::remove_value(query_id, timestamp_1));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 - 1), Some(0));
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2 - 1, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 - 1, 0).0,
 				Some(0)
 			);
 
 			assert_ok!(Tellor::remove_value(query_id, timestamp_0));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 - 1), None);
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2 - 1, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 - 1, 0).0,
 				None
 			);
 		});
@@ -1670,12 +1670,12 @@ fn get_index_for_data_before() {
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), None);
 		assert_eq!(
-			Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_1 + 1, 0).0,
+			Tellor::get_index_for_data_before_with_start(query_id, timestamp_1 + 1, 0).0,
 			None
 		);
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_0 + 1), None);
 		assert_eq!(
-			Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_0 + 1, 0).0,
+			Tellor::get_index_for_data_before_with_start(query_id, timestamp_0 + 1, 0).0,
 			None
 		);
 
@@ -1702,7 +1702,7 @@ fn get_index_for_data_before() {
 			assert_ok!(Tellor::remove_value(query_id, timestamp_2));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), None);
 			assert_eq!(
-				Tellor::get_index_for_data_before_with_start_index(query_id, timestamp_2 + 1, 0).0,
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 + 1, 0).0,
 				None
 			);
 		});
@@ -1711,8 +1711,8 @@ fn get_index_for_data_before() {
 
 #[test]
 #[ignore]
-// cargo test --release get_index_for_data_before_with_start_index -- --ignored --nocapture
-fn get_index_for_data_before_with_start_index() {
+// cargo test --release get_index_for_data_before_with_start -- --ignored --nocapture
+fn get_index_for_data_before_with_start() {
 	let reports = 2u32.saturating_pow(22);
 	let query_id = QueryId::zero();
 	let block_number = 0u8.into();
@@ -1757,13 +1757,13 @@ fn get_index_for_data_before_with_start_index() {
 		);
 		assert_eq!(index_before, expected);
 
-		println!("Using `get_index_for_data_before_with_start_index`, based on last timestamp");
+		println!("Using `get_index_for_data_before_with_start`, based on last timestamp");
 		let now = Instant::now();
 		let (index_before, iterations) =
-			Tellor::get_index_for_data_before_with_start_index(query_id, timestamp, 0);
+			Tellor::get_index_for_data_before_with_start(query_id, timestamp, 0);
 		let expected_iterations = NonZeroU32::new(reports).unwrap().ilog2() - 1;
 		println!(
-			"get_index_for_data_before_with_start_index: result={:?} elapsed: {:?} expected_iterations={} actual_iterations={}\n",
+			"get_index_for_data_before_with_start: result={:?} elapsed: {:?} expected_iterations={} actual_iterations={}\n",
 			index_before,
 			now.elapsed(),
 			expected_iterations,

@@ -633,14 +633,14 @@ benchmarks! {
 		assert_eq!(index_before, Some(0))
 	}
 
-	get_index_for_data_before_with_start_index {
+	get_index_for_data_before_with_start {
 		let i in 2..22;
 		let reports = 2u32.saturating_pow(i);
 		let query_id = QueryId::zero();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let timestamp = create_series::<T>(reports, query_id, reporter);
 	}: {
-		let (index_before, iterations) = Tellor::<T>::get_index_for_data_before_with_start_index(query_id, timestamp, 0);
+		let (index_before, iterations) = Tellor::<T>::get_index_for_data_before_with_start(query_id, timestamp, 0);
 		assert_eq!(index_before, Some(0));
 		assert_eq!(iterations, NonZeroU32::new(reports).unwrap().ilog2() - 1);
 	}

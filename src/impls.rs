@@ -724,7 +724,7 @@ impl<T: Config> Pallet<T> {
 	/// * `start` - The start index at which to to begin the search.
 	/// # Returns
 	/// Whether the index was found along with the latest index found before the supplied timestamp.
-	pub(super) fn get_index_for_data_before_with_start_index(
+	pub(super) fn get_index_for_data_before_with_start(
 		query_id: QueryId,
 		timestamp: Timestamp,
 		start: u32,
