@@ -836,7 +836,7 @@ impl<T: Config> Pallet<T> {
 		ensure!(claimer == &report.reporter, Error::<T>::InvalidClaimer);
 		let tip_count = <TipCount<T>>::get(query_id);
 		if tip_count == 0 {
-			return Err(Error::<T>::NoTipsSubmitted.into())
+			Err(Error::<T>::NoTipsSubmitted.into())
 		} else {
 			let mut min = 0;
 			let mut max = tip_count;
@@ -1246,7 +1246,7 @@ impl<T: Config> Pallet<T> {
 					// Check if last reported timestamp value is being removed
 					Some(last_reported_timestamp) if *last_reported_timestamp == timestamp => {
 						*lrt = report.previous; // set last reported to previous
-						return Ok(())
+						Ok(())
 					},
 					_ => Err(()), // No mutation
 				});
