@@ -27,5 +27,8 @@ pub(crate) const DECIMALS: u32 = 18;
 /// The maximum number of iterations for a binary search.
 pub(super) const MAX_ITERATIONS: u32 = 32;
 
+/// The maximum number of disputes sent to the governance controller contract per block.
+pub(super) const MAX_VOTES_SENT_PER_BLOCK: u8 = 3;
+
 /// Base amount of time before a reporter is able to submit a value again.
 pub(crate) const REPORTING_LOCK: Timestamp = 12 * HOURS;

@@ -19,7 +19,7 @@
 
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
 use crate::{
-	constants::{MAX_ITERATIONS, REPORTING_LOCK},
+	constants::{MAX_ITERATIONS, MAX_VOTES_SENT_PER_BLOCK, REPORTING_LOCK},
 	contracts::gas_limits,
 };
 use codec::Encode;
@@ -608,22 +608,26 @@ pub mod pallet {
 
 			// update stake amount/dispute fee
 			let interval = T::UpdateStakeAmountInterval::get();
-			if interval > Zero::zero() &&
+			let (s, l) = if interval > Zero::zero() &&
 				timestamp >= <LastStakeAmountUpdate<T>>::get() + interval.max(12 * HOURS)
 			{
 				// use storage layer (transaction) to ensure stake amount/dispute fee updated together
-				let _ = storage::with_storage_layer(|| -> Result<(), DispatchResult> {
-					Pallet::<T>::do_update_stake_amount()?;
-					Pallet::<T>::update_dispute_fee()?;
+				storage::with_storage_layer(|| -> Result<(u32, u32), DispatchResult> {
+					let s = Pallet::<T>::do_update_stake_amount()?;
+					let l = Pallet::<T>::update_dispute_fee()?;
 					<LastStakeAmountUpdate<T>>::set(timestamp);
-					Ok(())
-				});
-			}
+					Ok((s, l))
+				})
+				.unwrap_or_default()
+			} else {
+				(0, 0)
+			};
 
 			// Check for any pending votes due to be sent to governance controller contract for tallying
-			let _ = <Pallet<T>>::do_send_votes(timestamp, 3);
+			let v =
+				<Pallet<T>>::do_send_votes(timestamp, MAX_VOTES_SENT_PER_BLOCK).unwrap_or_default();
 
-			<T as Config>::WeightInfo::on_initialize()
+			<T as Config>::WeightInfo::on_initialize(s, l, v)
 		}
 	}
 
