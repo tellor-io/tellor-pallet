@@ -1825,7 +1825,15 @@ fn get_data_before() {
 			Some((uint_value(170), timestamp_3))
 		);
 		assert_eq!(
+			Tellor::get_data_before_with_start(query_id, timestamp_3 + 1, 0).0,
+			Some((uint_value(170), timestamp_3))
+		);
+		assert_eq!(
 			Tellor::get_data_before(query_id, timestamp_2),
+			Some((uint_value(150), timestamp_1))
+		);
+		assert_eq!(
+			Tellor::get_data_before_with_start(query_id, timestamp_2, 0).0,
 			Some((uint_value(150), timestamp_1))
 		);
 
@@ -1837,7 +1845,15 @@ fn get_data_before() {
 					Some((uint_value(170), timestamp_3))
 				);
 				assert_eq!(
+					Tellor::get_data_before_with_start(query_id, timestamp_3 + 1, 0).0,
+					Some((uint_value(170), timestamp_3))
+				);
+				assert_eq!(
 					Tellor::get_data_before(query_id, timestamp_2),
+					Some((uint_value(150), timestamp_1))
+				);
+				assert_eq!(
+					Tellor::get_data_before_with_start(query_id, timestamp_2, 0).0,
 					Some((uint_value(150), timestamp_1))
 				);
 			});
@@ -1861,7 +1877,15 @@ fn get_data_before() {
 			Some((uint_value(170), timestamp_3))
 		);
 		assert_eq!(
+			Tellor::get_data_before_with_start(query_id, timestamp_3 + 1, 0).0,
+			Some((uint_value(170), timestamp_3))
+		);
+		assert_eq!(
 			Tellor::get_data_before(query_id, timestamp_2),
+			Some((uint_value(150), timestamp_1))
+		);
+		assert_eq!(
+			Tellor::get_data_before_with_start(query_id, timestamp_2, 0).0,
 			Some((uint_value(150), timestamp_1))
 		);
 	});

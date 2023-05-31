@@ -305,10 +305,11 @@ impl<T: Config> Pallet<T> {
 	}
 
 	// Updates the stake amount after retrieving the latest token price from oracle.
-	pub(super) fn do_update_stake_amount() -> DispatchResult {
-		let Some((value, _)) = Self::get_data_before(
+	pub(super) fn do_update_stake_amount() -> Result<u32, DispatchError> {
+		let (Some((value, _)), iterations) = Self::get_data_before_with_start(
 			T::StakingTokenPriceQueryId::get(),
 			Self::now().checked_sub(12 * HOURS).ok_or(ArithmeticError::Underflow)?,
+			0
 		) else {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
@@ -337,7 +338,7 @@ impl<T: Config> Pallet<T> {
 			}
 		});
 		Self::deposit_event(Event::NewStakeAmount { amount });
-		Ok(())
+		Ok(iterations)
 	}
 
 	/// Enables the caller to cast a vote.
@@ -543,6 +544,31 @@ impl<T: Config> Pallet<T> {
 			})
 	}
 
+	/// Retrieves the latest value for the query identifier before the specified timestamp.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up the value for.
+	/// * `timestamp` - The timestamp before which to search for the latest value.
+	/// * `start` - The start index at which to to begin the search.
+	/// # Returns
+	/// The value retrieved and its timestamp, if found, along with the number of iterations taken.
+	pub(super) fn get_data_before_with_start(
+		query_id: QueryId,
+		timestamp: Timestamp,
+		start: u32,
+	) -> (Option<(ValueOf<T>, Timestamp)>, u32) {
+		let (index_before, iterations) =
+			Self::get_index_for_data_before_with_start(query_id, timestamp, start);
+		(
+			index_before
+				.and_then(|index| <ReportedTimestampsByIndex<T>>::get(query_id, index))
+				.and_then(|timestamp_retrieved| {
+					<ReportedValuesByTimestamp<T>>::get(query_id, timestamp_retrieved)
+						.map(|value| (value, timestamp_retrieved))
+				}),
+			iterations,
+		)
+	}
+
 	/// Read a specific data feed.
 	/// # Arguments
 	/// * `query_id` - Unique feed identifier of parameters.
@@ -723,7 +749,8 @@ impl<T: Config> Pallet<T> {
 	/// * `timestamp` - The timestamp before which to search for the latest index.
 	/// * `start` - The start index at which to to begin the search.
 	/// # Returns
-	/// Whether the index was found along with the latest index found before the supplied timestamp.
+	/// Whether the index was found along with the latest index found before the supplied timestamp,
+	/// along with the number of iterations taken.
 	pub(super) fn get_index_for_data_before_with_start(
 		query_id: QueryId,
 		timestamp: Timestamp,
@@ -1341,10 +1368,11 @@ impl<T: Config> Pallet<T> {
 	}
 
 	// Updates the dispute fee after retrieving the latest token price from oracle.
-	pub(super) fn update_dispute_fee() -> DispatchResult {
-		let Some((value, _)) = Self::get_data_before(
+	pub(super) fn update_dispute_fee() -> Result<u32, DispatchError> {
+		let (Some((value, _)), iterations) = Self::get_data_before_with_start(
 			T::StakingToLocalTokenPriceQueryId::get(),
 			Self::now().checked_sub(12 * HOURS).ok_or(ArithmeticError::Underflow)?,
+			0
 		) else {
 			return Err(Error::<T>::InvalidPrice.into());
 		};
@@ -1366,7 +1394,7 @@ impl<T: Config> Pallet<T> {
 				Err(())
 			}
 		});
-		Ok(())
+		Ok(iterations)
 	}
 
 	/// Updates accumulated staking rewards per staked token.

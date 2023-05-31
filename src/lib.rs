@@ -18,7 +18,10 @@
 #![recursion_limit = "256"]
 
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
-use crate::{constants::REPORTING_LOCK, contracts::gas_limits};
+use crate::{
+	constants::{MAX_ITERATIONS, REPORTING_LOCK},
+	contracts::gas_limits,
+};
 use codec::Encode;
 pub use constants::{DAYS, HOURS, MINUTES, WEEKS};
 use frame_support::{
@@ -1084,11 +1087,12 @@ pub mod pallet {
 
 		/// Updates the stake amount after retrieving the latest token price from oracle.
 		#[pallet::call_index(8)]
-		#[pallet::weight(<T as Config>::WeightInfo::update_stake_amount())]
-		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResult {
+		#[pallet::weight(<T as Config>::WeightInfo::update_stake_amount(MAX_ITERATIONS, MAX_ITERATIONS))]
+		pub fn update_stake_amount(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
-			Self::do_update_stake_amount()?;
-			Self::update_dispute_fee()
+			let s = Self::do_update_stake_amount()?;
+			let l = Self::update_dispute_fee()?;
+			Ok(Some(T::WeightInfo::update_stake_amount(s, l)).into())
 		}
 
 		/// Initialises a dispute/vote in the system.

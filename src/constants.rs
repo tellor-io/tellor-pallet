@@ -21,8 +21,11 @@ pub const HOURS: Timestamp = 60 * MINUTES;
 pub const DAYS: Timestamp = 24 * HOURS;
 pub const WEEKS: Timestamp = 7 * DAYS;
 
-/// Base amount of time before a reporter is able to submit a value again.
-pub(crate) const REPORTING_LOCK: Timestamp = 12 * HOURS;
-
 /// The number of decimals of the TRB token.
 pub(crate) const DECIMALS: u32 = 18;
+
+/// The maximum number of iterations for a binary search.
+pub(super) const MAX_ITERATIONS: u32 = 32;
+
+/// Base amount of time before a reporter is able to submit a value again.
+pub(crate) const REPORTING_LOCK: Timestamp = 12 * HOURS;

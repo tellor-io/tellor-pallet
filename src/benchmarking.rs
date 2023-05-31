@@ -27,8 +27,7 @@ use frame_benchmarking::{account, benchmarks, BenchmarkError};
 use frame_support::traits::OnInitialize;
 use frame_system::RawOrigin;
 use sp_core::bounded::BoundedVec;
-use sp_runtime::traits::{Hash, Keccak256};
-use sp_std::num::NonZeroU32;
+use sp_runtime::traits::{Bounded, Hash, Keccak256};
 use types::{Address, Timestamp};
 
 type RuntimeOrigin<T> = <T as frame_system::Config>::RuntimeOrigin;
@@ -274,33 +273,58 @@ benchmarks! {
 	}
 
 	update_stake_amount {
+		// Maximum number of binary search iterations for staking token price
+		let s in 2..12;
+		// Maximum number of binary search iterations for staking token to local token price
+		let l in 2..12;
+
 		let staking_token_price_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_token_price_query_data();
 		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
 		let staking_to_local_token_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_to_local_token_price_query_data();
 		let staking_to_local_token_query_id: QueryId =
 			Keccak256::hash(staking_to_local_token_query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
+		let disputer = account::<AccountIdOf<T>>("disputer", 0, SEED);
 		let address = Address::zero();
+
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(10_000), address)?;
+		T::BenchmarkHelper::set_balance(disputer.clone(), <BalanceOf<T>>::max_value());
 		T::BenchmarkHelper::set_time(HOURS);
-		// submit value
-		Tellor::<T>::submit_value(
-			RawOrigin::Signed(reporter.clone()).into(),
-			staking_token_price_query_id,
-			uint_value::<T>(50 * 10u128.pow(18)),
-			0,
-			staking_token_price_query_data)?;
-		T::BenchmarkHelper::set_time(12 * HOURS);
 
-		Tellor::<T>::submit_value(
-			RawOrigin::Signed(reporter.clone()).into(),
-			staking_to_local_token_query_id,
-			uint_value::<T>(6 * 10u128.pow(18)),
-			0,
-			staking_to_local_token_query_data)?;
+		let reports = 2u32.saturating_pow(s);
+		for i in 1..=reports {
+			Tellor::<T>::submit_value(
+				RawOrigin::Signed(reporter.clone()).into(),
+				staking_token_price_query_id,
+				uint_value::<T>(50 * 10u128.pow(18)),
+				0,
+				staking_token_price_query_data.clone())?;
+			if i > 1 && i < reports {
+				Tellor::<T>::begin_dispute(RawOrigin::Signed(disputer.clone()).into(),
+					staking_token_price_query_id,
+					<ReportedTimestampsByIndex<T>>::get(staking_token_price_query_id, i - 1).unwrap(),
+					Some(address))?;
+			}
+			T::BenchmarkHelper::set_time(12 * HOURS);
+		}
 
-		T::BenchmarkHelper::set_time(12 * HOURS);
+		let reports = 2u32.saturating_pow(l);
+		for i in 1..=reports {
+			Tellor::<T>::submit_value(
+				RawOrigin::Signed(reporter.clone()).into(),
+				staking_to_local_token_query_id,
+				uint_value::<T>(6 * 10u128.pow(18)),
+				0,
+				staking_to_local_token_query_data.clone())?;
+			if i > 1 && i < reports {
+				Tellor::<T>::begin_dispute(RawOrigin::Signed(disputer.clone()).into(),
+					staking_to_local_token_query_id,
+					<ReportedTimestampsByIndex<T>>::get(staking_to_local_token_query_id, i - 1).unwrap(),
+					Some(address))?;
+			}
+			T::BenchmarkHelper::set_time(12 * HOURS);
+		}
 	}: _(RawOrigin::Signed(reporter))
 
 	begin_dispute {
@@ -622,61 +646,5 @@ benchmarks! {
 		Tellor::<T>::on_initialize(T::BlockNumber::zero())
 	}
 
-	get_index_for_data_before {
-		let i in 2..22;
-		let reports = 2u32.saturating_pow(i);
-		let query_id = QueryId::zero();
-		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let timestamp = create_series::<T>(reports, query_id, reporter);
-	}: {
-		let index_before = Tellor::<T>::get_index_for_data_before(query_id, timestamp);
-		assert_eq!(index_before, Some(0))
-	}
-
-	get_index_for_data_before_with_start {
-		let i in 2..22;
-		let reports = 2u32.saturating_pow(i);
-		let query_id = QueryId::zero();
-		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
-		let timestamp = create_series::<T>(reports, query_id, reporter);
-	}: {
-		let (index_before, iterations) = Tellor::<T>::get_index_for_data_before_with_start(query_id, timestamp, 0);
-		assert_eq!(index_before, Some(0));
-		assert_eq!(iterations, NonZeroU32::new(reports).unwrap().ilog2() - 1);
-	}
-
 	impl_benchmark_test_suite!(Tellor, crate::mock::new_test_ext(), crate::mock::Test);
-}
-
-fn create_series<T: Config>(
-	reports: u32,
-	query_id: QueryId,
-	reporter: AccountIdOf<T>,
-) -> Timestamp {
-	let block_number = 0u8.into();
-	let mut timestamp = 1_685_196_686;
-	for i in 1..=reports {
-		timestamp.saturating_inc();
-		let index = i - 1;
-		<Reports<T>>::insert(
-			query_id,
-			timestamp,
-			ReportOf::<T> {
-				index,
-				block_number,
-				reporter: reporter.clone(),
-				is_disputed: false,
-				previous: <LastReportedTimestamp<T>>::get(query_id),
-			},
-		);
-		<ReportedTimestampsByIndex<T>>::insert(query_id, index, timestamp);
-		<LastReportedTimestamp<T>>::insert(query_id, timestamp);
-
-		if index > 0 && i < reports {
-			<Tellor<T>>::remove_value(query_id, timestamp).unwrap();
-		}
-	}
-	<ReportedTimestampCount<T>>::insert(query_id, reports);
-	// Return last timestamp
-	<LastReportedTimestamp<T>>::get(query_id).unwrap()
 }
