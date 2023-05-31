@@ -81,17 +81,18 @@ pub(crate) mod autopay {
 pub(crate) mod oracle {
 	use super::*;
 
+	/// Information relating to a reported value.
 	#[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub struct Report<AccountId, BlockNumber> {
-		/// The respective index of the timestamp.
+		/// The respective index of the reported value.
 		pub(crate) index: u32,
-		/// The block number when the timestamp was reported.
+		/// The block number when the value was reported.
 		pub(crate) block_number: BlockNumber,
-		/// The reporter of the timestamp.
+		/// The reporter of the value.
 		pub(crate) reporter: AccountId,
-		/// Whether the reported timestamp has been disputed.
+		/// Whether the reported value has been disputed.
 		pub(crate) is_disputed: bool,
-		/// The last (non-disputed) timestamp reported.
+		/// The timestamp of the last (non-disputed) value reported.
 		pub(crate) previous: Option<Timestamp>,
 	}
 
