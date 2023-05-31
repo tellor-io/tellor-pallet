@@ -44,6 +44,7 @@ mod autopay;
 mod governance;
 mod oracle;
 mod using_tellor;
+mod weights;
 
 type Balance = <Test as crate::Config>::Balance;
 type Error = crate::Error<Test>;
