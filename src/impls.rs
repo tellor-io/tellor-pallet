@@ -355,7 +355,7 @@ impl<T: Config> Pallet<T> {
 			dispute_id != <DisputeId>::default() &&
 				dispute_id != Keccak256::hash(&[]) &&
 				<DisputeInfo<T>>::contains_key(dispute_id),
-			Error::<T>::InvalidVote
+			Error::<T>::InvalidDispute
 		);
 		let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round
 		<VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
