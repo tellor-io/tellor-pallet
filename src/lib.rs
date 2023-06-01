@@ -244,7 +244,7 @@ pub mod pallet {
 			NMapKey<Identity, FeedId>,
 			NMapKey<Blake2_128Concat, Timestamp>,
 		),
-		bool,
+		(),
 		ValueQuery,
 	>;
 	/// Feed identifiers that have funding
@@ -771,7 +771,7 @@ pub mod pallet {
 					// Adjust currently funded feeds
 					<FeedsWithFunding<T>>::remove(feed_id);
 				}
-				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp.0), true);
+				<DataFeedRewardClaimed<T>>::set((query_id, feed_id, timestamp.0), ());
 			}
 
 			feed.balance.saturating_reduce(cumulative_reward);

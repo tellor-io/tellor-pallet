@@ -185,7 +185,7 @@ impl<T: Config> Pallet<T> {
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
 		ensure!(
-			!<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)),
+			!<DataFeedRewardClaimed<T>>::contains_key((query_id, feed_id, timestamp)),
 			Error::<T>::TipAlreadyClaimed
 		);
 		let n = (timestamp.checked_sub(feed.start_time).ok_or(ArithmeticError::Underflow)?)
@@ -1067,7 +1067,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> bool {
-		<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp))
+		<DataFeedRewardClaimed<T>>::contains_key((query_id, feed_id, timestamp))
 	}
 
 	/// Read whether rewards have been claimed.
@@ -1085,7 +1085,9 @@ impl<T: Config> Pallet<T> {
 		timestamps
 			.into_iter()
 			.take(T::MaxClaimTimestamps::get() as usize)
-			.map(|timestamp| <DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)))
+			.map(|timestamp| {
+				<DataFeedRewardClaimed<T>>::contains_key((query_id, feed_id, timestamp))
+			})
 			.collect()
 	}
 
