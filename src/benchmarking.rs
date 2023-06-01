@@ -600,8 +600,8 @@ benchmarks! {
 		let s in 2..12;
 		// Maximum number of binary search iterations for staking token to local token price
 		let l in 2..12;
-		// The maximum number of votes be sent
-		let v in 1..MAX_VOTES_SENT_PER_BLOCK.into();
+		// The maximum number of aggregate votes be sent
+		let v in 1..MAX_AGGREGATE_VOTES_SENT_PER_BLOCK.into();
 
 		let staking_token_price_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_token_price_query_data();
 		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();

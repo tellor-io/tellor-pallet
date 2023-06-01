@@ -19,7 +19,7 @@
 
 pub use crate::xcm::{ContractLocation, LocationToAccount, LocationToOrigin};
 use crate::{
-	constants::{MAX_ITERATIONS, MAX_VOTES_SENT_PER_BLOCK, REPORTING_LOCK},
+	constants::{MAX_AGGREGATE_VOTES_SENT_PER_BLOCK, MAX_ITERATIONS, REPORTING_LOCK},
 	contracts::gas_limits,
 };
 use codec::Encode;
@@ -624,8 +624,8 @@ pub mod pallet {
 			};
 
 			// Check for any pending votes due to be sent to governance controller contract for tallying
-			let v =
-				<Pallet<T>>::do_send_votes(timestamp, MAX_VOTES_SENT_PER_BLOCK).unwrap_or_default();
+			let v = <Pallet<T>>::do_send_votes(timestamp, MAX_AGGREGATE_VOTES_SENT_PER_BLOCK)
+				.unwrap_or_default();
 
 			<T as Config>::WeightInfo::on_initialize(s, l, v)
 		}

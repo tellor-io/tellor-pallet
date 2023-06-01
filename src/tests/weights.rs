@@ -1,5 +1,5 @@
 use crate::{
-	constants::{MAX_ITERATIONS, MAX_VOTES_SENT_PER_BLOCK},
+	constants::{MAX_AGGREGATE_VOTES_SENT_PER_BLOCK, MAX_ITERATIONS},
 	mock::Test,
 	Config, WeightInfo,
 };
@@ -43,7 +43,11 @@ fn verify() {
 		("report_vote_executed", Tellor::report_vote_executed(u8::MAX.into())),
 		(
 			"on_initialize",
-			Tellor::on_initialize(MAX_ITERATIONS, MAX_ITERATIONS, MAX_VOTES_SENT_PER_BLOCK.into()),
+			Tellor::on_initialize(
+				MAX_ITERATIONS,
+				MAX_ITERATIONS,
+				MAX_AGGREGATE_VOTES_SENT_PER_BLOCK.into(),
+			),
 		),
 	] {
 		println!(
