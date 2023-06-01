@@ -856,7 +856,7 @@ fn vote() {
 			));
 			assert_noop!(
 				Tellor::vote(RuntimeOrigin::signed(reporter_2), H256::random(), Some(false)),
-				Error::InvalidVote
+				Error::InvalidDispute
 			); // Can't vote on dispute does not exist
 
 			let dispute_id = dispute_id(PARA_ID, query_id, now());

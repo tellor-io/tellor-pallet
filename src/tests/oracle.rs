@@ -21,7 +21,8 @@ use crate::{
 	Config, VoteResult,
 };
 use frame_support::{
-	assert_noop, assert_ok,
+	assert_err, assert_noop, assert_ok,
+	dispatch::DispatchResult,
 	traits::{Currency, Hooks},
 };
 use sp_core::{bounded_vec, Get, U256};
@@ -29,8 +30,15 @@ use sp_runtime::{
 	traits::{BadOrigin, Convert},
 	Saturating,
 };
+use sp_std::num::NonZeroU32;
+use std::time::Instant;
 
 type InitialDisputeFee = <Test as Config>::InitialDisputeFee;
+type LastReportedTimestamp = crate::LastReportedTimestamp<Test>;
+type MaxDisputedTimeSeries = <Test as Config>::MaxDisputedTimeSeries;
+type Reports = crate::Reports<Test>;
+type ReportedTimestampCount = crate::ReportedTimestampCount<Test>;
+type ReportedTimestampsByIndex = crate::ReportedTimestampsByIndex<Test>;
 type StakeAmountCurrencyTarget = <Test as Config>::StakeAmountCurrencyTarget;
 type StakerReportsSubmittedByQueryId = crate::StakerReportsSubmittedByQueryId<Test>;
 
@@ -140,6 +148,7 @@ fn remove_value() {
 				MINIMUM_STAKE_AMOUNT.into(),
 				address
 			));
+			assert_eq!(LastReportedTimestamp::get(query_id), None);
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -147,6 +156,7 @@ fn remove_value() {
 				0,
 				query_data.clone(),
 			));
+			assert_eq!(LastReportedTimestamp::get(query_id), Some(timestamp));
 
 			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 1);
 			assert_noop!(Tellor::remove_value(query_id, 500), Error::InvalidTimestamp);
@@ -163,6 +173,8 @@ fn remove_value() {
 			));
 			assert_eq!(Tellor::get_new_value_count_by_query_id(query_id), 1);
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp), None);
+			assert!(Reports::get(query_id, timestamp).unwrap().is_disputed);
+			assert_eq!(LastReportedTimestamp::get(query_id), None);
 			assert!(Tellor::is_in_dispute(query_id, timestamp));
 			assert_noop!(Tellor::remove_value(query_id, timestamp), Error::ValueDisputed);
 
@@ -170,7 +182,154 @@ fn remove_value() {
 			assert_noop!(Tellor::remove_value(query_id, 0), Error::InvalidTimestamp);
 			assert_noop!(Tellor::remove_value(query_id, u64::MAX), Error::InvalidTimestamp);
 		});
+
+		with_block_after(REPORTING_LOCK, || {
+			assert_ok!(Tellor::submit_value(
+				RuntimeOrigin::signed(reporter),
+				query_id,
+				uint_value(100),
+				0,
+				query_data,
+			));
+
+			// Remove index to ensure verified upon value removal
+			let timestamp = now();
+			ReportedTimestampsByIndex::remove(
+				query_id,
+				Tellor::get_timestamp_index_by_timestamp(query_id, timestamp).unwrap(),
+			);
+			assert_noop!(Tellor::remove_value(query_id, timestamp), Error::InvalidTimestamp);
+		});
 	});
+}
+
+#[test]
+fn remove_values() {
+	assert_ok!(remove_from_time_series(0, vec![]));
+	assert_ok!(remove_from_time_series(2, vec![0]));
+	assert_ok!(remove_from_time_series(3, vec![0, 2]));
+	assert_ok!(remove_from_time_series(3, vec![1]));
+	assert_ok!(remove_from_time_series(5, vec![1, 0, 3]));
+	assert_ok!(remove_from_time_series(5, vec![1, 3]));
+	assert_ok!(remove_from_time_series(5, vec![1, 2, 3]));
+	assert_ok!(remove_from_time_series(5, 0..5));
+	assert_ok!(remove_from_time_series(5, (0..5).rev()));
+	assert_ok!(remove_from_time_series(10, (0..10).step_by(3)));
+
+	use rand::seq::{IteratorRandom, SliceRandom};
+	let mut rng = rand::thread_rng();
+	assert_ok!(remove_from_time_series(20, (0..20).rev().choose_multiple(&mut rng, 10)));
+	assert_ok!(remove_from_time_series(50, (0..50).choose_multiple(&mut rng, 25)));
+
+	let mut disputes = (0..100).choose_multiple(&mut rng, 50);
+	disputes.shuffle(&mut rng);
+	assert_ok!(remove_from_time_series(100, disputes));
+
+	let max: u32 = MaxDisputedTimeSeries::get();
+	assert_err!(
+		remove_from_time_series(max + 50, (25..(max as usize + 25 + 1)).rev()),
+		Error::MaxDisputedTimeSeriesReached
+	);
+}
+
+fn remove_from_time_series(size: u32, disputes: impl IntoIterator<Item = usize>) -> DispatchResult {
+	let query_data: QueryDataOf<Test> = spot_price("dot", "usd").try_into().unwrap();
+	let query_id = keccak_256(query_data.as_ref()).into();
+	let reporter = 1;
+
+	new_test_ext().execute_with(|| -> DispatchResult {
+		with_block(|| super::deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random()));
+
+		assert_eq!(LastReportedTimestamp::get(query_id), None);
+
+		fn print(timestamps: &Vec<Option<Timestamp>>) {
+			println!(
+				"{:?}",
+				timestamps
+					.iter()
+					.map(|t| match t {
+						Some(t) => t.to_string(),
+						None => format!("{:_^10}", ""),
+					})
+					.collect::<Vec<_>>()
+			);
+		}
+
+		// Add series of timestamps of specified size
+		let mut timestamps = Vec::new();
+		for i in 0..size {
+			with_block_after(REPORTING_LOCK, || {
+				assert_ok!(Tellor::submit_value(
+					RuntimeOrigin::signed(reporter),
+					query_id,
+					uint_value(100),
+					i,
+					query_data.clone(),
+				));
+				timestamps.push(Some(now()));
+				assert_eq!(LastReportedTimestamp::get(query_id), *timestamps.last().unwrap());
+			});
+		}
+		print(&timestamps);
+
+		// Remove disputed items, in specified order
+		for i in disputes {
+			let timestamp = timestamps[i].unwrap();
+			Tellor::remove_value(query_id, timestamp)?;
+			let report = Reports::get(query_id, timestamp).unwrap();
+			assert!(report.is_disputed);
+			timestamps[i] = None;
+		}
+		print(&timestamps);
+
+		// Form new time series of undisputed values and verify in order
+		let timestamps: Vec<_> = timestamps.into_iter().filter_map(|t| t).collect();
+		for (i, timestamp) in timestamps.iter().enumerate() {
+			let report = Reports::get(query_id, timestamp).unwrap();
+			assert!(!report.is_disputed);
+			match i {
+				0 => assert!(report.previous == None),
+				_ => assert_eq!(report.previous, Some(timestamps[i - 1])),
+			}
+		}
+		println!("{:?}", timestamps.iter().map(|t| t.to_string()).collect::<Vec<_>>());
+
+		// Follow linked timestamps using Report.previous, starting from last reported
+		if timestamps.len() > 0 {
+			let mut i = timestamps.len() - 1;
+			let mut current = LastReportedTimestamp::get(query_id);
+			while let Some(timestamp) = current {
+				assert_eq!(timestamp, timestamps[i]);
+				let report = Reports::get(query_id, timestamp).unwrap();
+				assert!(!report.is_disputed);
+				current = report.previous;
+				i.saturating_dec();
+			}
+		}
+
+		// Verify every item's previous value remains valid
+		print!("[");
+		for i in 0..size {
+			let timestamp = ReportedTimestampsByIndex::get(query_id, i).unwrap();
+			let report = Reports::get(query_id, timestamp).unwrap();
+			if let Some(previous) = report.previous {
+				assert_eq!(Reports::get(query_id, previous).unwrap().is_disputed, false)
+			} else if i != 0 {
+				let timestamp = ReportedTimestampsByIndex::get(query_id, i - 1).unwrap();
+				assert_eq!(Reports::get(query_id, timestamp).unwrap().is_disputed, true);
+			}
+			print!(
+				"\"{timestamp}{} -> {:?}\", ",
+				if report.is_disputed { "(❌)" } else { "" },
+				report.previous
+			)
+		}
+		println!("]");
+
+		assert_eq!(LastReportedTimestamp::get(query_id), timestamps.last().copied());
+		println!();
+		Ok(())
+	})
 }
 
 #[test]
@@ -495,7 +654,7 @@ fn submit_value() {
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L277
 	ext.execute_with(|| {
-		with_block(|| {
+		let timestamp = with_block(|| {
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
@@ -542,6 +701,7 @@ fn submit_value() {
 				),
 				Error::InvalidQueryId
 			);
+			assert_eq!(LastReportedTimestamp::get(query_id), None);
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -549,6 +709,8 @@ fn submit_value() {
 				0,
 				query_data.clone()
 			));
+			let timestamp = now();
+			assert_eq!(LastReportedTimestamp::get(query_id).unwrap(), timestamp);
 			assert_noop!(
 				Tellor::submit_value(
 					RuntimeOrigin::signed(reporter),
@@ -559,10 +721,10 @@ fn submit_value() {
 				),
 				Error::ReporterTimeLocked
 			);
+			timestamp
 		});
 
 		with_block_after(3_600 /* 1 hour */, || {
-			let timestamp = now();
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -570,6 +732,8 @@ fn submit_value() {
 				1,
 				query_data.clone()
 			));
+			let previous = timestamp;
+			let timestamp = now();
 			assert_eq!(Tellor::get_timestamp_index_by_timestamp(query_id, timestamp).unwrap(), 1);
 			assert_eq!(
 				Tellor::get_timestamp_by_query_id_and_index(query_id, 1).unwrap(),
@@ -582,6 +746,7 @@ fn submit_value() {
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(4_001));
 			assert_eq!(Tellor::get_reporter_by_timestamp(query_id, timestamp).unwrap(), reporter);
 			assert_eq!(Tellor::time_of_last_new_value().unwrap(), timestamp);
+			assert_eq!(Reports::get(query_id, timestamp).unwrap().previous, Some(previous));
 			assert_eq!(Tellor::get_reports_submitted_by_address(&reporter), 2);
 			assert_eq!(
 				Tellor::get_reports_submitted_by_address_and_query_id(reporter, query_id),
@@ -1395,11 +1560,19 @@ fn get_index_for_data_before() {
 		});
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
+		assert_eq!(
+			Tellor::get_index_for_data_before_with_start(query_id, timestamp_2, 0).0,
+			Some(1)
+		);
 
 		// advance time and test
 		for year in 1..2 {
 			with_block_after(year * 365 * 86_400, || {
 				assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
+				assert_eq!(
+					Tellor::get_index_for_data_before_with_start(query_id, timestamp_2, 0).0,
+					Some(1)
+				);
 			});
 		}
 
@@ -1420,20 +1593,52 @@ fn get_index_for_data_before() {
 		with_block(|| {
 			assert_ok!(Tellor::remove_value(query_id, timestamp_52));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_52), Some(51));
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_52, 0).0,
+				Some(51)
+			);
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2, 0).0,
+				Some(1)
+			);
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), Some(2));
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 + 1, 0).0,
+				Some(2)
+			);
 
 			// remove value at index 2
 			assert_ok!(Tellor::remove_value(query_id, timestamp_2));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2), Some(1));
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2, 0).0,
+				Some(1)
+			);
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), Some(1));
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 + 1, 0).0,
+				Some(1)
+			);
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), Some(1));
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_1 + 1, 0).0,
+				Some(1)
+			);
 
 			assert_ok!(Tellor::remove_value(query_id, timestamp_1));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 - 1), Some(0));
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 - 1, 0).0,
+				Some(0)
+			);
 
 			assert_ok!(Tellor::remove_value(query_id, timestamp_0));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 - 1), None);
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 - 1, 0).0,
+				None
+			);
 		});
 
 		let query_data: QueryDataOf<Test> = spot_price("ksm", "usd").try_into().unwrap();
@@ -1464,7 +1669,15 @@ fn get_index_for_data_before() {
 		});
 
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_1 + 1), None);
+		assert_eq!(
+			Tellor::get_index_for_data_before_with_start(query_id, timestamp_1 + 1, 0).0,
+			None
+		);
 		assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_0 + 1), None);
+		assert_eq!(
+			Tellor::get_index_for_data_before_with_start(query_id, timestamp_0 + 1, 0).0,
+			None
+		);
 
 		let timestamp_2 = with_block_after(REPORTING_LOCK, || {
 			assert_ok!(Tellor::submit_value(
@@ -1488,7 +1701,76 @@ fn get_index_for_data_before() {
 
 			assert_ok!(Tellor::remove_value(query_id, timestamp_2));
 			assert_eq!(Tellor::get_index_for_data_before(query_id, timestamp_2 + 1), None);
+			assert_eq!(
+				Tellor::get_index_for_data_before_with_start(query_id, timestamp_2 + 1, 0).0,
+				None
+			);
 		});
+	});
+}
+
+#[test]
+#[ignore]
+// cargo test --release get_index_for_data_before_with_start -- --ignored --nocapture
+fn get_index_for_data_before_with_start() {
+	let reports = 2u32.saturating_pow(22);
+	let query_id = QueryId::zero();
+	let block_number = 0u8.into();
+	let mut timestamp = 1_685_196_686;
+	new_test_ext().execute_with(|| {
+		println!("Creating {:?} reports, disputing all but first and last...", reports);
+		let now = Instant::now();
+		for i in 1..=reports {
+			timestamp.saturating_inc();
+			let index = i - 1;
+			Reports::insert(
+				query_id,
+				timestamp,
+				crate::types::ReportOf::<Test> {
+					index,
+					block_number,
+					reporter: 0,
+					is_disputed: false,
+					previous: LastReportedTimestamp::get(query_id),
+				},
+			);
+			ReportedTimestampsByIndex::insert(query_id, index, timestamp);
+			LastReportedTimestamp::insert(query_id, timestamp);
+
+			if index > 0 && i < reports {
+				assert_ok!(Tellor::remove_value(query_id, timestamp));
+			}
+		}
+		ReportedTimestampCount::insert(query_id, reports);
+		println!("Reports created in {:?}\n", now.elapsed());
+
+		let timestamp = LastReportedTimestamp::get(query_id).unwrap();
+		let expected = Some(0);
+
+		println!("Using `get_index_for_data_before`, based on last timestamp");
+		let now = Instant::now();
+		let index_before = Tellor::get_index_for_data_before(query_id, timestamp);
+		println!(
+			"get_index_for_data_before: result={:?} elapsed={:?}\n",
+			index_before,
+			now.elapsed()
+		);
+		assert_eq!(index_before, expected);
+
+		println!("Using `get_index_for_data_before_with_start`, based on last timestamp");
+		let now = Instant::now();
+		let (index_before, iterations) =
+			Tellor::get_index_for_data_before_with_start(query_id, timestamp, 0);
+		let expected_iterations = NonZeroU32::new(reports).unwrap().ilog2() - 1;
+		println!(
+			"get_index_for_data_before_with_start: result={:?} elapsed: {:?} expected_iterations={} actual_iterations={}\n",
+			index_before,
+			now.elapsed(),
+			expected_iterations,
+			iterations
+		);
+		assert_eq!(index_before, expected);
+		assert_eq!(iterations, expected_iterations);
 	});
 }
 
@@ -1543,7 +1825,15 @@ fn get_data_before() {
 			Some((uint_value(170), timestamp_3))
 		);
 		assert_eq!(
+			Tellor::get_data_before_with_start(query_id, timestamp_3 + 1, 0).0,
+			Some((uint_value(170), timestamp_3))
+		);
+		assert_eq!(
 			Tellor::get_data_before(query_id, timestamp_2),
+			Some((uint_value(150), timestamp_1))
+		);
+		assert_eq!(
+			Tellor::get_data_before_with_start(query_id, timestamp_2, 0).0,
 			Some((uint_value(150), timestamp_1))
 		);
 
@@ -1555,7 +1845,15 @@ fn get_data_before() {
 					Some((uint_value(170), timestamp_3))
 				);
 				assert_eq!(
+					Tellor::get_data_before_with_start(query_id, timestamp_3 + 1, 0).0,
+					Some((uint_value(170), timestamp_3))
+				);
+				assert_eq!(
 					Tellor::get_data_before(query_id, timestamp_2),
+					Some((uint_value(150), timestamp_1))
+				);
+				assert_eq!(
+					Tellor::get_data_before_with_start(query_id, timestamp_2, 0).0,
 					Some((uint_value(150), timestamp_1))
 				);
 			});
@@ -1579,7 +1877,15 @@ fn get_data_before() {
 			Some((uint_value(170), timestamp_3))
 		);
 		assert_eq!(
+			Tellor::get_data_before_with_start(query_id, timestamp_3 + 1, 0).0,
+			Some((uint_value(170), timestamp_3))
+		);
+		assert_eq!(
 			Tellor::get_data_before(query_id, timestamp_2),
+			Some((uint_value(150), timestamp_1))
+		);
+		assert_eq!(
+			Tellor::get_data_before_with_start(query_id, timestamp_2, 0).0,
 			Some((uint_value(150), timestamp_1))
 		);
 	});

@@ -154,15 +154,14 @@ impl<T: Config> Pallet<T> {
 		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
 		// Add to feeds with funding
 		<FeedsWithFunding<T>>::insert(feed_id, ());
-		let feed_details = feed.clone();
-		<DataFeeds<T>>::insert(query_id, feed_id, feed);
+		<DataFeeds<T>>::insert(query_id, feed_id, &feed);
 		<UserTipsTotal<T>>::mutate(&feed_funder, |total| total.saturating_accrue(amount));
 		Self::deposit_event(Event::DataFeedFunded {
 			feed_id,
 			query_id,
 			amount,
 			feed_funder,
-			feed_details,
+			feed_details: feed,
 		});
 		Ok(())
 	}
@@ -186,7 +185,7 @@ impl<T: Config> Pallet<T> {
 
 		let feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
 		ensure!(
-			!<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)),
+			!<DataFeedRewardClaimed<T>>::contains_key((query_id, feed_id, timestamp)),
 			Error::<T>::TipAlreadyClaimed
 		);
 		let n = (timestamp.checked_sub(feed.start_time).ok_or(ArithmeticError::Underflow)?)
@@ -196,19 +195,21 @@ impl<T: Config> Pallet<T> {
 			.start_time
 			.checked_add(feed.interval.checked_mul(n).ok_or(ArithmeticError::Overflow)?)
 			.ok_or(ArithmeticError::Overflow)?; // finds start timestamp c of interval n
-		let value_retrieved = Self::retrieve_data(query_id, timestamp);
-		ensure!(value_retrieved.as_ref().map_or(0, |v| v.len()) != 0, Error::<T>::InvalidTimestamp);
-		let (value_retrieved_before, timestamp_before) =
-			Self::get_data_before(query_id, timestamp).unwrap_or_default();
+		let report = <Reports<T>>::get(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
+		ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
+		let timestamp_before = report.previous.unwrap_or_default();
 		let mut price_change = 0; // price change from last value to current value
 		if feed.price_threshold != 0 {
 			// v1 is value retrieved at supplied timestamp
-			let v1 = BytesToU256::convert(
-				value_retrieved.expect("value retrieved checked above; qed").into_inner(),
-			)
-			.ok_or(Error::<T>::ValueConversionError)?;
+			let value = <ReportedValuesByTimestamp<T>>::get(query_id, timestamp)
+				.ok_or(Error::<T>::InvalidValue)?;
+			ensure!(value.len() != 0, Error::<T>::InvalidValue);
+			let v1 =
+				BytesToU256::convert(value.into_inner()).ok_or(Error::<T>::ValueConversionError)?;
 			// v2 is latest value retrieved BEFORE supplied timestamp
-			let v2 = BytesToU256::convert(value_retrieved_before.into_inner())
+			let value_before =
+				<ReportedValuesByTimestamp<T>>::get(query_id, timestamp_before).unwrap_or_default();
+			let v2 = BytesToU256::convert(value_before.into_inner())
 				.ok_or(Error::<T>::ValueConversionError)?;
 			if v2 == U256::zero() {
 				price_change = 10_000;
@@ -304,10 +305,11 @@ impl<T: Config> Pallet<T> {
 	}
 
 	// Updates the stake amount after retrieving the latest token price from oracle.
-	pub(super) fn do_update_stake_amount() -> DispatchResult {
-		let Some((value, _)) = Self::get_data_before(
+	pub(super) fn do_update_stake_amount() -> Result<u32, DispatchError> {
+		let (Some((value, _)), iterations) = Self::get_data_before_with_start(
 			T::StakingTokenPriceQueryId::get(),
 			Self::now().checked_sub(12 * HOURS).ok_or(ArithmeticError::Underflow)?,
+			0
 		) else {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
@@ -336,7 +338,7 @@ impl<T: Config> Pallet<T> {
 			}
 		});
 		Self::deposit_event(Event::NewStakeAmount { amount });
-		Ok(())
+		Ok(iterations)
 	}
 
 	/// Enables the caller to cast a vote.
@@ -353,7 +355,7 @@ impl<T: Config> Pallet<T> {
 			dispute_id != <DisputeId>::default() &&
 				dispute_id != Keccak256::hash(&[]) &&
 				<DisputeInfo<T>>::contains_key(dispute_id),
-			Error::<T>::InvalidVote
+			Error::<T>::InvalidDispute
 		);
 		let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round
 		<VoteInfo<T>>::try_mutate(dispute_id, vote_round, |maybe| -> DispatchResult {
@@ -476,7 +478,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<BlockNumberOf<T>> {
-		<ReportedTimestampsToBlockNumber<T>>::get(query_id, timestamp)
+		<Reports<T>>::get(query_id, timestamp).map(|r| r.block_number)
 	}
 
 	/// Read current data feeds.
@@ -502,9 +504,9 @@ impl<T: Config> Pallet<T> {
 				tip_count.checked_sub(1).expect("tip_count greater than zero; qed"),
 			)
 			.map(|last_tip| {
-				let timestamp_retrieved =
-					Self::get_current_value_and_timestamp(query_id).map_or(0, |v| v.1);
-				if timestamp_retrieved < last_tip.timestamp {
+				let last_reported_timestamp =
+					<LastReportedTimestamp<T>>::get(query_id).unwrap_or_default();
+				if last_reported_timestamp < last_tip.timestamp {
 					last_tip.amount
 				} else {
 					Zero::zero()
@@ -520,46 +522,8 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// The latest submitted value for the given identifier.
 	pub fn get_current_value(query_id: QueryId) -> Option<ValueOf<T>> {
-		let mut count = Self::get_new_value_count_by_query_id(query_id);
-		if count == 0 {
-			return None
-		}
-		//loop handles for dispute (value = None if disputed)
-		while count > 0 {
-			count.saturating_dec();
-			let value = Self::get_timestamp_by_query_id_and_index(query_id, count)
-				.and_then(|timestamp| Self::retrieve_data(query_id, timestamp));
-			if value.is_some() {
-				return value
-			}
-		}
-		None
-	}
-
-	/// Allows the user to get the latest value for the query identifier specified.
-	/// # Arguments
-	/// * `query_id` - Identifier to look up the value for
-	/// # Returns
-	/// The value retrieved, along with its timestamp, if found.
-	pub(super) fn get_current_value_and_timestamp(
-		query_id: QueryId,
-	) -> Option<(ValueOf<T>, Timestamp)> {
-		let mut count = Self::get_new_value_count_by_query_id(query_id);
-		if count == 0 {
-			return None
-		}
-		//loop handles for dispute (value = None if disputed)
-		while count > 0 {
-			count.saturating_dec();
-			let value =
-				Self::get_timestamp_by_query_id_and_index(query_id, count).and_then(|timestamp| {
-					Self::retrieve_data(query_id, timestamp).map(|value| (value, timestamp))
-				});
-			if value.is_some() {
-				return value
-			}
-		}
-		None
+		<LastReportedTimestamp<T>>::get(query_id)
+			.and_then(|t| <ReportedValuesByTimestamp<T>>::get(query_id, t))
 	}
 
 	/// Retrieves the latest value for the query identifier before the specified timestamp.
@@ -578,6 +542,31 @@ impl<T: Config> Pallet<T> {
 				Self::retrieve_data(query_id, timestamp_retrieved)
 					.map(|value| (value, timestamp_retrieved))
 			})
+	}
+
+	/// Retrieves the latest value for the query identifier before the specified timestamp.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up the value for.
+	/// * `timestamp` - The timestamp before which to search for the latest value.
+	/// * `start` - The start index at which to to begin the search.
+	/// # Returns
+	/// The value retrieved and its timestamp, if found, along with the number of iterations taken.
+	pub(super) fn get_data_before_with_start(
+		query_id: QueryId,
+		timestamp: Timestamp,
+		start: u32,
+	) -> (Option<(ValueOf<T>, Timestamp)>, u32) {
+		let (index_before, iterations) =
+			Self::get_index_for_data_before_with_start(query_id, timestamp, start);
+		(
+			index_before
+				.and_then(|index| <ReportedTimestampsByIndex<T>>::get(query_id, index))
+				.and_then(|timestamp_retrieved| {
+					<ReportedValuesByTimestamp<T>>::get(query_id, timestamp_retrieved)
+						.map(|value| (value, timestamp_retrieved))
+				}),
+			iterations,
+		)
 	}
 
 	/// Read a specific data feed.
@@ -754,6 +743,79 @@ impl<T: Config> Pallet<T> {
 		None
 	}
 
+	/// Retrieves latest index of data before the specified timestamp for the query identifier.
+	/// # Arguments
+	/// * `query_id` - The query identifier to look up the index for.
+	/// * `timestamp` - The timestamp before which to search for the latest index.
+	/// * `start` - The start index at which to to begin the search.
+	/// # Returns
+	/// Whether the index was found along with the latest index found before the supplied timestamp,
+	/// along with the number of iterations taken.
+	pub(super) fn get_index_for_data_before_with_start(
+		query_id: QueryId,
+		timestamp: Timestamp,
+		start: u32,
+	) -> (Option<u32>, u32) {
+		let mut iterations = 0;
+		// Use closure to simply append iterations to result, whilst retaining clean ? syntax within closure
+		let mut get_index = |query_id, timestamp, mut start| {
+			let last_reported_timestamp = <LastReportedTimestamp<T>>::get(query_id)?;
+			// Checking Boundaries to short-circuit the algorithm
+			let mut time = <ReportedTimestampsByIndex<T>>::get(query_id, start)?;
+			if time >= timestamp {
+				return None
+			}
+			let mut end = <Reports<T>>::get(query_id, last_reported_timestamp)?.index;
+			if last_reported_timestamp < timestamp {
+				return Some(end)
+			}
+			// Since the value is within our boundaries, do a binary search
+			let mut middle;
+			loop {
+				iterations.saturating_inc();
+				middle =
+					(end.checked_sub(start)?).checked_div(2)?.checked_add(1)?.checked_add(start)?;
+				time = <ReportedTimestampsByIndex<T>>::get(query_id, middle)?;
+				if time < timestamp {
+					// get immediate next value
+					let next_time = <ReportedTimestampsByIndex<T>>::get(query_id, middle + 1)?;
+					if next_time >= timestamp {
+						let report = <Reports<T>>::get(query_id, time)?;
+						return if !report.is_disputed {
+							// _time is correct
+							Some(middle)
+						} else {
+							report
+								.previous
+								.and_then(|t| <Reports<T>>::get(query_id, t).map(|r| r.index))
+						}
+					} else {
+						// look from middle + 1(next value) to end
+						start = middle.checked_add(1)?;
+					}
+				} else {
+					let previous_time =
+						<ReportedTimestampsByIndex<T>>::get(query_id, middle.checked_sub(1)?)?;
+					if previous_time < timestamp {
+						let report = <Reports<T>>::get(query_id, previous_time)?;
+						return if !report.is_disputed {
+							// previous_time is correct
+							Some(middle.checked_sub(1)?)
+						} else {
+							report
+								.previous
+								.and_then(|t| <Reports<T>>::get(query_id, t).map(|r| r.index))
+						}
+					} else {
+						// look from start to middle -1(prev value)
+						end = middle.checked_sub(1)?;
+					}
+				}
+			}
+		};
+		(get_index(query_id, timestamp, start), iterations)
+	}
+
 	/// Determines tip eligibility for a given oracle submission.
 	/// # Arguments
 	/// * `query_id` - Identifier of reported data.
@@ -769,15 +831,12 @@ impl<T: Config> Pallet<T> {
 			Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? > 12 * HOURS,
 			Error::<T>::ClaimBufferNotPassed
 		);
-		ensure!(!Self::is_in_dispute(query_id, timestamp), Error::<T>::ValueDisputed);
-		ensure!(
-			Self::get_reporter_by_timestamp(query_id, timestamp)
-				.map_or(false, |reporter| claimer == &reporter),
-			Error::<T>::InvalidClaimer
-		);
+		let report = <Reports<T>>::get(query_id, timestamp).ok_or(Error::<T>::InvalidTimestamp)?;
+		ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
+		ensure!(claimer == &report.reporter, Error::<T>::InvalidClaimer);
 		let tip_count = <TipCount<T>>::get(query_id);
 		if tip_count == 0 {
-			return Err(Error::<T>::NoTipsSubmitted.into())
+			Err(Error::<T>::NoTipsSubmitted.into())
 		} else {
 			let mut min = 0;
 			let mut max = tip_count;
@@ -793,8 +852,7 @@ impl<T: Config> Pallet<T> {
 				}
 			}
 
-			let (_, timestamp_before) =
-				Self::get_data_before(query_id, timestamp).unwrap_or_default();
+			let timestamp_before = report.previous.unwrap_or_default();
 			let min_tip = &mut <Tips<T>>::get(query_id, min).ok_or(Error::<T>::InvalidIndex)?;
 			ensure!(timestamp_before < min_tip.timestamp, Error::<T>::TipAlreadyEarned);
 			ensure!(timestamp >= min_tip.timestamp, Error::<T>::TimestampIneligibleForTip);
@@ -806,16 +864,9 @@ impl<T: Config> Pallet<T> {
 			let min_backup = min;
 
 			// check whether eligible for previous tips in array due to disputes
-			let index_now = Self::get_index_for_data_before(
-				query_id,
-				timestamp.checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?,
-			);
-			let index_before = Self::get_index_for_data_before(
-				query_id,
-				timestamp_before.checked_add(1u8.into()).ok_or(ArithmeticError::Overflow)?,
-			);
-			if index_now
-				.unwrap_or_default()
+			let index_before = <Reports<T>>::get(query_id, timestamp_before).map(|r| r.index);
+			if report
+				.index
 				.checked_sub(index_before.unwrap_or_default())
 				.ok_or(ArithmeticError::Underflow)? >
 				1 || index_before.is_none()
@@ -920,8 +971,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<(AccountIdOf<T>, bool)> {
-		<ReportersByTimestamp<T>>::get(query_id, timestamp)
-			.map(|reporter| (reporter, <ReportDisputes<T>>::get(query_id, timestamp)))
+		<Reports<T>>::get(query_id, timestamp).map(|r| (r.reporter, r.is_disputed))
 	}
 
 	/// Returns the reporter who submitted a value for a query identifier at a specific time.
@@ -934,7 +984,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<AccountIdOf<T>> {
-		<ReportersByTimestamp<T>>::get(query_id, timestamp)
+		<Reports<T>>::get(query_id, timestamp).map(|r| r.reporter)
 	}
 
 	/// Returns the timestamp of the reporter's last submission.
@@ -991,7 +1041,7 @@ impl<T: Config> Pallet<T> {
 	) -> BalanceOf<T> {
 		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return Zero::zero()};
 		let mut cumulative_reward = <BalanceOf<T>>::zero();
-		for timestamp in timestamps.into_iter().take(100) {
+		for timestamp in timestamps.into_iter().take(T::MaxClaimTimestamps::get() as usize) {
 			cumulative_reward.saturating_accrue(
 				Self::do_get_reward_amount(feed_id, query_id, timestamp).unwrap_or_default(),
 			)
@@ -1017,7 +1067,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> bool {
-		<DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp))
+		<DataFeedRewardClaimed<T>>::contains_key((query_id, feed_id, timestamp))
 	}
 
 	/// Read whether rewards have been claimed.
@@ -1034,8 +1084,10 @@ impl<T: Config> Pallet<T> {
 	) -> Vec<bool> {
 		timestamps
 			.into_iter()
-			.take(100)
-			.map(|timestamp| <DataFeedRewardClaimed<T>>::get((query_id, feed_id, timestamp)))
+			.take(T::MaxClaimTimestamps::get() as usize)
+			.map(|timestamp| {
+				<DataFeedRewardClaimed<T>>::contains_key((query_id, feed_id, timestamp))
+			})
 			.collect()
 	}
 
@@ -1082,7 +1134,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamp: Timestamp,
 	) -> Option<u32> {
-		<ReportedTimestamps<T>>::get(query_id, timestamp)
+		<Reports<T>>::get(query_id, timestamp).map(|r| r.index)
 	}
 
 	/// Read the total amount of tips paid by a user.
@@ -1160,7 +1212,9 @@ impl<T: Config> Pallet<T> {
 	/// # Returns
 	/// Whether the value is disputed.
 	pub fn is_in_dispute(query_id: QueryId, timestamp: Timestamp) -> bool {
-		<ReportDisputes<T>>::get(query_id, timestamp)
+		<Reports<T>>::get(query_id, timestamp)
+			.map(|r| r.is_disputed)
+			.unwrap_or_default()
 	}
 
 	/// Returns the duration since UNIX_EPOCH, in seconds.
@@ -1175,18 +1229,53 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// * `query_id` - Identifier of the specific data feed.
 	/// * `timestamp` - The timestamp of the value to remove.
-	pub(super) fn remove_value(query_id: QueryId, timestamp: Timestamp) -> DispatchResult {
-		ensure!(!<ReportDisputes<T>>::get(query_id, timestamp), Error::<T>::ValueDisputed);
-		let index = <ReportedTimestamps<T>>::get(query_id, timestamp)
-			.ok_or(Error::<T>::InvalidTimestamp)?;
-		ensure!(
-			Some(timestamp) == <ReportedTimestampsByIndex<T>>::get(query_id, index),
-			Error::<T>::InvalidTimestamp
-		);
+	pub(super) fn remove_value(
+		query_id: QueryId,
+		timestamp: Timestamp,
+	) -> Result<u32, DispatchError> {
+		let iterations =
+			<Reports<T>>::try_mutate(query_id, timestamp, |maybe| -> Result<u32, DispatchError> {
+				let Some(report) = maybe else { return Err(Error::<T>::InvalidTimestamp.into()) };
+				ensure!(!report.is_disputed, Error::<T>::ValueDisputed);
+				ensure!(
+					Some(timestamp) == <ReportedTimestampsByIndex<T>>::get(query_id, report.index),
+					Error::<T>::InvalidTimestamp
+				);
+				report.is_disputed = true;
+
+				// Update last reported timestamp, if applicable
+				let _ = <LastReportedTimestamp<T>>::try_mutate(query_id, |lrt| match lrt {
+					// Check if last reported timestamp value is being removed
+					Some(last_reported_timestamp) if *last_reported_timestamp == timestamp => {
+						*lrt = report.previous; // set last reported to previous
+						Ok(())
+					},
+					_ => Err(()), // No mutation
+				});
+
+				// Update next valid timestamp in series to point to previous valid timestamp (before one being removed)
+				let start = report.index.checked_add(1).ok_or(ArithmeticError::Overflow)?;
+				let end = start.saturating_add(T::MaxDisputedTimeSeries::get());
+				let mut iterations = 0;
+				for index in start..=end {
+					iterations.saturating_inc();
+					if iterations > T::MaxDisputedTimeSeries::get() {
+						return Err(Error::<T>::MaxDisputedTimeSeriesReached.into())
+					}
+					let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index) else { break };
+					let mut next_report = <Reports<T>>::get(query_id, timestamp)
+						.ok_or(Error::<T>::InvalidTimestamp)?;
+					next_report.previous = report.previous;
+					<Reports<T>>::insert(query_id, timestamp, &next_report);
+					if !next_report.is_disputed {
+						break
+					}
+				}
+				Ok(iterations)
+			})?;
 		<ReportedValuesByTimestamp<T>>::remove(query_id, timestamp);
-		<ReportDisputes<T>>::set(query_id, timestamp, true);
 		Self::deposit_event(Event::ValueRemoved { query_id, timestamp });
-		Ok(())
+		Ok(iterations)
 	}
 
 	/// Retrieve value from the oracle based on timestamp.
@@ -1281,10 +1370,11 @@ impl<T: Config> Pallet<T> {
 	}
 
 	// Updates the dispute fee after retrieving the latest token price from oracle.
-	pub(super) fn update_dispute_fee() -> DispatchResult {
-		let Some((value, _)) = Self::get_data_before(
+	pub(super) fn update_dispute_fee() -> Result<u32, DispatchError> {
+		let (Some((value, _)), iterations) = Self::get_data_before_with_start(
 			T::StakingToLocalTokenPriceQueryId::get(),
 			Self::now().checked_sub(12 * HOURS).ok_or(ArithmeticError::Underflow)?,
+			0
 		) else {
 			return Err(Error::<T>::InvalidPrice.into());
 		};
@@ -1306,7 +1396,7 @@ impl<T: Config> Pallet<T> {
 				Err(())
 			}
 		});
-		Ok(())
+		Ok(iterations)
 	}
 
 	/// Updates accumulated staking rewards per staked token.

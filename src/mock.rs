@@ -137,6 +137,7 @@ impl tellor::Config for Test {
 	type GovernanceOrigin = EnsureGovernance;
 	type InitialDisputeFee = ConstU128<{ 50 * 10u128.pow(12) }>; // (100 TRB / 10) * 5, where TRB 1:5 OCP
 	type MaxClaimTimestamps = ConstU32<100>; // 100 timestamps per claim
+	type MaxDisputedTimeSeries = ConstU32<100>;
 	type MaxQueryDataLength = ConstU32<1024>;
 	type MaxValueLength = ConstU32<256>;
 	type MaxVotes = ConstU32<10>; // 10 votes max when voting on multiple disputes
@@ -197,7 +198,7 @@ impl tellor::traits::SendXcm for TestSendXcm {
 pub struct TestBenchmarkHelper;
 #[cfg(feature = "runtime-benchmarks")]
 impl<MaxQueryDataLength: sp_core::Get<u32>>
-	tellor::traits::BenchmarkHelper<AccountId, MaxQueryDataLength> for TestBenchmarkHelper
+	tellor::traits::BenchmarkHelper<AccountId, Balance, MaxQueryDataLength> for TestBenchmarkHelper
 {
 	fn set_time(time_in_secs: u64) {
 		System::set_block_number(System::block_number() + 1);
