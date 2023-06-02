@@ -21,6 +21,8 @@ const MAX_WEIGHT: Weight = Weight::from_parts(MAX_REF_TIME, MAX_POV_SIZE);
 
 #[test]
 fn verify() {
+	println!("max block weight: {MAX_WEIGHT}\n");
+	println!("max weights:");
 	for (function, weight) in vec![
 		("register", Weights::register()),
 		("claim_onetime_tip", Weights::claim_onetime_tip(MaxClaimTimestamps::get())),
@@ -51,9 +53,11 @@ fn verify() {
 		),
 	] {
 		println!(
-			"{function}: max {weight:?}\t{:.2}% max ref_time, {:.2}% max proof_size",
+			"{function}: {weight:?}\tpercentage of block={:.2}% (ref_time), {:.2}% (proof_size), max tx per block={} (ref_time), {} (proof_size)",
 			(weight.ref_time() as f64 / MAX_WEIGHT.ref_time() as f64) * 100.0,
-			(weight.proof_size() as f64 / MAX_WEIGHT.proof_size() as f64) * 100.0
+			(weight.proof_size() as f64 / MAX_WEIGHT.proof_size() as f64) * 100.0,
+			MAX_WEIGHT.ref_time() / weight.ref_time(),
+			MAX_WEIGHT.proof_size() / weight.proof_size()
 		);
 		assert!(weight.all_lt(MAX_WEIGHT));
 	}
