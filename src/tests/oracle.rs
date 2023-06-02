@@ -1489,27 +1489,37 @@ fn add_staking_rewards() {
 
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L539
 	ext.execute_with(|| {
-		Balances::make_free_balance_be(&funder, token(1_000));
-		assert_eq!(Balances::free_balance(funder), token(1_000));
+		with_block(|| {
+			Balances::make_free_balance_be(&funder, token(1_000));
+			assert_eq!(Balances::free_balance(funder), token(1_000));
 
-		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), token(1_000)));
-		assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
-		assert_eq!(Balances::free_balance(funder), 0);
-		assert_eq!(Tellor::reward_rate(), token(1_000) / REWARD_RATE_TARGET);
+			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), token(1_000)));
+			assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
+			assert_eq!(Balances::free_balance(funder), 0);
+			assert_eq!(Tellor::reward_rate(), token(1_000) / REWARD_RATE_TARGET);
+			System::assert_last_event(
+				Event::StakingRewardsAdded { source: funder, amount: token(1_000) }.into(),
+			);
 
-		// Test min value
-		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), 0));
-		assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
-		assert_eq!(Balances::free_balance(funder), 0);
-		assert_eq!(Tellor::reward_rate(), token(1_000) / REWARD_RATE_TARGET);
+			// Test min value
+			System::reset_events();
+			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), 0));
+			assert_eq!(Balances::free_balance(staking_rewards), token(1_000));
+			assert_eq!(Balances::free_balance(funder), 0);
+			assert_eq!(Tellor::reward_rate(), token(1_000) / REWARD_RATE_TARGET);
+			assert_eq!(System::event_count(), 0);
 
-		// Test max value
-		Balances::make_free_balance_be(&funder, Balance::MAX);
-		Balances::make_free_balance_be(&staking_rewards, 0);
-		assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), Balance::MAX));
-		assert_eq!(Balances::free_balance(staking_rewards), Balance::MAX);
-		assert_eq!(Balances::free_balance(funder), 0);
-		assert_eq!(Tellor::reward_rate(), Balance::MAX / REWARD_RATE_TARGET);
+			// Test max value
+			Balances::make_free_balance_be(&funder, Balance::MAX);
+			Balances::make_free_balance_be(&staking_rewards, 0);
+			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), Balance::MAX));
+			assert_eq!(Balances::free_balance(staking_rewards), Balance::MAX);
+			assert_eq!(Balances::free_balance(funder), 0);
+			assert_eq!(Tellor::reward_rate(), Balance::MAX / REWARD_RATE_TARGET);
+			System::assert_last_event(
+				Event::StakingRewardsAdded { source: funder, amount: Balance::MAX }.into(),
+			);
+		});
 	});
 }
 
