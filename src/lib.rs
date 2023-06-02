@@ -1487,8 +1487,8 @@ pub mod pallet {
 			reporter: AccountIdOf<T>,
 			amount: Tributes,
 		) -> DispatchResult {
-			// ensure origin is governance controller contract
-			T::GovernanceOrigin::ensure_origin(origin)?;
+			// ensure origin is staking controller contract
+			T::StakingOrigin::ensure_origin(origin)?;
 
 			<StakerDetails<T>>::try_mutate(&reporter, |maybe| -> DispatchResult {
 				match maybe {

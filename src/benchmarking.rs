@@ -530,6 +530,7 @@ benchmarks! {
 		// tally vote
 		Tellor::<T>::report_vote_tallied(caller.clone(), dispute_id, VoteResult::Passed)?;
 
+		let caller = T::StakingOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 	}: _<RuntimeOrigin<T>>(caller, reporter.clone(), trb(100))
 	verify {
 		assert_last_event::<T>(

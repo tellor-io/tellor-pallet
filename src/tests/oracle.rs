@@ -496,14 +496,14 @@ fn slash_reporter() {
 			assert_eq!(Tellor::get_total_stake_amount(), amount);
 			assert_noop!(
 				Tellor::report_slash(
-					Origin::Governance.into(),
+					Origin::Staking.into(), // Call originates from staking contract, via governance contract call
 					0,
 					(MINIMUM_STAKE_AMOUNT + 1).into()
 				),
 				Error::InsufficientStake
 			);
 			assert_ok!(Tellor::report_slash(
-				Origin::Governance.into(),
+				Origin::Staking.into(), // Call originates from staking contract, via governance contract call
 				reporter,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
@@ -543,7 +543,7 @@ fn slash_reporter() {
 			assert_eq!(staker_details.locked_balance, trb(100));
 			assert!(staker_details.staked);
 			assert_ok!(Tellor::report_slash(
-				Origin::Governance.into(),
+				Origin::Staking.into(), // Call originates from staking contract, via governance contract call
 				reporter,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
@@ -581,7 +581,7 @@ fn slash_reporter() {
 			assert_eq!(staker_details.locked_balance, trb(5));
 			assert_eq!(Tellor::get_total_stake_amount(), trb(795));
 			assert_ok!(Tellor::report_slash(
-				Origin::Governance.into(),
+				Origin::Staking.into(), // Call originates from staking contract, via governance contract call
 				reporter,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
@@ -628,7 +628,7 @@ fn slash_reporter() {
 		// Report slash after tally dispute period
 		with_block_after(86_400, || {
 			assert_ok!(Tellor::report_slash(
-				Origin::Governance.into(),
+				Origin::Staking.into(), // Call originates from staking contract, via governance contract call
 				reporter,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
