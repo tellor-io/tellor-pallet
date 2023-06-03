@@ -449,6 +449,8 @@ pub mod pallet {
 		},
 		/// Emitted when confirmation of a stake withdraw request is sent to the staking controller contract.
 		StakeWithdrawRequestConfirmationSent { para_id: u32, contract_address: Address },
+		/// Emitted when staking rewards are added.
+		StakingRewardsAdded { source: AccountIdOf<T>, amount: BalanceOf<T> },
 		/// Emitted when a value is removed (via governance).
 		ValueRemoved { query_id: QueryId, timestamp: Timestamp },
 
@@ -974,8 +976,12 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			#[pallet::compact] amount: BalanceOf<T>,
 		) -> DispatchResult {
-			let funder = ensure_signed(origin)?;
-			Self::do_add_staking_rewards(&funder, amount)
+			let source = ensure_signed(origin)?;
+			Self::do_add_staking_rewards(&source, amount)?;
+			if amount > Zero::zero() {
+				Self::deposit_event(Event::StakingRewardsAdded { source, amount });
+			}
+			Ok(())
 		}
 
 		/// Allows a reporter to submit a value to the oracle.
