@@ -141,7 +141,7 @@ fn begin_dispute() {
 		// Report slash after tally dispute period
 		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::report_slash(
-				Origin::Governance.into(),
+				Origin::Staking.into(), // Call originates from staking contract, via governance contract call
 				reporter,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
@@ -296,7 +296,7 @@ fn begin_dispute_by_non_reporter() {
 		// Report slash after tally dispute period
 		with_block_after(86_400 * 2, || {
 			assert_ok!(Tellor::report_slash(
-				Origin::Governance.into(),
+				Origin::Staking.into(), // Call originates from staking contract, via governance contract call
 				reporter,
 				MINIMUM_STAKE_AMOUNT.into()
 			));
