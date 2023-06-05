@@ -1225,7 +1225,7 @@ pub mod pallet {
 				dispute_id,
 				query_id,
 				timestamp,
-				reporter: dispute_initiator,
+				reporter: dispute.disputed_reporter.clone(),
 			});
 
 			// Lookup corresponding address on controller chain
