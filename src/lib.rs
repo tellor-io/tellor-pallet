@@ -95,7 +95,7 @@ pub mod pallet {
 
 	#[cfg(feature = "runtime-benchmarks")]
 	use crate::traits::BenchmarkHelper;
-	use crate::types::Weights;
+	use crate::{traits::Weigher, types::Weights};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -225,6 +225,9 @@ pub mod pallet {
 			Self::Balance,
 			Self::MaxQueryDataLength,
 		>;
+
+		/// Means of measuring the weight consumed by an XCM message.
+		type Weigher: Weigher;
 
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
@@ -668,6 +671,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
+				Parachain(T::Registry::get().para_id).into(),
 			);
 			Self::send_xcm(
 				registry_contract.para_id,
@@ -1252,6 +1256,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
+				Parachain(governance_contract.para_id).into(),
 			);
 			Self::send_xcm(
 				governance_contract.para_id,
@@ -1421,6 +1426,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
+				Parachain(staking_contract.para_id).into(),
 			);
 			Self::send_xcm(
 				staking_contract.para_id,

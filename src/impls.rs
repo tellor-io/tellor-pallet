@@ -16,6 +16,7 @@
 
 use super::*;
 use crate::constants::DECIMALS;
+use ::xcm::prelude::Parachain;
 use frame_support::traits::fungible::Inspect;
 use sp_runtime::{
 	traits::{CheckedAdd, CheckedMul, CheckedSub, Hash},
@@ -285,6 +286,7 @@ impl<T: Config> Pallet<T> {
 						GAS_LIMIT,
 					),
 					GAS_LIMIT,
+					Parachain(governance_contract.para_id).into(),
 				);
 				Self::send_xcm(
 					governance_contract.para_id,

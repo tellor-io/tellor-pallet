@@ -15,6 +15,7 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::types::{QueryId, Timestamp, U256};
+use frame_support::weights::Weight;
 #[cfg(feature = "runtime-benchmarks")]
 use frame_support::BoundedVec;
 use sp_std::vec::Vec;
@@ -153,4 +154,19 @@ pub trait BenchmarkHelper<AccountId, Balance, MaxQueryDataLength> {
 	/// # Returns
 	/// Bytes of query data
 	fn get_staking_to_local_token_price_query_data() -> BoundedVec<u8, MaxQueryDataLength>;
+}
+
+// From: https://github.com/paritytech/polkadot/blob/b1cc6fa14330261a305d56be36c04e9c99518993/xcm/xcm-executor/src/traits/weight.rs#L34
+/// A means of getting approximate weight consumption for a given destination message executor and a
+/// message.
+pub trait UniversalWeigher {
+	/// Get the upper limit of weight required for `dest` to execute `message`.
+	#[allow(clippy::result_unit_err)]
+	fn weigh(dest: impl Into<MultiLocation>, message: Xcm<()>) -> Result<Weight, ()>;
+}
+
+/// A means of getting approximate weight consumption of a transact instruction
+pub trait Weigher: UniversalWeigher {
+	/// Get the upper limit of weight required for `dest` to execute `transact` instruction
+	fn transact(dest: impl Into<MultiLocation>, gas_limit: u64) -> Weight;
 }
