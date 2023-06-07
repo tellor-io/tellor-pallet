@@ -94,6 +94,9 @@ fn begin_dispute() {
 				None,
 			));
 			let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
+			System::assert_has_event(
+				Event::NewDispute { dispute_id, query_id, timestamp, reporter }.into(),
+			);
 			let dispute_info = Tellor::get_dispute_info(dispute_id).unwrap();
 			let vote_info = Tellor::get_vote_info(dispute_id, 1).unwrap();
 			assert_eq!(Tellor::get_vote_count(), 1, "vote count should be correct");
