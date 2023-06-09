@@ -131,12 +131,15 @@ impl From<ContractLocation> for MultiLocation {
 /// * `gas_limit` - The gas limit used to calculate the weight and corresponding fees required.
 /// # Returns
 /// A XCM message for remote transact.
-pub(crate) fn transact<T: Config>(call: Vec<u8>, gas_limit: u64, dest: MultiLocation) -> Xcm<()> {
+pub(crate) fn transact<T: Config>(
+	dest: impl Into<MultiLocation> + sp_std::marker::Copy,
+	call: Vec<u8>,
+	gas_limit: u64,
+) -> Result<Xcm<()>, DispatchError> {
 	// Calculate weight for executing smart contract call via ethereum_xcm::transact(): https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/ethereum-xcm/src/lib.rs#L138-L147
-	//let transact_extrinsic_weight = gas_to_weight(gas_limit) + DbWeight::get().reads(1);
 	let transact_extrinsic_weight = T::Weigher::transact(dest, gas_limit);
 
-	let message = Xcm(vec![
+	let sample_message = Xcm(vec![
 		DescendOrigin(Parachain(T::ParachainId::get()).into()),
 		WithdrawAsset((T::XcmFeesAsset::get(), Fungible(1u128)).into()),
 		BuyExecution {
@@ -151,22 +154,26 @@ pub(crate) fn transact<T: Config>(call: Vec<u8>, gas_limit: u64, dest: MultiLoca
 	]);
 
 	// Extract weight of XCM message
-	let xcm_weight: Weight = T::Weigher::weigh(dest, message).unwrap();
-	// Calculate total weight based on xcm message weight and transact execution
-	let total_weight = xcm_weight + transact_extrinsic_weight;
-	// Convert to fee amount
-	let amount = weight_to_fee::<T>(total_weight);
-	let asset: MultiAsset = (T::XcmFeesAsset::get(), Fungible(amount)).into();
-	// Construct xcm message
-	Xcm(vec![
-		WithdrawAsset(asset.clone().into()),
-		BuyExecution { fees: asset, weight_limit: Limited(total_weight) },
-		Transact {
-			origin_kind: OriginKind::SovereignAccount,
-			require_weight_at_most: transact_extrinsic_weight,
-			call: call.into(),
+	match T::Weigher::weigh(dest, sample_message) {
+		Ok(xcm_weight) => {
+			// Calculate total weight based on xcm message weight and transact execution
+			let total_weight = xcm_weight + transact_extrinsic_weight;
+			// Convert to fee amount
+			let amount = weight_to_fee::<T>(total_weight);
+			let asset: MultiAsset = (T::XcmFeesAsset::get(), Fungible(amount)).into();
+			// Construct xcm message
+			Ok(Xcm(vec![
+				WithdrawAsset(asset.clone().into()),
+				BuyExecution { fees: asset, weight_limit: Limited(total_weight) },
+				Transact {
+					origin_kind: OriginKind::SovereignAccount,
+					require_weight_at_most: transact_extrinsic_weight,
+					call: call.into(),
+				},
+			]))
 		},
-	])
+		Err(_) => Err(Error::<T>::WeighingFailure.into()),
+	}
 }
 
 pub(crate) fn weight_to_fee<T: Config>(weight: Weight) -> u128 {
@@ -298,7 +305,7 @@ mod tests {
 		};
 
 		assert_eq!(
-			super::transact::<Test>(vec![], GAS_LIMIT, Parachain(EVM_PARA_ID).into()),
+			super::transact::<Test>(Parachain(EVM_PARA_ID), vec![], GAS_LIMIT).unwrap(),
 			Xcm(vec![
 				WithdrawAsset(fees.clone().into()),
 				BuyExecution { fees, weight_limit: Limited(total_weight) },

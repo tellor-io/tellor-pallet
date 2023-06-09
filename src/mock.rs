@@ -167,7 +167,7 @@ impl tellor::Config for Test {
 	type XcmWeightToAsset = ConstU128<50_000>; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = TestBenchmarkHelper;
-	type Weigher = MoonbeamWeights;
+	type Weigher = DestinationParachainWeigher;
 	type WeightInfo = ();
 }
 
@@ -298,7 +298,7 @@ pub(crate) fn with_block_after<R>(time_in_secs: u64, execute: impl FnOnce() -> R
 	result
 }
 
-impl UniversalWeigher for MoonbeamWeights {
+impl UniversalWeigher for DestinationParachainWeigher {
 	fn weigh(dest: impl Into<MultiLocation>, message: Xcm<()>) -> Result<Weight, ()> {
 		let mut weight: Weight = Weight::zero();
 		return match dest.into() {
@@ -306,30 +306,35 @@ impl UniversalWeigher for MoonbeamWeights {
 				for instruction in message.0.iter() {
 					match instruction {
 						DescendOrigin(_) =>
-							weight =
-								weight.checked_add(&MoonbeamWeights::descend_origin()).ok_or(())?,
+							weight = weight
+								.checked_add(&DestinationParachainWeigher::descend_origin())
+								.ok_or(())?,
 						WithdrawAsset(_) =>
-							weight =
-								weight.checked_add(&MoonbeamWeights::withdraw_asset()).ok_or(())?,
+							weight = weight
+								.checked_add(&DestinationParachainWeigher::withdraw_asset())
+								.ok_or(())?,
 						BuyExecution { .. } =>
-							weight =
-								weight.checked_add(&MoonbeamWeights::buy_execution()).ok_or(())?,
+							weight = weight
+								.checked_add(&DestinationParachainWeigher::buy_execution())
+								.ok_or(())?,
 						Transact { .. } =>
-							weight = weight.checked_add(&MoonbeamWeights::transact()).ok_or(())?,
+							weight = weight
+								.checked_add(&DestinationParachainWeigher::transact())
+								.ok_or(())?,
 						_ => weight = weight.checked_add(&Weight::zero()).ok_or(())?,
 					};
 				}
 				Ok(weight)
 			},
 			_ => {
-				log::trace!(target: "xcm::UniversalWeigher", "Invalid MultiLocation");
+				log::trace!(target: "xcm::UniversalWeigher", "Unsupported MultiLocation");
 				Err(())
 			},
 		}
 	}
 }
 
-impl Weigher for MoonbeamWeights {
+impl Weigher for DestinationParachainWeigher {
 	fn transact(dest: impl Into<MultiLocation>, gas_limit: u64) -> Weight {
 		return match dest.into() {
 			MultiLocation { parents: _, interior: X1(Parachain(EVM_PARA_ID)) } => {
@@ -344,8 +349,8 @@ impl Weigher for MoonbeamWeights {
 	}
 }
 
-pub struct MoonbeamWeights;
-impl MoonbeamWeights {
+pub struct DestinationParachainWeigher;
+impl DestinationParachainWeigher {
 	fn descend_origin() -> Weight {
 		Weight::from_parts(5_992_000, 0)
 	}

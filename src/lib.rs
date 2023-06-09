@@ -226,7 +226,7 @@ pub mod pallet {
 			Self::MaxQueryDataLength,
 		>;
 
-		/// Means of measuring the weight consumed by an XCM message.
+		/// Means of measuring the weight consumed by an XCM message on destination chain(s)
 		type Weigher: Weigher;
 
 		/// Weight information for extrinsics in this pallet.
@@ -594,6 +594,7 @@ pub mod pallet {
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,
 		Unreachable,
+		WeighingFailure,
 	}
 
 	/// Origin for the Tellor module.
@@ -657,6 +658,7 @@ pub mod pallet {
 				report_slash: T::WeightInfo::report_slash().ref_time(),
 			};
 			let message = xcm::transact::<T>(
+				Parachain(T::Registry::get().para_id),
 				ethereum_xcm::transact(
 					registry_contract.address,
 					registry::register(
@@ -671,8 +673,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
-				Parachain(T::Registry::get().para_id).into(),
-			);
+			)?;
 			Self::send_xcm(
 				registry_contract.para_id,
 				message,
@@ -1241,6 +1242,7 @@ pub mod pallet {
 			let governance_contract = T::Governance::get();
 			const GAS_LIMIT: u64 = gas_limits::BEGIN_PARACHAIN_DISPUTE;
 			let message = xcm::transact::<T>(
+				Parachain(governance_contract.para_id),
 				ethereum_xcm::transact(
 					governance_contract.address,
 					governance::begin_parachain_dispute(
@@ -1256,8 +1258,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
-				Parachain(governance_contract.para_id).into(),
-			);
+			)?;
 			Self::send_xcm(
 				governance_contract.para_id,
 				message,
@@ -1418,6 +1419,7 @@ pub mod pallet {
 			let staking_contract = T::Staking::get();
 			const GAS_LIMIT: u64 = gas_limits::CONFIRM_STAKING_WITHDRAW_REQUEST;
 			let message = xcm::transact::<T>(
+				Parachain(staking_contract.para_id),
 				ethereum_xcm::transact(
 					staking_contract.address,
 					staking::confirm_parachain_stake_withdraw_request(address, amount)
@@ -1426,8 +1428,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
-				Parachain(staking_contract.para_id).into(),
-			);
+			)?;
 			Self::send_xcm(
 				staking_contract.para_id,
 				message,

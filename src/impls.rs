@@ -270,6 +270,7 @@ impl<T: Config> Pallet<T> {
 				let vote = maybe.as_mut().ok_or(Error::<T>::InvalidVote)?;
 				ensure!(!vote.sent, Error::<T>::VoteAlreadySent);
 				let message = xcm::transact::<T>(
+					Parachain(governance_contract.para_id),
 					xcm::ethereum_xcm::transact(
 						governance_contract.address,
 						contracts::governance::vote(
@@ -286,8 +287,7 @@ impl<T: Config> Pallet<T> {
 						GAS_LIMIT,
 					),
 					GAS_LIMIT,
-					Parachain(governance_contract.para_id).into(),
-				);
+				)?;
 				Self::send_xcm(
 					governance_contract.para_id,
 					message,

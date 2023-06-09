@@ -165,8 +165,8 @@ pub trait UniversalWeigher {
 	fn weigh(dest: impl Into<MultiLocation>, message: Xcm<()>) -> Result<Weight, ()>;
 }
 
-/// A means of getting approximate weight consumption of a transact instruction
+/// A means of getting approximate weight consumption of a transact instruction on a destination parachain
 pub trait Weigher: UniversalWeigher {
-	/// Get the upper limit of weight required for `dest` to execute `transact` instruction
+	/// Get the upper limit of weight required for `dest` to execute `transact`
 	fn transact(dest: impl Into<MultiLocation>, gas_limit: u64) -> Weight;
 }
