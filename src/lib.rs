@@ -42,7 +42,7 @@ pub use types::{
 	autopay::{Feed, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
-	Address, DisputeId, FeedId, QueryId, Timestamp, Tributes, U256,
+	Address, DisputeId, FeedId, QueryId, Timestamp, Tributes, Weights, U256,
 };
 
 #[cfg(test)]

@@ -163,11 +163,12 @@ pub(crate) fn weigh() -> Weight {
 	// Standard database weight
 	let db_weight = frame_support::weights::constants::RocksDbWeight::get();
 	// Moonbase Alpha benchmarked instruction weights
+	const ASSET_BURN_MAX_PROOF_SIZE: u64 = 7242;
 	const DESCEND_ORIGIN: Weight = Weight::from_parts(10_084_000, 0); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L169
-	const WITHDRAW_ASSET: Weight = Weight::from_parts(200_000_000, 0); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_fungible.rs#L28
+	const WITHDRAW_ASSET: Weight = Weight::from_parts(200_000_000, ASSET_BURN_MAX_PROOF_SIZE); // https://github.com/PureStake/moonbeam/blob/master/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_fungible.rs
 	let buy_execution: Weight =
-		Weight::from_parts(158_702_000, 0).saturating_add(db_weight.reads(4)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L136
-	let transact: Weight = Weight::from_parts(34_785_000, 0).saturating_add(db_weight.reads(1)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L148
+		Weight::from_parts(181_080_000, 19056).saturating_add(db_weight.reads(4)); // https://github.com/PureStake/moonbeam/blob/056f67494ccf8f815e33cf350fe0575734b89ec5/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L136
+	let transact: Weight = Weight::from_parts(24_375_000, 1527).saturating_add(db_weight.reads(1)); // https://github.com/PureStake/moonbeam/blob/a814fcf36a67f0f14f40afcd7d12fd4f3c5e775b/pallets/moonbeam-xcm-benchmarks/src/weights/moonbeam_xcm_benchmarks_generic.rs#L142
 
 	// Calculate combined weight of xcm instructions
 	DESCEND_ORIGIN
