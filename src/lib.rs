@@ -658,7 +658,7 @@ pub mod pallet {
 				report_slash: T::WeightInfo::report_slash().ref_time(),
 			};
 			let message = xcm::transact::<T>(
-				Parachain(T::Registry::get().para_id),
+				Parachain(registry_contract.para_id),
 				ethereum_xcm::transact(
 					registry_contract.address,
 					registry::register(
