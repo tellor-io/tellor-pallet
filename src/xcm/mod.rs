@@ -148,7 +148,7 @@ pub(crate) fn transact<T: Config>(
 		},
 		Transact {
 			origin_kind: OriginKind::SovereignAccount,
-			require_weight_at_most: Weight::zero(),
+			require_weight_at_most: transact_extrinsic_weight,
 			call: call.clone().into(),
 		},
 	]);
@@ -291,12 +291,12 @@ mod tests {
 		let transact =
 			Weight::from_parts(24_375_000, 1527).saturating_add(RocksDbWeight::get().reads(1_u64));
 
-		let weigh = descend_origin
+		let weight = descend_origin
 			.saturating_add(withdraw_asset)
 			.saturating_add(buy_execution)
 			.saturating_add(transact);
 
-		let total_weight = weigh + xt_weight;
+		let total_weight = weight + xt_weight;
 		// Convert to fee amount
 		let amount = super::weight_to_fee::<Test>(total_weight);
 		let fees = MultiAsset {
