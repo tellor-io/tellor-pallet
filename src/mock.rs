@@ -16,11 +16,19 @@
 
 use crate as tellor;
 use crate::{
-	constants::HOURS, types::Address, xcm::ContractLocation, EnsureGovernance, EnsureStaking,
+	constants::HOURS,
+	traits::{UniversalWeigher, Weigher},
+	types::Address,
+	xcm::ContractLocation,
+	EnsureGovernance, EnsureStaking,
 };
 use frame_support::{
 	assert_ok, log, parameter_types,
 	traits::{ConstU16, ConstU64, OnFinalize, UnixTime},
+	weights::{
+		constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
+		Weight,
+	},
 	Hashable, PalletId,
 };
 #[cfg(feature = "runtime-benchmarks")]
@@ -159,6 +167,7 @@ impl tellor::Config for Test {
 	type XcmWeightToAsset = ConstU128<50_000>; // Moonbase Alpha: https://github.com/PureStake/moonbeam/blob/f19ba9de013a1c789425d3b71e8a92d54f2191af/runtime/moonbase/src/lib.rs#L135
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = TestBenchmarkHelper;
+	type Weigher = DestinationParachainWeigher;
 	type WeightInfo = ();
 }
 
@@ -287,4 +296,74 @@ pub(crate) fn with_block_after<R>(time_in_secs: u64, execute: impl FnOnce() -> R
 	System::reset_events();
 	SENT_XCM.with(|q| q.borrow_mut().clear());
 	result
+}
+
+impl UniversalWeigher for DestinationParachainWeigher {
+	fn weigh(dest: impl Into<MultiLocation>, message: Xcm<()>) -> Result<Weight, ()> {
+		let mut weight: Weight = Weight::zero();
+		return match dest.into() {
+			MultiLocation { parents: _, interior: X1(Parachain(EVM_PARA_ID)) } => {
+				for instruction in message.0.iter() {
+					match instruction {
+						DescendOrigin(_) =>
+							weight = weight
+								.checked_add(&DestinationParachainWeigher::descend_origin())
+								.ok_or(())?,
+						WithdrawAsset(_) =>
+							weight = weight
+								.checked_add(&DestinationParachainWeigher::withdraw_asset())
+								.ok_or(())?,
+						BuyExecution { .. } =>
+							weight = weight
+								.checked_add(&DestinationParachainWeigher::buy_execution())
+								.ok_or(())?,
+						Transact { .. } =>
+							weight = weight
+								.checked_add(&DestinationParachainWeigher::transact())
+								.ok_or(())?,
+						_ => weight = weight.checked_add(&Weight::zero()).ok_or(())?,
+					};
+				}
+				Ok(weight)
+			},
+			_ => {
+				log::trace!(target: "xcm::UniversalWeigher", "Unsupported MultiLocation");
+				Err(())
+			},
+		}
+	}
+}
+
+impl Weigher for DestinationParachainWeigher {
+	fn transact(dest: impl Into<MultiLocation>, gas_limit: u64) -> Weight {
+		return match dest.into() {
+			MultiLocation { parents: _, interior: X1(Parachain(EVM_PARA_ID)) } => {
+				// https://github.com/PureStake/moonbeam/blob/master/runtime/moonbase/src/lib.rs#L371-L375
+				const GAS_PER_SECOND: u64 = 40_000_000;
+				const WEIGHT_PER_GAS: u64 = WEIGHT_REF_TIME_PER_SECOND / GAS_PER_SECOND;
+				Weight::from_parts(gas_limit.saturating_mul(WEIGHT_PER_GAS), 0)
+					.saturating_add(RocksDbWeight::get().reads(1_u64))
+			},
+			_ => Weight::zero(),
+		}
+	}
+}
+
+pub struct DestinationParachainWeigher;
+impl DestinationParachainWeigher {
+	fn descend_origin() -> Weight {
+		Weight::from_parts(5_992_000, 0)
+	}
+
+	fn withdraw_asset() -> Weight {
+		Weight::from_parts(200_000_000, 0)
+	}
+
+	fn buy_execution() -> Weight {
+		Weight::from_parts(181_080_000, 19056).saturating_add(RocksDbWeight::get().reads(4_u64))
+	}
+
+	fn transact() -> Weight {
+		Weight::from_parts(24_375_000, 1527).saturating_add(RocksDbWeight::get().reads(1_u64))
+	}
 }

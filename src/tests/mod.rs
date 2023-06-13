@@ -19,18 +19,20 @@ use crate::{
 	contracts::{gas_limits, registry},
 	mock,
 	mock::*,
+	traits::{UniversalWeigher, Weigher},
 	types::{
 		AccountIdOf, Address, BalanceOf, DisputeId, QueryDataOf, QueryId, Timestamp, Tributes,
 		ValueOf, Weights,
 	},
 	weights::WeightInfo,
-	xcm::{ethereum_xcm, gas_to_weight, weigh, DbWeight},
+	xcm::ethereum_xcm,
 	Event, Origin,
 };
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{
 	assert_noop, assert_ok,
 	traits::{Get, UnixTime},
+	weights::Weight,
 };
 use sp_core::{bytes::to_hex, keccak_256, H256, U256};
 use sp_runtime::{
@@ -132,8 +134,25 @@ fn unit() -> u128 {
 
 fn xcm_transact(call: DoubleEncoded<RuntimeCall>, gas_limit: u64) -> (MultiLocation, Xcm<()>) {
 	// Calculate weights and fees to construct xcm
-	let xt_weight = gas_to_weight(gas_limit) + DbWeight::get().reads(1);
-	let total_weight = weigh() + xt_weight;
+	let xt_weight: Weight =
+		<Test as crate::Config>::Weigher::transact(Parachain(EVM_PARA_ID), gas_limit);
+	let message = Xcm(vec![
+		DescendOrigin(Parachain(<Test as crate::Config>::ParachainId::get()).into()),
+		WithdrawAsset((<Test as crate::Config>::XcmFeesAsset::get(), Fungible(0)).into()),
+		BuyExecution {
+			fees: (<Test as crate::Config>::XcmFeesAsset::get(), Fungible(0)).into(),
+			weight_limit: Limited(Weight::zero()),
+		},
+		Transact {
+			origin_kind: OriginKind::SovereignAccount,
+			require_weight_at_most: Weight::zero(),
+			call: call.clone().into(),
+		},
+	]);
+
+	let xcm_weight: Weight =
+		<Test as crate::Config>::Weigher::weigh(Parachain(EVM_PARA_ID), message).unwrap();
+	let total_weight: Weight = xcm_weight + xt_weight;
 	let fees = MultiAsset {
 		id: Concrete(MultiLocation { parents: 0, interior: X1(PalletInstance(3)) }), // Balances pallet for simplicity
 		fun: Fungible(total_weight.ref_time() as u128 * 50_000),

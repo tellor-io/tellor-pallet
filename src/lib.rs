@@ -42,7 +42,7 @@ pub use types::{
 	autopay::{Feed, Tip},
 	governance::VoteResult,
 	oracle::StakeInfo,
-	Address, DisputeId, FeedId, QueryId, Timestamp, Tributes, U256,
+	Address, DisputeId, FeedId, QueryId, Timestamp, Tributes, Weights, U256,
 };
 
 #[cfg(test)]
@@ -95,7 +95,7 @@ pub mod pallet {
 
 	#[cfg(feature = "runtime-benchmarks")]
 	use crate::traits::BenchmarkHelper;
-	use crate::types::Weights;
+	use crate::traits::Weigher;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -225,6 +225,9 @@ pub mod pallet {
 			Self::Balance,
 			Self::MaxQueryDataLength,
 		>;
+
+		/// Means of measuring the weight consumed by an XCM message on destination chain(s)
+		type Weigher: Weigher;
 
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
@@ -591,6 +594,7 @@ pub mod pallet {
 		MaxEthereumXcmInputSizeExceeded,
 		SendFailure,
 		Unreachable,
+		WeighingFailure,
 	}
 
 	/// Origin for the Tellor module.
@@ -654,6 +658,7 @@ pub mod pallet {
 				report_slash: T::WeightInfo::report_slash().ref_time(),
 			};
 			let message = xcm::transact::<T>(
+				Parachain(registry_contract.para_id),
 				ethereum_xcm::transact(
 					registry_contract.address,
 					registry::register(
@@ -668,7 +673,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
-			);
+			)?;
 			Self::send_xcm(
 				registry_contract.para_id,
 				message,
@@ -1237,6 +1242,7 @@ pub mod pallet {
 			let governance_contract = T::Governance::get();
 			const GAS_LIMIT: u64 = gas_limits::BEGIN_PARACHAIN_DISPUTE;
 			let message = xcm::transact::<T>(
+				Parachain(governance_contract.para_id),
 				ethereum_xcm::transact(
 					governance_contract.address,
 					governance::begin_parachain_dispute(
@@ -1252,7 +1258,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
-			);
+			)?;
 			Self::send_xcm(
 				governance_contract.para_id,
 				message,
@@ -1413,6 +1419,7 @@ pub mod pallet {
 			let staking_contract = T::Staking::get();
 			const GAS_LIMIT: u64 = gas_limits::CONFIRM_STAKING_WITHDRAW_REQUEST;
 			let message = xcm::transact::<T>(
+				Parachain(staking_contract.para_id),
 				ethereum_xcm::transact(
 					staking_contract.address,
 					staking::confirm_parachain_stake_withdraw_request(address, amount)
@@ -1421,7 +1428,7 @@ pub mod pallet {
 					GAS_LIMIT,
 				),
 				GAS_LIMIT,
-			);
+			)?;
 			Self::send_xcm(
 				staking_contract.para_id,
 				message,

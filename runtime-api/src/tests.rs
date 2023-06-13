@@ -23,6 +23,7 @@ use codec::Encode;
 use frame_support::{
 	parameter_types,
 	traits::{ConstU16, ConstU64},
+	weights::Weight,
 	BoundedVec, PalletId,
 };
 use sp_api::mock_impl_runtime_apis;
@@ -141,6 +142,7 @@ impl tellor::Config for Test {
 	type Xcm = TestSendXcm;
 	type XcmFeesAsset = XcmFeesAsset;
 	type XcmWeightToAsset = ();
+	type Weigher = TestWeigher;
 	type WeightInfo = ();
 }
 pub struct TestSendXcm;
@@ -150,6 +152,19 @@ impl tellor::traits::SendXcm for TestSendXcm {
 		_dest: impl Into<MultiLocation>,
 		_message: Xcm<()>,
 	) -> Result<XcmHash, SendError> {
+		unimplemented!("not required for runtime api tests")
+	}
+}
+
+pub struct TestWeigher;
+impl tellor::traits::Weigher for TestWeigher {
+	fn transact(_dest: impl Into<MultiLocation>, _gas_limit: u64) -> Weight {
+		unimplemented!("not required for runtime api tests")
+	}
+}
+
+impl tellor::traits::UniversalWeigher for TestWeigher {
+	fn weigh(dest: impl Into<MultiLocation>, message: Xcm<()>) -> Result<Weight, ()> {
 		unimplemented!("not required for runtime api tests")
 	}
 }
