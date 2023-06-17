@@ -562,7 +562,7 @@ benchmarks! {
 
 	report_vote_executed {
 		// Maximum number of vote rounds are used as this extrinsic iterates over all vote rounds
-		let r in 1..u8::MAX.into();
+		let r in 1..MAX_VOTE_ROUNDS.into();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let reporter = account::<AccountIdOf<T>>("account", 256, SEED);
