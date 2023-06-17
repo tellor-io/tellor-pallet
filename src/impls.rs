@@ -272,6 +272,7 @@ impl<T: Config> Pallet<T> {
 				let message = xcm::transact::<T>(
 					Parachain(governance_contract.para_id),
 					xcm::ethereum_xcm::transact(
+						T::EthereumXcmPalletIndex::get(),
 						governance_contract.address,
 						contracts::governance::vote(
 							dispute_id.as_ref(),

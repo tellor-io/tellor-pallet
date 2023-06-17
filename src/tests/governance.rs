@@ -377,6 +377,7 @@ fn begins_dispute_xcm() {
 				sent_xcm(),
 				vec![xcm_transact(
 					ethereum_xcm::transact(
+						EthereumXcmPalletIndex::get(),
 						*GOVERNANCE,
 						contracts::governance::begin_parachain_dispute(
 							query_id.as_ref(),
@@ -1006,6 +1007,7 @@ fn send_votes() {
 						sent_xcm.pop_front().unwrap(),
 						xcm_transact(
 							ethereum_xcm::transact(
+								EthereumXcmPalletIndex::get(),
 								*GOVERNANCE,
 								contracts::governance::vote(
 									dispute_id.as_ref(),
@@ -1131,6 +1133,7 @@ fn send_votes_via_hook() {
 						sent_xcm.pop_front().unwrap(),
 						xcm_transact(
 							ethereum_xcm::transact(
+								EthereumXcmPalletIndex::get(),
 								*GOVERNANCE,
 								contracts::governance::vote(
 									dispute_id.as_ref(),

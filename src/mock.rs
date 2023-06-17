@@ -139,6 +139,7 @@ impl tellor::Config for Test {
 	type Asset = Balances;
 	type Balance = Balance;
 	type Decimals = ConstU8<12>;
+	type EthereumXcmPalletIndex = ConstU8<38>;
 	type Fee = ConstU16<10>; // 1%
 	type FeeLocation = FeeLocation;
 	type Governance = TellorGovernance;

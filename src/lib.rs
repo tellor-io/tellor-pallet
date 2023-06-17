@@ -105,119 +105,91 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-
 		/// The runtime origin type.
 		type RuntimeOrigin: From<<Self as frame_system::Config>::RuntimeOrigin>
 			+ Into<result::Result<Origin, <Self as Config>::RuntimeOrigin>>;
-
 		/// The fungible asset used for tips, dispute fees and staking rewards.
 		type Asset: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
-
 		/// The units in which we record balances.
 		type Balance: Balance + From<Timestamp> + From<u128> + Into<U256>;
-
 		/// The number of decimals used by the balance unit.
 		#[pallet::constant]
 		type Decimals: Get<u8>;
-
+		/// The index of the `pallet-ethereum-xcm` pallet within the destination chain runtime.
+		#[pallet::constant]
+		type EthereumXcmPalletIndex: Get<u8>;
 		/// Percentage, 1000 is 100%, 50 is 5%, etc
 		#[pallet::constant]
 		type Fee: Get<u16>;
-
 		/// The (interior) fee location to be used by controller contracts for XCM execution on this parachain.
 		type FeeLocation: Get<InteriorMultiLocation>;
-
 		/// The location of the governance controller contract.
 		#[pallet::constant]
 		type Governance: Get<ContractLocation>;
-
 		/// Origin that handles dispute resolution (governance).
 		type GovernanceOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
-
 		/// Initial dispute fee.
 		#[pallet::constant]
 		type InitialDisputeFee: Get<BalanceOf<Self>>;
-
 		/// The maximum number of timestamps per claim.
 		#[pallet::constant]
 		type MaxClaimTimestamps: Get<u32>;
-
 		/// The maximum number of sequential disputed timestamps.
 		#[pallet::constant]
 		type MaxDisputedTimeSeries: Get<u32>;
-
 		/// The maximum length of query data.
 		#[pallet::constant]
 		type MaxQueryDataLength: Get<u32>;
-
 		/// The maximum length of an individual value submitted to the oracle.
 		#[pallet::constant]
 		type MaxValueLength: Get<u32>;
-
 		/// The maximum number of votes when voting on multiple disputes.
 		#[pallet::constant]
 		type MaxVotes: Get<u32>;
-
 		/// The minimum amount of tokens required to stake.
 		#[pallet::constant]
 		type MinimumStakeAmount: Get<u128>;
-
 		/// The identifier of the pallet within the runtime.
 		#[pallet::constant]
 		type PalletId: Get<PalletId>;
-
 		/// The local parachain's own identifier.
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
-
 		/// Origin that manages registration with the controller contracts.
 		type RegisterOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
-
 		/// The location of the registry controller contract.
 		#[pallet::constant]
 		type Registry: Get<ContractLocation>;
-
 		// Amount required to be a staker, in the currency as specified in the staking token price query identifier.
 		#[pallet::constant]
 		type StakeAmountCurrencyTarget: Get<u128>;
-
 		/// The location of the staking controller contract.
 		#[pallet::constant]
 		type Staking: Get<ContractLocation>;
-
 		/// Origin that handles staking.
 		type StakingOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
-
 		/// Staking token 'SpotPrice' query identifier, used for updating stake amount.
 		#[pallet::constant]
 		type StakingTokenPriceQueryId: Get<QueryId>;
-
 		/// Staking token to local token 'SpotPrice' query identifier, used for updating dispute fee.
 		#[pallet::constant]
 		type StakingToLocalTokenPriceQueryId: Get<QueryId>;
-
 		/// The on-chain time provider.
 		type Time: UnixTime;
-
 		/// Frequency of stake amount updates.
 		#[pallet::constant]
 		type UpdateStakeAmountInterval: Get<Timestamp>;
-
 		/// The value to convert weight to fee, used by sent to controller contracts to
 		/// calculate fees required for XCM execution on this parachain.
 		#[pallet::constant]
 		type WeightToFee: Get<u128>;
-
 		/// The sub-system used for sending XCM messages.
 		type Xcm: traits::SendXcm;
-
 		/// The asset to be used for fee payment for remote execution on the controller contract chain.
 		type XcmFeesAsset: Get<AssetId>;
-
 		/// The amount per weight unit in the asset used for fee payment for remote execution on the controller contract chain.
 		#[pallet::constant]
 		type XcmWeightToAsset: Get<u128>;
-
 		/// Helper trait for benchmarks.
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: BenchmarkHelper<
@@ -225,10 +197,8 @@ pub mod pallet {
 			Self::Balance,
 			Self::MaxQueryDataLength,
 		>;
-
-		/// Means of measuring the weight consumed by an XCM message on destination chain(s)
+		/// Means of measuring the weight consumed by an XCM message on destination chain(s).
 		type Weigher: Weigher;
-
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -660,6 +630,7 @@ pub mod pallet {
 			let message = xcm::transact::<T>(
 				Parachain(registry_contract.para_id),
 				ethereum_xcm::transact(
+					T::EthereumXcmPalletIndex::get(),
 					registry_contract.address,
 					registry::register(
 						T::ParachainId::get(),
@@ -1244,6 +1215,7 @@ pub mod pallet {
 			let message = xcm::transact::<T>(
 				Parachain(governance_contract.para_id),
 				ethereum_xcm::transact(
+					T::EthereumXcmPalletIndex::get(),
 					governance_contract.address,
 					governance::begin_parachain_dispute(
 						query_id.as_ref(),
@@ -1421,6 +1393,7 @@ pub mod pallet {
 			let message = xcm::transact::<T>(
 				Parachain(staking_contract.para_id),
 				ethereum_xcm::transact(
+					T::EthereumXcmPalletIndex::get(),
 					staking_contract.address,
 					staking::confirm_parachain_stake_withdraw_request(address, amount)
 						.try_into()
