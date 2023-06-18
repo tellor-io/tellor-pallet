@@ -24,7 +24,7 @@ use crate::Pallet as Tellor;
 use crate::{constants::DECIMALS, traits::BenchmarkHelper, types::QueryDataOf};
 use codec::alloc::vec;
 use frame_benchmarking::{account, benchmarks, BenchmarkError};
-use frame_support::traits::OnInitialize;
+use frame_support::traits::{fungible::Inspect, OnInitialize};
 use frame_system::RawOrigin;
 use sp_core::bounded::BoundedVec;
 use sp_runtime::traits::{Bounded, Hash, Keccak256};
@@ -133,6 +133,7 @@ benchmarks! {
 		let reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 
 		T::BenchmarkHelper::set_time(REPORTING_LOCK);
+		T::BenchmarkHelper::set_balance(T::PalletId::get().into_account_truncating(), T::Asset::minimum_balance() * 2u8.into());
 		T::BenchmarkHelper::set_balance(tipper.clone(), token::<T>(1u64 * t as u64));
 		deposit_stake::<T>(reporter.clone(), trb(100), Address::zero())?;
 
@@ -164,6 +165,7 @@ benchmarks! {
 		let address = Address::zero();
 
 		T::BenchmarkHelper::set_time(MINUTES);
+		T::BenchmarkHelper::set_balance(T::PalletId::get().into_account_truncating(), T::Asset::minimum_balance() * 2u8.into());
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), feed_fund_amount);
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
 		let feed_id = create_feed::<T>(feed_creator.clone(),
@@ -197,6 +199,7 @@ benchmarks! {
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let feed_creator = account::<AccountIdOf<T>>("account", 1, SEED);
 
+		T::BenchmarkHelper::set_balance(T::PalletId::get().into_account_truncating(), T::Asset::minimum_balance() * 2u8.into());
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), token::<T>(1_000u16));
 		let feed_id = create_feed::<T>(feed_creator.clone(),
 				query_id,
@@ -222,6 +225,7 @@ benchmarks! {
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let feed_creator = account::<AccountIdOf<T>>("account", 1, SEED);
 
+		T::BenchmarkHelper::set_balance(T::PalletId::get().into_account_truncating(), T::Asset::minimum_balance() * 2u8.into());
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), token::<T>(1_000u16));
 		// create feed
 		create_feed::<T>(
@@ -246,11 +250,13 @@ benchmarks! {
 		let query_id = Keccak256::hash(query_data.as_ref()).into();
 		let tipper = account::<AccountIdOf<T>>("account", 1, SEED);
 		let amount = token::<T>(1u8);
+		T::BenchmarkHelper::set_balance(T::PalletId::get().into_account_truncating(), T::Asset::minimum_balance() * 2u8.into());
 		T::BenchmarkHelper::set_balance(tipper.clone(), amount);
 	}: _(RawOrigin::Signed(tipper), query_id, amount, query_data)
 
 	add_staking_rewards {
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
+		T::BenchmarkHelper::set_balance(T::PalletId::get().into_account_truncating(), T::Asset::minimum_balance() * 2u8.into());
 		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(1_000u16));
 	}: _(RawOrigin::Signed(reporter), token::<T>(100u64))
 
@@ -618,6 +624,7 @@ benchmarks! {
 
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(10_000), address)?;
+		T::BenchmarkHelper::set_balance(T::PalletId::get().into_account_truncating(), T::Asset::minimum_balance() * 2u8.into());
 		T::BenchmarkHelper::set_balance(disputer.clone(), token::<T>(1_000u16));
 		T::BenchmarkHelper::set_balance(user.clone(), token::<T>(1_000u16));
 		T::BenchmarkHelper::set_time(HOURS);

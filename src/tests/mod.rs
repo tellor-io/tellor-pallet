@@ -26,12 +26,12 @@ use crate::{
 	},
 	weights::WeightInfo,
 	xcm::ethereum_xcm,
-	Event, Origin,
+	Config, Event, Origin,
 };
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{
 	assert_noop, assert_ok,
-	traits::{Get, UnixTime},
+	traits::{fungible::Inspect, Currency, Get, UnixTime},
 	weights::Weight,
 };
 use sp_core::{bytes::to_hex, keccak_256, H256, U256};
@@ -48,7 +48,8 @@ mod oracle;
 mod using_tellor;
 mod weights;
 
-type Balance = <Test as crate::Config>::Balance;
+type Asset = <Test as Config>::Asset;
+type Balance = <Test as Config>::Balance;
 type Error = crate::Error<Test>;
 type EthereumXcmPalletIndex = <Test as crate::Config>::EthereumXcmPalletIndex;
 type U256ToBalance = crate::types::U256ToBalance<Test>;
@@ -68,6 +69,10 @@ fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeI
 		Token::Uint(timestamp.into()),
 	]))
 	.into()
+}
+
+fn minimum_balance() -> Balance {
+	<Asset as frame_support::traits::fungible::Inspect<AccountId>>::minimum_balance()
 }
 
 // Returns the timestamp for the current block.
@@ -223,6 +228,23 @@ fn encodes_spot_price() {
 		"0xa6f013ee236804827b77696d350e9f0ac3e879328f2a3021d473a0b778ad78ac",
 		to_hex(&keccak_256(&spot_price("btc", "usd")), false)
 	)
+}
+
+#[test]
+fn initialises_sub_accounts() {
+	new_test_ext().execute_with(|| {
+		with_block(|| {
+			let pallet_account = <Test as crate::Config>::PalletId::get().into_account_truncating();
+			Balances::make_free_balance_be(&pallet_account, minimum_balance() * 4); // 3 sub-accounts + remaining min balance
+			for account in vec![Tellor::dispute_fees(), Tellor::staking_rewards(), Tellor::tips()] {
+				assert_ok!(Tellor::init_sub_account(&account));
+				assert_eq!(Balances::balance(&account), minimum_balance());
+				assert_eq!(Balances::reducible_balance(&account, true), 0)
+			}
+			assert_eq!(Balances::balance(&pallet_account), minimum_balance());
+			assert_eq!(Balances::reducible_balance(&pallet_account, true), 0)
+		});
+	});
 }
 
 #[test]

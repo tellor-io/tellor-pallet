@@ -936,7 +936,9 @@ pub mod pallet {
 			if Self::get_current_tip(query_id) > Zero::zero() {
 				<QueryIdsWithFunding<T>>::insert(query_id, ());
 			}
-			T::Asset::transfer(&tipper, &Self::tips(), amount, true)?;
+			let tips = &Self::tips();
+			Self::init_sub_account(tips)?;
+			T::Asset::transfer(&tipper, tips, amount, true)?;
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
 			let query_data_len = query_data.len();
 			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });

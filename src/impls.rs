@@ -110,9 +110,10 @@ impl<T: Config> Pallet<T> {
 		amount: BalanceOf<T>,
 	) -> DispatchResult {
 		let staking_rewards = Self::staking_rewards();
+		Self::init_sub_account(&staking_rewards)?;
 		T::Asset::transfer(source, &staking_rewards, amount, false)?;
 		Self::update_rewards()?;
-		let staking_rewards_balance = T::Asset::balance(&staking_rewards).into();
+		let staking_rewards_balance = T::Asset::reducible_balance(&staking_rewards, true).into();
 		// update reward rate = real staking rewards balance / 30 days
 		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::get())?;
 		<RewardRate<T>>::set(U256ToBalance::<T>::convert(
@@ -152,7 +153,9 @@ impl<T: Config> Pallet<T> {
 
 		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 		feed.balance.saturating_accrue(amount);
-		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
+		let tips = &Self::tips();
+		Self::init_sub_account(tips)?;
+		T::Asset::transfer(&feed_funder, tips, amount, true)?;
 		// Add to feeds with funding
 		<FeedsWithFunding<T>>::insert(feed_id, ());
 		<DataFeeds<T>>::insert(query_id, feed_id, &feed);
@@ -1365,6 +1368,16 @@ impl<T: Config> Pallet<T> {
 		T::PalletId::get().into_sub_account_truncating(b"tips")
 	}
 
+	// Initialise a sub-account with minimum balance from main pallet account.
+	pub(super) fn init_sub_account(account: &T::AccountId) -> Result<BalanceOf<T>, DispatchError> {
+		let min_balance = T::Asset::minimum_balance();
+		if T::Asset::balance(account) < min_balance {
+			let source = &T::PalletId::get().into_account_truncating();
+			T::Asset::transfer(source, account, min_balance, true)?;
+		}
+		Ok(Zero::zero())
+	}
+
 	/// A unit in which balances are recorded.
 	fn unit() -> Result<u128, DispatchError> {
 		10u128
@@ -1436,7 +1449,8 @@ impl<T: Config> Pallet<T> {
 		.ok_or(ArithmeticError::DivisionByZero)?
 		.checked_sub(total_reward_debt)
 		.ok_or(ArithmeticError::Underflow)?;
-		let staking_rewards_balance = T::Asset::balance(&Self::staking_rewards()).into();
+		let staking_rewards_balance =
+			T::Asset::reducible_balance(&Self::staking_rewards(), true).into();
 		if accumulated_reward >= staking_rewards_balance {
 			// if staking rewards run out, calculate remaining reward per staked token and set
 			// RewardRate to 0
@@ -1573,7 +1587,7 @@ impl<T: Config> Pallet<T> {
 		<RewardRate<T>>::try_mutate(|reward_rate| -> DispatchResult {
 			if *reward_rate == Zero::zero() {
 				*reward_rate = U256ToBalance::<T>::convert(
-					T::Asset::balance(&staking_rewards)
+					T::Asset::reducible_balance(&staking_rewards, true)
 						.into()
 						.checked_sub(
 							accumulated_reward_per_share
