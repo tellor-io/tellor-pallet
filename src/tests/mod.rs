@@ -50,6 +50,7 @@ mod weights;
 
 type Balance = <Test as crate::Config>::Balance;
 type Error = crate::Error<Test>;
+type EthereumXcmPalletIndex = <Test as crate::Config>::EthereumXcmPalletIndex;
 type U256ToBalance = crate::types::U256ToBalance<Test>;
 
 const MINIMUM_STAKE_AMOUNT: u128 = 100 * TRB;
@@ -256,6 +257,7 @@ fn registers() {
 				sent_xcm(),
 				vec![xcm_transact(
 					ethereum_xcm::transact(
+						EthereumXcmPalletIndex::get(),
 						*REGISTRY,
 						registry::register(
 							PARA_ID,
