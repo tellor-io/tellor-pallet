@@ -15,7 +15,7 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::{
-	constants::DECIMALS,
+	constants::{DECIMALS, MAX_VOTE_ROUNDS},
 	contracts::{gas_limits, registry},
 	mock,
 	mock::*,
@@ -246,7 +246,7 @@ fn registers() {
 				report_vote_tallied: <Test as crate::Config>::WeightInfo::report_vote_tallied()
 					.ref_time(),
 				report_vote_executed: <Test as crate::Config>::WeightInfo::report_vote_executed(
-					u8::MAX.into(),
+					MAX_VOTE_ROUNDS.into(),
 				)
 				.ref_time(),
 				report_slash: <Test as crate::Config>::WeightInfo::report_slash().ref_time(),

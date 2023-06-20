@@ -536,8 +536,8 @@ fn begin_dispute_round_fee_saturates() {
 		let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
 		println!("{}", Tellor::get_vote_info(dispute_id, 1).unwrap().fee / 10u128.pow(12));
 
-		// Repeatedly start new vote rounds until reaching vote_round::MAAX
-		for round in 2..u8::MAX {
+		// Repeatedly start new vote rounds until reaching MAX_VOTE_ROUNDS
+		for round in 2..=MAX_VOTE_ROUNDS {
 			// Wait max time period before tally
 			with_block_after(6 * DAYS, || {
 				assert_ok!(Tellor::report_vote_tallied(
@@ -558,6 +558,15 @@ fn begin_dispute_round_fee_saturates() {
 				);
 			});
 		}
+		assert_noop!(
+			Tellor::begin_dispute(
+				RuntimeOrigin::signed(disputer),
+				query_id,
+				timestamp,
+				Some(disputer_address),
+			),
+			Error::MaxVoteRoundsReached
+		);
 	});
 }
 

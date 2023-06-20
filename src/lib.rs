@@ -23,7 +23,7 @@ use crate::{
 	contracts::gas_limits,
 };
 use codec::Encode;
-pub use constants::{DAYS, HOURS, MINUTES, WEEKS};
+pub use constants::{DAYS, HOURS, MAX_VOTE_ROUNDS, MINUTES, WEEKS};
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
 	ensure,
@@ -623,7 +623,7 @@ pub mod pallet {
 					.ref_time(),
 				report_stake_withdrawn: T::WeightInfo::report_stake_withdrawn().ref_time(),
 				report_vote_tallied: T::WeightInfo::report_vote_tallied().ref_time(),
-				report_vote_executed: T::WeightInfo::report_vote_executed(u8::MAX.into())
+				report_vote_executed: T::WeightInfo::report_vote_executed(MAX_VOTE_ROUNDS.into())
 					.ref_time(),
 				report_slash: T::WeightInfo::report_slash().ref_time(),
 			};
@@ -1114,6 +1114,9 @@ pub mod pallet {
 				|vote_rounds| -> Result<u8, DispatchError> {
 					*vote_rounds =
 						vote_rounds.checked_add(1).ok_or(Error::<T>::MaxVoteRoundsReached)?;
+					if *vote_rounds > MAX_VOTE_ROUNDS {
+						return Err(Error::<T>::MaxVoteRoundsReached.into())
+					}
 					Ok(*vote_rounds)
 				},
 			)?;
@@ -1564,7 +1567,7 @@ pub mod pallet {
 		///
 		/// - `dispute_id`: The identifier of the dispute.
 		#[pallet::call_index(18)]
-		#[pallet::weight(<T as Config>::WeightInfo::report_vote_executed(u8::MAX.into()))]
+		#[pallet::weight(<T as Config>::WeightInfo::report_vote_executed(MAX_VOTE_ROUNDS.into()))]
 		pub fn report_vote_executed(
 			origin: OriginFor<T>,
 			dispute_id: DisputeId,

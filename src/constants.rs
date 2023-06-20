@@ -30,5 +30,8 @@ pub(super) const MAX_ITERATIONS: u32 = 32;
 /// The maximum number of aggregate votes on disputes sent to the governance controller contract per block.
 pub(super) const MAX_AGGREGATE_VOTES_SENT_PER_BLOCK: u8 = 3;
 
+/// The maximum number of vote rounds per dispute.
+pub const MAX_VOTE_ROUNDS: u8 = 20;
+
 /// Base amount of time before a reporter is able to submit a value again.
 pub(crate) const REPORTING_LOCK: Timestamp = 12 * HOURS;
