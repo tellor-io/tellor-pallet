@@ -38,7 +38,7 @@ use once_cell::sync::Lazy;
 use sp_core::{ConstU128, ConstU32, ConstU8, H256};
 use sp_runtime::{
 	testing::Header,
-	traits::{BlakeTwo256, IdentityLookup},
+	traits::{AccountIdConversion, BlakeTwo256, IdentityLookup},
 };
 use sp_std::cell::RefCell;
 use std::{
@@ -53,6 +53,7 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 pub(crate) const EVM_PARA_ID: u32 = 2000;
+const EXISTENTIAL_DEPOSIT: u128 = 1;
 pub(crate) const PALLET_INDEX: u8 = 3;
 pub(crate) const PARA_ID: u32 = 3000;
 
@@ -101,7 +102,7 @@ impl pallet_balances::Config for Test {
 	type Balance = Balance;
 	type DustRemoval = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ExistentialDeposit = ConstU128<1>;
+	type ExistentialDeposit = ConstU128<EXISTENTIAL_DEPOSIT>;
 	type AccountStore = System;
 	type WeightInfo = ();
 	type MaxLocks = ();
@@ -260,7 +261,19 @@ impl<MaxQueryDataLength: sp_core::Get<u32>>
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	let mut storage = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+
+	const SUB_ACCOUNTS: u8 = 3;
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![(
+			<Test as crate::Config>::PalletId::get().into_account_truncating(),
+			EXISTENTIAL_DEPOSIT * (SUB_ACCOUNTS + 1) as Balance,
+		)],
+	}
+	.assimilate_storage(&mut storage)
+	.unwrap();
+
+	storage.into()
 }
 
 /// Starts a new block, executing the supplied closure thereafter.

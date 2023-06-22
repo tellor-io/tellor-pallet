@@ -18,7 +18,7 @@ use super::*;
 use crate::{constants::REPORTING_LOCK, contracts, types::Tally, Config, VoteResult, DAYS, HOURS};
 use frame_support::{
 	assert_noop, assert_ok,
-	traits::{Currency, Hooks},
+	traits::{fungible::Inspect, Currency, Hooks},
 };
 use sp_runtime::traits::BadOrigin;
 use std::collections::VecDeque;
@@ -85,8 +85,8 @@ fn begin_dispute() {
 				),
 				pallet_balances::Error::<Test>::InsufficientBalance
 			);
-			Balances::make_free_balance_be(&another_reporter, token(1_000));
-			let balance_before_begin_dispute = Balances::free_balance(&another_reporter);
+			Balances::make_free_balance_be(&another_reporter, token(1_000) + minimum_balance());
+			let balance_before_begin_dispute = Balances::reducible_balance(&another_reporter, true);
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -117,7 +117,7 @@ fn begin_dispute() {
 				"number of vote rounds should be correct"
 			);
 
-			let balance_after_begin_dispute = Balances::free_balance(another_reporter);
+			let balance_after_begin_dispute = Balances::reducible_balance(&another_reporter, true);
 			assert_eq!(
 				balance_before_begin_dispute - balance_after_begin_dispute - dispute_fee(),
 				0,
@@ -126,7 +126,7 @@ fn begin_dispute() {
 
 			let dispute_initialization_fee = vote_info.fee;
 			assert_eq!(
-				Balances::free_balance(another_reporter),
+				Balances::reducible_balance(&another_reporter, true),
 				balance_before_begin_dispute - dispute_initialization_fee
 			);
 			dispute_id
@@ -243,8 +243,8 @@ fn begin_dispute_by_non_reporter() {
 				),
 				pallet_balances::Error::<Test>::InsufficientBalance
 			);
-			Balances::make_free_balance_be(&another_reporter, token(1_000));
-			let balance_before_begin_dispute = Balances::free_balance(&another_reporter);
+			Balances::make_free_balance_be(&another_reporter, token(1_000) + minimum_balance());
+			let balance_before_begin_dispute = Balances::reducible_balance(&another_reporter, true);
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -272,7 +272,7 @@ fn begin_dispute_by_non_reporter() {
 				"number of vote rounds should be correct"
 			);
 
-			let balance_after_begin_dispute = Balances::free_balance(another_reporter);
+			let balance_after_begin_dispute = Balances::reducible_balance(&another_reporter, true);
 			assert_eq!(
 				balance_before_begin_dispute - balance_after_begin_dispute - dispute_fee(),
 				0,
@@ -281,7 +281,7 @@ fn begin_dispute_by_non_reporter() {
 
 			let dispute_initialization_fee = vote_info.fee;
 			assert_eq!(
-				Balances::free_balance(another_reporter),
+				Balances::reducible_balance(&another_reporter, true),
 				balance_before_begin_dispute - dispute_initialization_fee
 			);
 			dispute_id
@@ -365,7 +365,7 @@ fn begins_dispute_xcm() {
 			));
 
 			let timestamp = now();
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -443,7 +443,7 @@ fn begin_dispute_checks_max_vote_rounds() {
 			let dispute_id = dispute_id(PARA_ID, query_id, timestamp);
 			VoteRounds::set(dispute_id, u8::MAX);
 
-			Balances::make_free_balance_be(&reporter, token(10));
+			Balances::make_free_balance_be(&reporter, token(10) + minimum_balance());
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp, None),
 				Error::MaxVoteRoundsReached
@@ -465,7 +465,7 @@ fn begin_dispute_fee_saturates() {
 	ext.execute_with(|| {
 		with_block(|| {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
-			Balances::make_free_balance_be(&disputer, u128::MAX);
+			Balances::make_free_balance_be(&disputer, Balance::MAX);
 		})
 	});
 
@@ -510,7 +510,7 @@ fn begin_dispute_round_fee_saturates() {
 	ext.execute_with(|| {
 		with_block(|| {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
-			Balances::make_free_balance_be(&disputer, u128::MAX);
+			Balances::make_free_balance_be(&disputer, Balance::MAX);
 		})
 	});
 
@@ -616,15 +616,15 @@ fn execute_vote() {
 				),
 				pallet_balances::Error::<Test>::InsufficientBalance
 			); // must have tokens to pay for dispute
-			Balances::make_free_balance_be(&dispute_reporter, token(1_000));
-			let balance_1 = Balances::free_balance(&dispute_reporter);
+			Balances::make_free_balance_be(&dispute_reporter, token(1_000) + minimum_balance());
+			let balance_1 = Balances::reducible_balance(&dispute_reporter, true);
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_reporter),
 				query_id,
 				timestamp_1,
 				None
 			));
-			let balance_2 = Balances::free_balance(&dispute_reporter);
+			let balance_2 = Balances::reducible_balance(&dispute_reporter, true);
 			let dispute_id = dispute_id(PARA_ID, query_id, timestamp_1);
 			assert_eq!(
 				Tellor::get_dispute_info(dispute_id).unwrap(),
@@ -665,11 +665,14 @@ fn execute_vote() {
 
 		// Execute after tally dispute period
 		let (timestamp_2, dispute_2) = with_block_after(86_400 * 2, || {
-			let previous_balance = Balances::free_balance(&dispute_reporter);
+			let previous_balance = Balances::reducible_balance(&dispute_reporter, true);
 			assert_ok!(Tellor::report_vote_executed(Origin::Governance.into(), dispute_1));
 			let dispute_fee = Tellor::get_vote_info(dispute_1, 1).unwrap().fee;
 
-			assert_eq!(previous_balance + dispute_fee, Balances::free_balance(&dispute_reporter));
+			assert_eq!(
+				previous_balance + dispute_fee,
+				Balances::reducible_balance(&dispute_reporter, true)
+			);
 
 			assert_noop!(
 				Tellor::report_vote_executed(Origin::Governance.into(), dispute_1),
@@ -745,13 +748,13 @@ fn execute_vote() {
 		});
 
 		with_block_after(86_400, || {
-			let previous_balance = Balances::free_balance(&dispute_reporter);
+			let previous_balance = Balances::reducible_balance(&dispute_reporter, true);
 			assert_ok!(Tellor::report_vote_executed(Origin::Governance.into(), dispute_2));
 			let first_round_fee = Tellor::get_vote_info(dispute_2, 1).unwrap().fee;
 			let second_round_fee = Tellor::get_vote_info(dispute_2, 2).unwrap().fee;
 			assert_eq!(
 				previous_balance + first_round_fee + second_round_fee,
-				Balances::free_balance(&dispute_reporter)
+				Balances::reducible_balance(&dispute_reporter, true)
 			);
 		});
 	});
@@ -792,7 +795,7 @@ fn tally_votes() {
 				Error::InvalidDispute
 			); // Cannot tally a dispute that does not exist
 
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -860,7 +863,7 @@ fn vote() {
 				0,
 				query_data.clone(),
 			));
-			Balances::make_free_balance_be(&reporter_2, token(1_000));
+			Balances::make_free_balance_be(&reporter_2, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter_2),
 				query_id,
@@ -948,7 +951,7 @@ fn send_votes() {
 	ext.execute_with(|| {
 		with_block(|| {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
-			Balances::make_free_balance_be(&user, token(10));
+			Balances::make_free_balance_be(&user, token(10) + minimum_balance());
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(user),
 				query_id,
@@ -957,7 +960,10 @@ fn send_votes() {
 			));
 			let dispute_fee: Balance = InitialDisputeFee::get(); // 10% 100 TRB to OCP
 			let stake_amount = dispute_fee * 10;
-			Balances::make_free_balance_be(&disputer, stake_amount * DISPUTES as u128);
+			Balances::make_free_balance_be(
+				&disputer,
+				(stake_amount * DISPUTES as u128) + minimum_balance(),
+			);
 		})
 	});
 
@@ -1075,7 +1081,7 @@ fn send_votes_via_hook() {
 	ext.execute_with(|| {
 		with_block(|| {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
-			Balances::make_free_balance_be(&user, token(10));
+			Balances::make_free_balance_be(&user, token(10) + minimum_balance());
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(user),
 				query_id,
@@ -1084,7 +1090,10 @@ fn send_votes_via_hook() {
 			));
 			let dispute_fee: Balance = InitialDisputeFee::get(); // 10% 100 TRB to OCP
 			let stake_amount = dispute_fee * 10;
-			Balances::make_free_balance_be(&disputer, stake_amount * DISPUTES as u128);
+			Balances::make_free_balance_be(
+				&disputer,
+				(stake_amount * DISPUTES as u128) + minimum_balance(),
+			);
 		})
 	});
 
@@ -1198,8 +1207,8 @@ fn vote_on_multiple_disputes() {
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L205
 	ext.execute_with(|| {
 		with_block(|| {
-			Balances::make_free_balance_be(&disputer, token(1_000));
-			Balances::make_free_balance_be(&voter, token(101));
+			Balances::make_free_balance_be(&disputer, token(1_000) + minimum_balance());
+			Balances::make_free_balance_be(&voter, token(101) + minimum_balance());
 
 			// Voter must be user or reporter to have any effect, so make a user by creating a tip
 			assert_ok!(Tellor::tip(
@@ -1335,7 +1344,7 @@ fn did_vote() {
 				0,
 				query_data.clone(),
 			));
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1392,7 +1401,7 @@ fn get_dispute_info() {
 				0,
 				query_data.clone(),
 			));
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1438,7 +1447,7 @@ fn get_disputes_by_reporter() {
 				query_data.clone(),
 			));
 			assert_eq!(Tellor::get_disputes_by_reporter(reporter), Vec::<DisputeId>::new());
-			Balances::make_free_balance_be(&dispute_initiator, token(1_000));
+			Balances::make_free_balance_be(&dispute_initiator, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(dispute_initiator),
 				query_id,
@@ -1534,7 +1543,7 @@ fn get_open_disputes_on_id() {
 			));
 
 			assert_eq!(Tellor::get_open_disputes_on_id(query_id), 0);
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1593,7 +1602,7 @@ fn get_vote_count() {
 				0,
 				query_data.clone(),
 			));
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1661,7 +1670,7 @@ fn get_vote_info() {
 				0,
 				query_data.clone(),
 			));
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1747,7 +1756,7 @@ fn get_vote_rounds() {
 				0,
 				query_data.clone(),
 			));
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1800,7 +1809,7 @@ fn get_vote_tally_by_address() {
 				0,
 				query_data.clone(),
 			));
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1870,7 +1879,7 @@ fn get_tips_by_address() {
 				MINIMUM_STAKE_AMOUNT.into(),
 				Address::random()
 			));
-			Balances::make_free_balance_be(&user, token(1_000) + 1);
+			Balances::make_free_balance_be(&user, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(user),
 				query_id,
@@ -1884,7 +1893,7 @@ fn get_tips_by_address() {
 				0,
 				query_data,
 			));
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1936,8 +1945,8 @@ fn invalid_dispute() {
 	});
 
 	ext.execute_with(|| {
-		Balances::make_free_balance_be(&reporter, token(1_000));
-		let balance_before_begin_dispute = Balances::free_balance(&reporter);
+		Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
+		let balance_before_begin_dispute = Balances::reducible_balance(&reporter, true);
 		let dispute_id = with_block(|| {
 			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_noop!(
@@ -1962,7 +1971,7 @@ fn invalid_dispute() {
 			assert_ok!(Tellor::report_vote_executed(Origin::Governance.into(), dispute_id));
 
 			// validate updated balance of dispute initiator
-			assert_eq!(Balances::free_balance(reporter), balance_before_begin_dispute);
+			assert_eq!(Balances::reducible_balance(&reporter, true), balance_before_begin_dispute);
 		});
 	});
 }
@@ -1976,8 +1985,8 @@ fn slash_dispute_initiator() {
 	let mut ext = new_test_ext();
 
 	ext.execute_with(|| {
-		Balances::make_free_balance_be(&another_reporter, token(1_000));
-		let balance_before_begin_dispute = Balances::free_balance(&another_reporter);
+		Balances::make_free_balance_be(&another_reporter, token(1_000) + minimum_balance());
+		let balance_before_begin_dispute = Balances::reducible_balance(&another_reporter, true);
 		let dispute_id = with_block(|| {
 			let dispute_id = dispute_id(PARA_ID, query_id, now());
 			assert_noop!(
@@ -2041,7 +2050,7 @@ fn slash_dispute_initiator() {
 			// validate slashed balance of dispute initiator
 			let vote_info = Tellor::get_vote_info(dispute_id, 1).unwrap();
 			assert_eq!(
-				Balances::free_balance(another_reporter),
+				Balances::reducible_balance(&another_reporter, true),
 				balance_before_begin_dispute - vote_info.fee
 			);
 		});

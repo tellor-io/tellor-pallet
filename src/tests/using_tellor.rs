@@ -316,7 +316,7 @@ fn is_in_dispute() {
 
 		with_block(|| {
 			assert_eq!(Tellor::is_in_dispute(query_id, timestamp_1), false);
-			Balances::make_free_balance_be(&another_reporter, token(1000));
+			Balances::make_free_balance_be(&another_reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -336,7 +336,7 @@ fn is_in_dispute() {
 			assert!(Tellor::is_in_dispute(query_id, timestamp_1));
 
 			assert_eq!(Tellor::is_in_dispute(query_id, timestamp_2), false);
-			Balances::make_free_balance_be(&reporter, token(1000));
+			Balances::make_free_balance_be(&reporter, token(1_000) + minimum_balance());
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
