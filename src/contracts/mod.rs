@@ -23,7 +23,6 @@ pub(crate) type Abi = Token;
 
 pub(crate) mod governance;
 pub(crate) mod registry;
-pub(crate) mod staking;
 
 fn call(function: &[u8; 4], mut parameters: Vec<u8>) -> Vec<u8> {
 	let mut encoded = function.to_vec();
@@ -34,7 +33,6 @@ fn call(function: &[u8; 4], mut parameters: Vec<u8>) -> Vec<u8> {
 pub(crate) mod gas_limits {
 	// Static gas limits, based on max gas from `forge test --gas-report` of contracts
 	pub(crate) const BEGIN_PARACHAIN_DISPUTE: u64 = 600_000;
-	pub(crate) const CONFIRM_STAKING_WITHDRAW_REQUEST: u64 = 80_000;
 	pub(crate) const REGISTER: u64 = 250_000;
 	pub(crate) const VOTE: u64 = 150_000;
 }

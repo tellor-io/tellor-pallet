@@ -482,12 +482,10 @@ benchmarks! {
 		let address = Address::zero();
 		let amount = trb(100);
 		let caller = deposit_stake::<T>(reporter.clone(), amount, address)?;
-	}: _<RuntimeOrigin<T>>(caller, reporter, amount, address)
+	}: _<RuntimeOrigin<T>>(caller, reporter.clone(), amount, address)
 	verify {
-		let staking_contract = T::Staking::get();
 		assert_last_event::<T>(
-				Event::StakeWithdrawRequestConfirmationSent { para_id: staking_contract.para_id,
-				contract_address: staking_contract.address.into() }.into(),
+				Event::StakeWithdrawRequestReported { reporter, amount, address }.into(),
 			);
 	}
 

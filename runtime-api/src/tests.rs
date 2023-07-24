@@ -133,7 +133,6 @@ impl tellor::Config for Test {
 	type RegisterOrigin = frame_system::EnsureRoot<AccountId>;
 	type Registry = ();
 	type StakeAmountCurrencyTarget = ();
-	type Staking = ();
 	type StakingOrigin = EnsureStaking;
 	type StakingTokenPriceQueryId = ();
 	type StakingToLocalTokenPriceQueryId = ();

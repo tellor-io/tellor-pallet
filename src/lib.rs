@@ -71,11 +71,7 @@ pub mod pallet {
 		xcm::{self, ethereum_xcm},
 		*,
 	};
-	use crate::{
-		contracts::{staking, Abi},
-		xcm::ContractLocation,
-		Tip,
-	};
+	use crate::{contracts::Abi, xcm::ContractLocation, Tip};
 	use ::xcm::latest::prelude::*;
 	use codec::Compact;
 	use frame_support::{
@@ -163,9 +159,6 @@ pub mod pallet {
 		// Amount required to be a staker, in the currency as specified in the staking token price query identifier.
 		#[pallet::constant]
 		type StakeAmountCurrencyTarget: Get<u128>;
-		/// The location of the staking controller contract.
-		#[pallet::constant]
-		type Staking: Get<ContractLocation>;
 		/// Origin that handles staking.
 		type StakingOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 		/// Staking token 'SpotPrice' query identifier, used for updating stake amount.
@@ -420,8 +413,6 @@ pub mod pallet {
 			amount: Tributes,
 			address: Address,
 		},
-		/// Emitted when confirmation of a stake withdraw request is sent to the staking controller contract.
-		StakeWithdrawRequestConfirmationSent { para_id: u32, contract_address: Address },
 		/// Emitted when staking rewards are added.
 		StakingRewardsAdded { source: AccountIdOf<T>, amount: BalanceOf<T> },
 		/// Emitted when a value is removed (via governance).
@@ -1389,30 +1380,6 @@ pub mod pallet {
 				}
 			})?;
 			Self::deposit_event(Event::StakeWithdrawRequestReported { reporter, amount, address });
-
-			// Confirm staking withdraw request with staking contract
-			let staking_contract = T::Staking::get();
-			const GAS_LIMIT: u64 = gas_limits::CONFIRM_STAKING_WITHDRAW_REQUEST;
-			let message = xcm::transact::<T>(
-				Parachain(staking_contract.para_id),
-				ethereum_xcm::transact(
-					T::EthereumXcmPalletIndex::get(),
-					staking_contract.address,
-					staking::confirm_parachain_stake_withdraw_request(address, amount)
-						.try_into()
-						.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					GAS_LIMIT,
-				),
-				GAS_LIMIT,
-			)?;
-			Self::send_xcm(
-				staking_contract.para_id,
-				message,
-				Event::StakeWithdrawRequestConfirmationSent {
-					para_id: staking_contract.para_id,
-					contract_address: staking_contract.address.into(),
-				},
-			)?;
 			Ok(())
 		}
 
