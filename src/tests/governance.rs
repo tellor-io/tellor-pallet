@@ -29,6 +29,7 @@ type PendingVotes = crate::pallet::PendingVotes<Test>;
 type VoteInfo = crate::pallet::VoteInfo<Test>;
 type VoteRounds = crate::pallet::VoteRounds<Test>;
 type Votes = crate::Votes<Test>;
+type Weights = <Test as Config>::WeightInfo;
 
 #[test]
 fn begin_dispute() {
@@ -52,7 +53,7 @@ fn begin_dispute() {
 			);
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, 0, None),
-				Error::NotReporter
+				Error::NotReporter.with_weight(Weights::begin_dispute(0))
 			);
 
 			assert_ok!(Tellor::report_stake_deposited(
@@ -63,7 +64,7 @@ fn begin_dispute() {
 			));
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(another_reporter), query_id, 0, None),
-				Error::NoValueExists
+				Error::NoValueExists.with_weight(Weights::begin_dispute(0))
 			);
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
@@ -158,7 +159,7 @@ fn begin_dispute() {
 					timestamp,
 					None
 				),
-				Error::DisputeRoundReportingPeriodExpired
+				Error::DisputeRoundReportingPeriodExpired.with_weight(Weights::begin_dispute(0))
 			); //assert second dispute started within a day
 
 			assert_ok!(Tellor::report_stake_deposited(
@@ -185,7 +186,7 @@ fn begin_dispute() {
 					timestamp,
 					None
 				),
-				Error::DisputeReportingPeriodExpired
+				Error::DisputeReportingPeriodExpired.with_weight(Weights::begin_dispute(0))
 			); //dispute must be started within timeframe
 		})
 	});
@@ -220,7 +221,7 @@ fn begin_dispute_by_non_reporter() {
 					0,
 					Some(oracle_user)
 				),
-				Error::NoValueExists
+				Error::NoValueExists.with_weight(Weights::begin_dispute(0))
 			);
 			assert_ok!(Tellor::submit_value(
 				RuntimeOrigin::signed(reporter),
@@ -313,7 +314,7 @@ fn begin_dispute_by_non_reporter() {
 					timestamp,
 					Some(oracle_user)
 				),
-				Error::DisputeRoundReportingPeriodExpired
+				Error::DisputeRoundReportingPeriodExpired.with_weight(Weights::begin_dispute(0))
 			); //assert second dispute started within a day
 
 			assert_ok!(Tellor::report_stake_deposited(
@@ -340,7 +341,7 @@ fn begin_dispute_by_non_reporter() {
 					timestamp,
 					Some(oracle_user)
 				),
-				Error::DisputeReportingPeriodExpired
+				Error::DisputeReportingPeriodExpired.with_weight(Weights::begin_dispute(0))
 			); //dispute must be started within timeframe
 		})
 	});
@@ -446,7 +447,7 @@ fn begin_dispute_checks_max_vote_rounds() {
 			Balances::make_free_balance_be(&reporter, token(10));
 			assert_noop!(
 				Tellor::begin_dispute(RuntimeOrigin::signed(reporter), query_id, timestamp, None),
-				Error::MaxVoteRoundsReached
+				Error::MaxVoteRoundsReached.with_weight(Weights::begin_dispute(0))
 			);
 		});
 	});
@@ -565,7 +566,7 @@ fn begin_dispute_round_fee_saturates() {
 				timestamp,
 				Some(disputer_address),
 			),
-			Error::MaxVoteRoundsReached
+			Error::MaxVoteRoundsReached.with_weight(Weights::begin_dispute(0))
 		);
 	});
 }
@@ -683,7 +684,7 @@ fn execute_vote() {
 					timestamp_1,
 					None
 				),
-				Error::DisputeRoundReportingPeriodExpired
+				Error::DisputeRoundReportingPeriodExpired.with_weight(Weights::begin_dispute(0))
 			); // assert second dispute started within a day
 
 			let vote = Tellor::get_vote_info(dispute_1, 1).unwrap();

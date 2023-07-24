@@ -332,6 +332,7 @@ fn is_in_dispute() {
 					None
 				),
 				Error::DisputeRoundReportingPeriodExpired
+					.with_weight(<Test as crate::Config>::WeightInfo::begin_dispute(0))
 			);
 			assert!(Tellor::is_in_dispute(query_id, timestamp_1));
 
