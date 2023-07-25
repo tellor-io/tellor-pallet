@@ -79,6 +79,7 @@ pub mod pallet {
 	use ::xcm::latest::prelude::*;
 	use codec::Compact;
 	use frame_support::{
+		dispatch::WithPostDispatchInfo,
 		pallet_prelude::*,
 		sp_runtime::traits::{CheckedAdd, CheckedMul, Hash},
 		traits::{
@@ -662,22 +663,26 @@ pub mod pallet {
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::claim_onetime_tip(T::MaxClaimTimestamps::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::claim_onetime_tip(timestamps.len() as u32))]
 		pub fn claim_onetime_tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			timestamps: BoundedVec<Compact<Timestamp>, T::MaxClaimTimestamps>,
 		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
-			ensure!(<TipCount<T>>::get(query_id) > 0, Error::<T>::NoTipsSubmitted);
+			ensure!(
+				<TipCount<T>>::get(query_id) > 0,
+				Error::<T>::NoTipsSubmitted.with_weight(T::WeightInfo::claim_onetime_tip(0))
+			);
 
 			let mut cumulative_reward = BalanceOf::<T>::zero();
-			for timestamp in &timestamps {
-				cumulative_reward.saturating_accrue(Self::get_onetime_tip_amount(
-					query_id,
-					timestamp.0,
-					&reporter,
-				)?);
+			for (i, timestamp) in
+				timestamps.iter().enumerate().map(|(i, t)| (i.saturating_add(1) as u32, t))
+			{
+				cumulative_reward.saturating_accrue(
+					Self::get_onetime_tip_amount(query_id, timestamp.0, &reporter)
+						.map_err(|e| e.with_weight(T::WeightInfo::claim_onetime_tip(i)))?,
+				);
 			}
 			let fee = (cumulative_reward
 				.checked_mul(&T::Fee::get().into())
@@ -700,7 +705,7 @@ pub mod pallet {
 				amount: cumulative_reward,
 				reporter,
 			});
-			Ok(Some(T::WeightInfo::claim_onetime_tip(timestamps.len() as u32)).into())
+			Ok(().into())
 		}
 
 		/// Allows Tellor reporters to claim their tips in batches.
@@ -709,7 +714,7 @@ pub mod pallet {
 		/// - `query_id`: Identifier of reported data.
 		/// - `timestamps`: Batch of timestamps of reported data eligible for reward.
 		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::claim_tip(T::MaxClaimTimestamps::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::claim_tip(timestamps.len() as u32))]
 		pub fn claim_tip(
 			origin: OriginFor<T>,
 			feed_id: FeedId,
@@ -718,32 +723,38 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let reporter = ensure_signed(origin)?;
 
-			let mut feed = <DataFeeds<T>>::get(query_id, feed_id).ok_or(Error::<T>::InvalidFeed)?;
+			let mut feed = <DataFeeds<T>>::get(query_id, feed_id)
+				.ok_or(Error::<T>::InvalidFeed.with_weight(T::WeightInfo::claim_tip(0)))?;
 			let balance = feed.balance;
-			ensure!(balance > Zero::zero(), Error::<T>::InsufficientFeedBalance);
+			ensure!(
+				balance > Zero::zero(),
+				Error::<T>::InsufficientFeedBalance.with_weight(T::WeightInfo::claim_tip(0))
+			);
 
 			let mut cumulative_reward = BalanceOf::<T>::zero();
-			for timestamp in &timestamps {
+			for (i, timestamp) in
+				timestamps.iter().enumerate().map(|(i, t)| (i.saturating_add(1) as u32, t))
+			{
 				ensure!(
 					Self::now().checked_sub(timestamp.0).ok_or(ArithmeticError::Underflow)? >
 						12 * HOURS,
-					Error::<T>::ClaimBufferNotPassed
+					Error::<T>::ClaimBufferNotPassed.with_weight(T::WeightInfo::claim_tip(i))
 				);
 				ensure!(
 					Some(&reporter) ==
 						Self::get_reporter_by_timestamp(query_id, timestamp.0).as_ref(),
-					Error::<T>::InvalidClaimer
+					Error::<T>::InvalidClaimer.with_weight(T::WeightInfo::claim_tip(i))
 				);
-				cumulative_reward.saturating_accrue(Self::do_get_reward_amount(
-					feed_id,
-					query_id,
-					timestamp.0,
-				)?);
+				cumulative_reward.saturating_accrue(
+					Self::do_get_reward_amount(feed_id, query_id, timestamp.0)
+						.map_err(|e| e.with_weight(T::WeightInfo::claim_tip(i)))?,
+				);
 
 				if cumulative_reward >= balance {
 					ensure!(
 						Some(timestamp) == timestamps.last(),
 						Error::<T>::InsufficientFeedBalance
+							.with_weight(T::WeightInfo::claim_tip(i))
 					);
 					cumulative_reward = balance;
 					// Adjust currently funded feeds
@@ -773,7 +784,7 @@ pub mod pallet {
 				amount: cumulative_reward,
 				reporter,
 			});
-			Ok(Some(T::WeightInfo::claim_tip(timestamps.len() as u32)).into())
+			Ok(().into())
 		}
 
 		/// Allows data feed account to be filled with tokens.
@@ -805,7 +816,7 @@ pub mod pallet {
 		/// - `query_data`: The data used by reporters to fulfil the query.
 		/// - `amount`: Optional initial amount to fund it with.
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::setup_data_feed(T::MaxQueryDataLength::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::setup_data_feed(query_data.len() as u32))]
 		pub fn setup_data_feed(
 			origin: OriginFor<T>,
 			query_id: QueryId,
@@ -817,7 +828,7 @@ pub mod pallet {
 			#[pallet::compact] reward_increase_per_second: BalanceOf<T>,
 			query_data: QueryDataOf<T>,
 			#[pallet::compact] amount: BalanceOf<T>,
-		) -> DispatchResultWithPostInfo {
+		) -> DispatchResult {
 			let feed_creator = ensure_signed(origin)?;
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			let feed_id = Keccak256::hash(&contracts::encode(&vec![
@@ -847,7 +858,6 @@ pub mod pallet {
 			<QueryIdFromDataFeedId<T>>::insert(feed_id, query_id);
 			Self::store_data(query_id, &query_data);
 			<DataFeeds<T>>::insert(query_id, feed_id, feed);
-			let query_data_len = query_data.len();
 			Self::deposit_event(Event::NewDataFeed {
 				query_id,
 				feed_id,
@@ -857,7 +867,7 @@ pub mod pallet {
 			if amount > Zero::zero() {
 				Self::do_fund_feed(feed_creator, feed_id, query_id, amount)?;
 			}
-			Ok(Some(T::WeightInfo::setup_data_feed(query_data_len as u32)).into())
+			Ok(())
 		}
 
 		/// Function to run a single tip.
@@ -866,13 +876,13 @@ pub mod pallet {
 		/// - `amount`: Amount to tip.
 		/// - `query_data`: The data used by reporters to fulfil the query.
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::tip(T::MaxQueryDataLength::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::tip(query_data.len() as u32))]
 		pub fn tip(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			#[pallet::compact] amount: BalanceOf<T>,
 			query_data: QueryDataOf<T>,
-		) -> DispatchResultWithPostInfo {
+		) -> DispatchResult {
 			let tipper = ensure_signed(origin)?;
 			ensure!(query_id == Keccak256::hash(query_data.as_ref()), Error::<T>::InvalidQueryId);
 			ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
@@ -938,9 +948,8 @@ pub mod pallet {
 			}
 			T::Asset::transfer(&tipper, &Self::tips(), amount, true)?;
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
-			let query_data_len = query_data.len();
 			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
-			Ok(Some(T::WeightInfo::tip(query_data_len as u32)).into())
+			Ok(())
 		}
 
 		/// Funds the staking account with staking rewards.
@@ -967,14 +976,14 @@ pub mod pallet {
 		/// - `nonce`: The current value count for the query identifier.
 		/// - `query_data`: The data used to fulfil the data query.
 		#[pallet::call_index(7)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_value(T::MaxQueryDataLength::get(), T::MaxValueLength::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_value(query_data.len() as u32, value.len() as u32))]
 		pub fn submit_value(
 			origin: OriginFor<T>,
 			query_id: QueryId,
 			value: ValueOf<T>,
 			#[pallet::compact] nonce: Nonce,
 			query_data: QueryDataOf<T>,
-		) -> DispatchResultWithPostInfo {
+		) -> DispatchResult {
 			let reporter = ensure_signed(origin)?;
 			ensure!(!value.is_empty(), Error::<T>::InvalidValue);
 			ensure!(
@@ -1058,8 +1067,6 @@ pub mod pallet {
 				reports.saturating_inc();
 			});
 			<StakerDetails<T>>::insert(&reporter, staker);
-			let query_data_len = query_data.len();
-			let value_len = value.len();
 			Self::deposit_event(Event::NewReport {
 				query_id,
 				time: timestamp,
@@ -1068,7 +1075,7 @@ pub mod pallet {
 				query_data,
 				reporter,
 			});
-			Ok(Some(T::WeightInfo::submit_value(query_data_len as u32, value_len as u32)).into())
+			Ok(())
 		}
 
 		/// Updates the stake amount after retrieving the latest token price from oracle.
@@ -1099,10 +1106,13 @@ pub mod pallet {
 			// Lookup dispute initiator's corresponding address on controller chain (if available) when no beneficiary address specified
 			let beneficiary = beneficiary
 				.or_else(|| <StakerDetails<T>>::get(&dispute_initiator).map(|s| s.address))
-				.ok_or(Error::<T>::NotReporter)?;
+				.ok_or(Error::<T>::NotReporter.with_weight(T::WeightInfo::begin_dispute(0)))?;
 
 			// Ensure value actually exists
-			ensure!(<Reports<T>>::contains_key(query_id, timestamp), Error::<T>::NoValueExists);
+			ensure!(
+				<Reports<T>>::contains_key(query_id, timestamp),
+				Error::<T>::NoValueExists.with_weight(T::WeightInfo::begin_dispute(0))
+			);
 			let dispute_id: DisputeId = Keccak256::hash(&contracts::encode(&[
 				Abi::Uint(T::ParachainId::get().into()),
 				Abi::FixedBytes(query_id.0.into()),
@@ -1119,7 +1129,8 @@ pub mod pallet {
 					}
 					Ok(*vote_rounds)
 				},
-			)?;
+			)
+			.map_err(|e| e.with_weight(T::WeightInfo::begin_dispute(0)))?;
 
 			// Create new vote and dispute
 			let mut vote = VoteOf::<T> {
@@ -1141,6 +1152,7 @@ pub mod pallet {
 					Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? <
 						REPORTING_LOCK,
 					Error::<T>::DisputeReportingPeriodExpired
+						.with_weight(T::WeightInfo::begin_dispute(0))
 				);
 				<OpenDisputesOnId<T>>::try_mutate(query_id, |open_disputes| -> DispatchResult {
 					*open_disputes = Some(
@@ -1151,7 +1163,8 @@ pub mod pallet {
 							.ok_or(ArithmeticError::Overflow)?,
 					);
 					Ok(())
-				})?;
+				})
+				.map_err(|e| e.with_weight(T::WeightInfo::begin_dispute(0)))?;
 				// calculate dispute fee based on number of open disputes on query id
 				vote.fee = vote.fee.saturating_mul(
 					<BalanceOf<T>>::from(2u8).saturating_pow(
@@ -1165,27 +1178,34 @@ pub mod pallet {
 				let dispute = DisputeOf::<T> {
 					query_id,
 					timestamp,
-					value: Self::retrieve_data(query_id, timestamp)
-						.ok_or(Error::<T>::InvalidTimestamp)?,
-					disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp)
-						.ok_or(Error::<T>::NoValueExists)?,
+					value: Self::retrieve_data(query_id, timestamp).ok_or(
+						Error::<T>::InvalidTimestamp.with_weight(T::WeightInfo::begin_dispute(0)),
+					)?,
+					disputed_reporter: Self::get_reporter_by_timestamp(query_id, timestamp).ok_or(
+						Error::<T>::NoValueExists.with_weight(T::WeightInfo::begin_dispute(0)),
+					)?,
 					slashed_amount: <StakeAmount<T>>::get(),
 				};
 				<DisputeIdsByReporter<T>>::insert(&dispute.disputed_reporter, dispute_id, ());
 				<DisputeInfo<T>>::insert(dispute_id, &dispute);
 				(dispute, Self::remove_value(query_id, timestamp)?)
 			} else {
-				let prev_id = vote_round.checked_sub(1).ok_or(ArithmeticError::Underflow)?;
-				let prev_vote =
-					<VoteInfo<T>>::get(dispute_id, prev_id).ok_or(Error::<T>::InvalidVote)?;
+				let prev_id = vote_round.checked_sub(1).ok_or(
+					ArithmeticError::Underflow.with_weight(T::WeightInfo::begin_dispute(0)),
+				)?;
+				let prev_vote = <VoteInfo<T>>::get(dispute_id, prev_id)
+					.ok_or(Error::<T>::InvalidVote.with_weight(T::WeightInfo::begin_dispute(0)))?;
 				ensure!(
-					Self::now()
-						.checked_sub(prev_vote.tally_date)
-						.ok_or(ArithmeticError::Underflow)? <
-						1u64.checked_mul(DAYS).expect("cannot overflow based on values; qed"),
+					Self::now().checked_sub(prev_vote.tally_date).ok_or(
+						ArithmeticError::Underflow.with_weight(T::WeightInfo::begin_dispute(0))
+					)? < 1u64.checked_mul(DAYS).expect("cannot overflow based on values; qed"),
 					Error::<T>::DisputeRoundReportingPeriodExpired
+						.with_weight(T::WeightInfo::begin_dispute(0))
 				);
-				ensure!(!prev_vote.executed, Error::<T>::VoteAlreadyExecuted); // Ensure previous round not executed
+				ensure!(
+					!prev_vote.executed,
+					Error::<T>::VoteAlreadyExecuted.with_weight(T::WeightInfo::begin_dispute(0))
+				); // Ensure previous round not executed
 				vote.fee = vote.fee.saturating_mul(<BalanceOf<T>>::from(2u8).saturating_pow(
 					vote_round.checked_sub(1).expect("vote round checked above; qed").into(),
 				));
@@ -1264,23 +1284,26 @@ pub mod pallet {
 		///
 		/// - `votes`: The votes for disputes, containing the dispute identifier and whether the caller supports or is against the vote. None indicates the caller’s classification of the dispute as invalid.
 		#[pallet::call_index(11)]
-		#[pallet::weight(<T as Config>::WeightInfo::vote_on_multiple_disputes(T::MaxVotes::get()))]
+		#[pallet::weight(<T as Config>::WeightInfo::vote_on_multiple_disputes(votes.len() as u32))]
 		pub fn vote_on_multiple_disputes(
 			origin: OriginFor<T>,
 			votes: BoundedVec<(DisputeId, Option<bool>), T::MaxVotes>,
 		) -> DispatchResultWithPostInfo {
 			let voter = ensure_signed(origin)?;
-			for (dispute_id, supports) in &votes {
-				Self::do_vote(&voter, *dispute_id, *supports)?
+			for (i, (dispute_id, supports)) in
+				votes.iter().enumerate().map(|(i, v)| (i.saturating_add(1) as u32, v))
+			{
+				Self::do_vote(&voter, *dispute_id, *supports)
+					.map_err(|e| e.with_weight(T::WeightInfo::vote_on_multiple_disputes(i)))?
 			}
-			Ok(Some(T::WeightInfo::vote_on_multiple_disputes(votes.len() as u32)).into())
+			Ok(().into())
 		}
 
 		/// Sends any pending dispute votes due to the governance controller contract for tallying.
 		///
 		/// - `max_votes`: The maximum number of votes to be sent.
 		#[pallet::call_index(12)]
-		#[pallet::weight(<T as Config>::WeightInfo::send_votes(u8::MAX.into()))]
+		#[pallet::weight(<T as Config>::WeightInfo::send_votes((*max_votes).into()))]
 		pub fn send_votes(origin: OriginFor<T>, max_votes: u8) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
 			Ok(Some(T::WeightInfo::send_votes(Self::do_send_votes(Self::now(), max_votes)?)).into())

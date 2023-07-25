@@ -30,6 +30,7 @@ use sp_runtime::traits::{BadOrigin, Convert};
 type Fee = <Test as Config>::Fee;
 type FeedsWithFunding = crate::pallet::FeedsWithFunding<Test>;
 type Tips = crate::pallet::Tips<Test>;
+type Weights = <Test as Config>::WeightInfo;
 
 #[test]
 fn claim_tip_ensures() {
@@ -148,7 +149,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bounded_vec![]
 				),
-				Error::InvalidFeed
+				Error::InvalidFeed.with_weight(Weights::claim_tip(0))
 			);
 			// no tips submitted for this queryId
 			assert_noop!(
@@ -158,7 +159,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bounded_vec![12345.into()]
 				),
-				Error::InsufficientFeedBalance
+				Error::InsufficientFeedBalance.with_weight(Weights::claim_tip(0))
 			);
 			assert_ok!(Tellor::fund_feed(
 				RuntimeOrigin::signed(feed_creator),
@@ -174,7 +175,7 @@ fn claim_tip_ensures() {
 					query_id,
 					timestamps.clone()
 				),
-				Error::ClaimBufferNotPassed
+				Error::ClaimBufferNotPassed.with_weight(Weights::claim_tip(3))
 			);
 		});
 		// Advancing time 12 hours to satisfy hardcoded buffer time.
@@ -187,7 +188,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bad_timestamps
 				),
-				Error::InvalidClaimer
+				Error::InvalidClaimer.with_weight(Weights::claim_tip(1))
 			);
 			assert_noop!(
 				Tellor::claim_tip(
@@ -196,7 +197,7 @@ fn claim_tip_ensures() {
 					query_id,
 					timestamps.clone()
 				),
-				Error::InvalidClaimer
+				Error::InvalidClaimer.with_weight(Weights::claim_tip(1))
 			);
 			// reward already claimed
 			assert_ok!(Tellor::claim_tip(
@@ -212,7 +213,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bounded_vec![claimed.into()]
 				),
-				Error::TipAlreadyClaimed
+				Error::TipAlreadyClaimed.with_weight(Weights::claim_tip(1))
 			);
 		});
 		// no value exists at timestamp
@@ -243,7 +244,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bounded_vec![timestamp.into()]
 				),
-				Error::ValueDisputed
+				Error::ValueDisputed.with_weight(Weights::claim_tip(1))
 			);
 		});
 		// price threshold not met
@@ -288,7 +289,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bounded_vec![timestamp.into()]
 				),
-				Error::PriceThresholdNotMet
+				Error::PriceThresholdNotMet.with_weight(Weights::claim_tip(1))
 			);
 		});
 		// insufficient balance for all submitted timestamps
@@ -317,7 +318,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bounded_vec![timestamp_1.into(), now().into()]
 				),
-				Error::InsufficientFeedBalance
+				Error::InsufficientFeedBalance.with_weight(Weights::claim_tip(1))
 			);
 			now()
 		});
@@ -330,7 +331,7 @@ fn claim_tip_ensures() {
 					query_id,
 					bounded_vec![timestamp_2.into()]
 				),
-				Error::ClaimPeriodExpired
+				Error::ClaimPeriodExpired.with_weight(Weights::claim_tip(1))
 			);
 		});
 	});
@@ -985,7 +986,7 @@ fn claim_onetime_tip() {
 		// no tips submitted for this queryId
 		assert_noop!(
 			Tellor::claim_onetime_tip(RuntimeOrigin::signed(reporter), query_id, bounded_vec![]),
-			Error::NoTipsSubmitted
+			Error::NoTipsSubmitted.with_weight(Weights::claim_onetime_tip(0))
 		);
 
 		// buffer time has not passed
@@ -1015,7 +1016,7 @@ fn claim_onetime_tip() {
 					query_id,
 					bounded_vec![timestamp.into()]
 				),
-				Error::ClaimBufferNotPassed
+				Error::ClaimBufferNotPassed.with_weight(Weights::claim_onetime_tip(1))
 			);
 		});
 		with_block_after(86_400 / 2, || {
@@ -1059,7 +1060,7 @@ fn claim_onetime_tip() {
 					query_id,
 					bounded_vec![timestamp.into()]
 				),
-				Error::ValueDisputed
+				Error::ValueDisputed.with_weight(Weights::claim_onetime_tip(1))
 			);
 		});
 
@@ -1087,7 +1088,7 @@ fn claim_onetime_tip() {
 					query_id,
 					bounded_vec![timestamp.into()]
 				),
-				Error::InvalidClaimer
+				Error::InvalidClaimer.with_weight(Weights::claim_onetime_tip(1))
 			);
 		});
 
@@ -1127,7 +1128,7 @@ fn claim_onetime_tip() {
 					query_id,
 					bounded_vec![timestamp_2.into()]
 				),
-				Error::TipAlreadyEarned
+				Error::TipAlreadyEarned.with_weight(Weights::claim_onetime_tip(1))
 			);
 		});
 		with_block(|| {
@@ -1176,7 +1177,7 @@ fn claim_onetime_tip() {
 					query_id,
 					bounded_vec![timestamp_1.into()]
 				),
-				Error::TimestampIneligibleForTip
+				Error::TimestampIneligibleForTip.with_weight(Weights::claim_onetime_tip(1))
 			);
 			assert_ok!(Tellor::claim_onetime_tip(
 				RuntimeOrigin::signed(another_reporter),
@@ -1191,7 +1192,7 @@ fn claim_onetime_tip() {
 					query_id,
 					bounded_vec![timestamp_2.into()]
 				),
-				Error::TipAlreadyClaimed
+				Error::TipAlreadyClaimed.with_weight(Weights::claim_onetime_tip(1))
 			);
 		});
 	});

@@ -31,6 +31,7 @@ use crate::{
 use ethabi::{Bytes, Token, Uint};
 use frame_support::{
 	assert_noop, assert_ok,
+	dispatch::WithPostDispatchInfo,
 	traits::{Get, UnixTime},
 	weights::Weight,
 };
