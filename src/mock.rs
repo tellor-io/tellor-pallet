@@ -118,7 +118,6 @@ impl pallet_timestamp::Config for Test {
 
 pub(crate) static REGISTRY: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 pub(crate) static GOVERNANCE: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
-pub(crate) static STAKING: Lazy<[u8; 20]> = Lazy::new(|| Address::random().into());
 
 parameter_types! {
 	pub const MinimumStakeAmount: u128 = 100 * 10u128.pow(18); // 100 TRB
@@ -126,7 +125,6 @@ parameter_types! {
 	pub const ParachainId: u32 = PARA_ID;
 	pub TellorRegistry: ContractLocation = (EVM_PARA_ID, *REGISTRY).into();
 	pub TellorGovernance: ContractLocation = (EVM_PARA_ID, *GOVERNANCE).into();
-	pub TellorStaking: ContractLocation = (EVM_PARA_ID, *STAKING).into();
 	pub StakingTokenPriceQueryId: H256 = H256([211,194,112,119,36,198,191,243,89,99,24,187,3,60,229,109,166,126,119,8,208,251,201,107,66,216,126,12,172,199,241,136]);
 	pub StakingToLocalTokenPriceQueryId: H256 = H256([252, 212, 53, 69, 139, 47, 79, 224, 14, 207, 98, 192, 81, 195, 123, 170, 138, 241, 23, 4, 53, 70, 22, 191, 191, 171, 11, 101, 130, 16, 61, 30]);
 	pub XcmFeesAsset : AssetId = AssetId::Concrete(PalletInstance(3).into()); // Balances pallet on EVM parachain
@@ -156,7 +154,6 @@ impl tellor::Config for Test {
 	type RegisterOrigin = system::EnsureRoot<AccountId>;
 	type Registry = TellorRegistry;
 	type StakeAmountCurrencyTarget = ConstU128<{ 500 * 10u128.pow(18) }>;
-	type Staking = TellorStaking;
 	type StakingOrigin = EnsureStaking;
 	type StakingTokenPriceQueryId = StakingTokenPriceQueryId;
 	type StakingToLocalTokenPriceQueryId = StakingToLocalTokenPriceQueryId;

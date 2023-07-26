@@ -133,7 +133,6 @@ impl tellor::Config for Test {
 	type RegisterOrigin = frame_system::EnsureRoot<AccountId>;
 	type Registry = ();
 	type StakeAmountCurrencyTarget = ();
-	type Staking = ();
 	type StakingOrigin = EnsureStaking;
 	type StakingTokenPriceQueryId = ();
 	type StakingToLocalTokenPriceQueryId = ();
@@ -165,7 +164,7 @@ impl tellor::traits::Weigher for TestWeigher {
 }
 
 impl tellor::traits::UniversalWeigher for TestWeigher {
-	fn weigh(dest: impl Into<MultiLocation>, message: Xcm<()>) -> Result<Weight, ()> {
+	fn weigh(_dest: impl Into<MultiLocation>, _message: Xcm<()>) -> Result<Weight, ()> {
 		unimplemented!("not required for runtime api tests")
 	}
 }
@@ -777,8 +776,8 @@ fn state_call_encoding() {
 	let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
 	// Example encoding of runtime-api calls via state.call rpc
-	const AUTOPAY: &str = "TellorAutoPay";
-	const GOVERNANCE: &str = "TellorGovernance";
+	const _AUTOPAY: &str = "TellorAutoPay";
+	const _GOVERNANCE: &str = "TellorGovernance";
 
 	const ORACLE: &str = "TellorOracle";
 	call(ORACLE, "get_block_number_by_timestamp", &(query_id, timestamp).encode());
@@ -788,8 +787,8 @@ fn state_call_encoding() {
 #[test]
 fn constants() {
 	// Ensures certain constants are publicly available for usage within runtime config
-	const MINUTES: Timestamp = tellor::MINUTES;
-	const HOURS: Timestamp = tellor::HOURS;
-	const DAYS: Timestamp = tellor::DAYS;
-	const WEEKS: Timestamp = tellor::WEEKS;
+	const _MINUTES: Timestamp = tellor::MINUTES;
+	const _HOURS: Timestamp = tellor::HOURS;
+	const _DAYS: Timestamp = tellor::DAYS;
+	const _WEEKS: Timestamp = tellor::WEEKS;
 }

@@ -57,6 +57,7 @@ fn uint_value<T: Config>(value: impl Into<Uint>) -> ValueOf<T> {
 	ethabi::encode(&[Token::Uint(value.into())]).try_into().unwrap()
 }
 
+#[allow(clippy::result_large_err)]
 fn deposit_stake<T: Config>(
 	reporter: AccountIdOf<T>,
 	amount: Tributes,
@@ -73,6 +74,7 @@ fn deposit_stake<T: Config>(
 }
 
 // Helper function for creating feeds
+#[allow(clippy::too_many_arguments)]
 fn create_feed<T: Config>(
 	feed_creator: AccountIdOf<T>,
 	query_id: QueryId,
@@ -98,7 +100,7 @@ fn create_feed<T: Config>(
 		amount,
 	)
 	.unwrap();
-	let feed_id = Keccak256::hash(&ethabi::encode(&vec![
+	Keccak256::hash(&ethabi::encode(&vec![
 		Token::FixedBytes(query_id.0.into()),
 		Token::Uint(reward.into()),
 		Token::Uint(start_time.into()),
@@ -107,8 +109,6 @@ fn create_feed<T: Config>(
 		Token::Uint(price_threshold.into()),
 		Token::Uint(reward_increase_per_second.into()),
 	]))
-	.into();
-	feed_id
 }
 
 fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeId {
@@ -117,7 +117,6 @@ fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeI
 		Token::FixedBytes(query_id.0.to_vec()),
 		Token::Uint(timestamp.into()),
 	]))
-	.into()
 }
 
 benchmarks! {
@@ -128,12 +127,12 @@ benchmarks! {
 		// Maximum timestamps for claiming tip for measuring maximum weight
 		let t in 1..T::MaxClaimTimestamps::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let tipper = account::<AccountIdOf<T>>("account", 1, SEED);
 		let reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 
 		T::BenchmarkHelper::set_time(REPORTING_LOCK);
-		T::BenchmarkHelper::set_balance(tipper.clone(), token::<T>(1u64 * t as u64));
+		T::BenchmarkHelper::set_balance(tipper.clone(), token::<T>(t as u64));
 		deposit_stake::<T>(reporter.clone(), trb(100), Address::zero())?;
 
 		let mut timestamps = BoundedVec::default();
@@ -156,7 +155,7 @@ benchmarks! {
 		// Maximum timestamps for claiming tip for measuring maximum weight
 		let t in 1..T::MaxClaimTimestamps::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let feed_creator = account::<AccountIdOf<T>>("account", 2, SEED);
 		let reward = token::<T>(10u8);
@@ -166,7 +165,7 @@ benchmarks! {
 		T::BenchmarkHelper::set_time(MINUTES);
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), feed_fund_amount);
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
-		let feed_id = create_feed::<T>(feed_creator.clone(),
+		let feed_id = create_feed::<T>(feed_creator,
 				query_id,
 				reward,
 				T::Time::now().as_secs(),
@@ -180,6 +179,7 @@ benchmarks! {
 
 		let mut timestamps = BoundedVec::default();
 		for i in 1..=t {
+			#[allow(clippy::identity_op)]
 			T::BenchmarkHelper::set_time(1 * HOURS);
 			Tellor::<T>::submit_value(
 				RawOrigin::Signed(reporter.clone()).into(),
@@ -194,7 +194,7 @@ benchmarks! {
 
 	fund_feed{
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let feed_creator = account::<AccountIdOf<T>>("account", 1, SEED);
 
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), token::<T>(1_000u16));
@@ -219,7 +219,7 @@ benchmarks! {
 		// Maximum value for query data in order to measure the maximum weight
 		let q in 1..T::MaxQueryDataLength::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![1u8; q as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let feed_creator = account::<AccountIdOf<T>>("account", 1, SEED);
 
 		T::BenchmarkHelper::set_balance(feed_creator.clone(), token::<T>(1_000u16));
@@ -243,7 +243,7 @@ benchmarks! {
 		// Maximum value for query data in order to measure the maximum weight
 		let q in 1..T::MaxQueryDataLength::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![1u8; q as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let tipper = account::<AccountIdOf<T>>("account", 1, SEED);
 		let amount = token::<T>(1u8);
 		T::BenchmarkHelper::set_balance(tipper.clone(), amount);
@@ -260,7 +260,7 @@ benchmarks! {
 		// Maximum length for value in order to measure the maximum weight
 		let v in 1..T::MaxValueLength::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![1u8; q as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let value  = BoundedVec::try_from(vec![1u8; v as usize]).unwrap();
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let address = Address::zero();
@@ -279,10 +279,10 @@ benchmarks! {
 		let l in 2..12;
 
 		let staking_token_price_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_token_price_query_data();
-		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
+		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref());
 		let staking_to_local_token_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_to_local_token_price_query_data();
 		let staking_to_local_token_query_id: QueryId =
-			Keccak256::hash(staking_to_local_token_query_data.as_ref()).into();
+			Keccak256::hash(staking_to_local_token_query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let disputer = account::<AccountIdOf<T>>("disputer", 0, SEED);
 		let address = Address::zero();
@@ -331,7 +331,7 @@ benchmarks! {
 		// Maximum number of sequential disputed timestamps
 		let d in 1..T::MaxDisputedTimeSeries::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let stake_amount = <StakeAmount<T>>::get();
 		let dispute_fees = token::<T>(10u8);
 
@@ -372,7 +372,7 @@ benchmarks! {
 
 	vote {
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let address = Address::zero();
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
@@ -401,7 +401,7 @@ benchmarks! {
 		// Maximum votes for disputes are used in order to measure the maximum weight
 		let v in 1..T::MaxVotes::get();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let another_reporter = account::<AccountIdOf<T>>("account", 2, SEED);
 		let address = Address::zero();
@@ -430,7 +430,7 @@ benchmarks! {
 		// The maximum number of votes be sent
 		let v in 1..u8::MAX.into();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 256, SEED);
 		let user = account::<AccountIdOf<T>>("account", 257, SEED);
 		let address = Address::zero();
@@ -482,12 +482,10 @@ benchmarks! {
 		let address = Address::zero();
 		let amount = trb(100);
 		let caller = deposit_stake::<T>(reporter.clone(), amount, address)?;
-	}: _<RuntimeOrigin<T>>(caller, reporter, amount, address)
+	}: _<RuntimeOrigin<T>>(caller, reporter.clone(), amount, address)
 	verify {
-		let staking_contract = T::Staking::get();
 		assert_last_event::<T>(
-				Event::StakeWithdrawRequestConfirmationSent { para_id: staking_contract.para_id,
-				contract_address: staking_contract.address.into() }.into(),
+				Event::StakeWithdrawRequestReported { reporter, amount, address }.into(),
 			);
 	}
 
@@ -508,7 +506,7 @@ benchmarks! {
 
 	report_slash {
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let caller = T::GovernanceOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let address = Address::zero();
@@ -516,7 +514,7 @@ benchmarks! {
 		T::BenchmarkHelper::set_time(HOURS);
 
 		// submit value
-		Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(4_000), 0, query_data.clone())?;
+		Tellor::<T>::submit_value(RawOrigin::Signed(reporter.clone()).into(), query_id, uint_value::<T>(4_000), 0, query_data)?;
 		let disputed_timestamp = <TimeOfLastNewValue<T>>::get().unwrap();
 		T::BenchmarkHelper::set_balance(reporter.clone(), token::<T>(1_000u16));
 		// begin dispute
@@ -528,7 +526,7 @@ benchmarks! {
 
 		T::BenchmarkHelper::set_time(DAYS);
 		// tally vote
-		Tellor::<T>::report_vote_tallied(caller.clone(), dispute_id, VoteResult::Passed)?;
+		Tellor::<T>::report_vote_tallied(caller, dispute_id, VoteResult::Passed)?;
 
 		let caller = T::StakingOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 	}: _<RuntimeOrigin<T>>(caller, reporter.clone(), trb(100))
@@ -540,7 +538,7 @@ benchmarks! {
 
 	report_vote_tallied {
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let caller = T::GovernanceOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let address = Address::zero();
@@ -564,7 +562,7 @@ benchmarks! {
 		// Maximum number of vote rounds are used as this extrinsic iterates over all vote rounds
 		let r in 1..MAX_VOTE_ROUNDS.into();
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 256, SEED);
 		let caller = T::GovernanceOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let address = Address::zero();
@@ -605,12 +603,12 @@ benchmarks! {
 		let v in 1..MAX_AGGREGATE_VOTES_SENT_PER_BLOCK.into();
 
 		let staking_token_price_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_token_price_query_data();
-		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref()).into();
+		let staking_token_price_query_id = Keccak256::hash(staking_token_price_query_data.as_ref());
 		let staking_to_local_token_query_data: QueryDataOf<T> = T::BenchmarkHelper::get_staking_to_local_token_price_query_data();
 		let staking_to_local_token_query_id: QueryId =
-			Keccak256::hash(staking_to_local_token_query_data.as_ref()).into();
+			Keccak256::hash(staking_to_local_token_query_data.as_ref());
 		let query_data: QueryDataOf<T> = BoundedVec::try_from(vec![0u8; T::MaxQueryDataLength::get() as usize]).unwrap();
-		let query_id = Keccak256::hash(query_data.as_ref()).into();
+		let query_id = Keccak256::hash(query_data.as_ref());
 		let reporter = account::<AccountIdOf<T>>("account", 1, SEED);
 		let disputer = account::<AccountIdOf<T>>("account", 2, SEED);
 		let user = account::<AccountIdOf<T>>("account", 3, SEED);

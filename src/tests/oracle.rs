@@ -390,15 +390,8 @@ fn request_stake_withdraw() {
 				trb(10),
 				address
 			));
-			System::assert_has_event(
-				Event::StakeWithdrawRequestReported { reporter, amount: trb(10), address }.into(),
-			);
 			System::assert_last_event(
-				Event::StakeWithdrawRequestConfirmationSent {
-					para_id: EVM_PARA_ID,
-					contract_address: (*STAKING).into(),
-				}
-				.into(),
+				Event::StakeWithdrawRequestReported { reporter, amount: trb(10), address }.into(),
 			);
 			let staker_details = Tellor::get_staker_info(reporter).unwrap();
 			assert_eq!(staker_details.start_date, now());
