@@ -1,13 +1,13 @@
 [package]
 name = "tellor"
 version = "0.1.0"
-description = "FRAME pallet template for defining custom runtime logic."
-authors = ["Substrate DevHub <https://github.com/substrate-developer-hub>"]
-homepage = "https://substrate.io"
+description = "Tellor oracle functionality for parachains."
+authors = ["Tellor <info@tellor.io>", "Parity Technologies <admin@parity.io>"]
+homepage = "https://tellor.io"
 edition = "2021"
-license = "Unlicense"
+license = "GPL-3.0-only"
 publish = false
-repository = "https://github.com/substrate-developer-hub/substrate-node-template/"
+repository = "https://github.com/tellor-io/tellor-pallet"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
