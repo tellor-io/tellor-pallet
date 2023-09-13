@@ -27,7 +27,7 @@ use frame_benchmarking::{account, benchmarks, BenchmarkError};
 use frame_support::traits::OnInitialize;
 use frame_system::RawOrigin;
 use sp_core::bounded::BoundedVec;
-use sp_runtime::traits::{Bounded, Hash, Keccak256};
+use sp_runtime::traits::{Hash, Keccak256};
 use types::{Address, Timestamp};
 
 type RuntimeOrigin<T> = <T as frame_system::Config>::RuntimeOrigin;
@@ -289,7 +289,7 @@ benchmarks! {
 
 		// report deposit stake
 		deposit_stake::<T>(reporter.clone(), trb(10_000), address)?;
-		T::BenchmarkHelper::set_balance(disputer.clone(), <BalanceOf<T>>::max_value());
+		T::BenchmarkHelper::set_balance(disputer.clone(), <BalanceOf<T>>::from(u64::MAX));
 		T::BenchmarkHelper::set_time(HOURS);
 
 		let reports = 2u32.saturating_pow(s);
@@ -566,6 +566,7 @@ benchmarks! {
 		let reporter = account::<AccountIdOf<T>>("account", 256, SEED);
 		let caller = T::GovernanceOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let address = Address::zero();
+		Tellor::<T>::register(RawOrigin::Root.into())?;
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
 		T::BenchmarkHelper::set_time(HOURS);
 		Tellor::<T>::submit_value(

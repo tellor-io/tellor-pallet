@@ -32,7 +32,7 @@ use frame_support::{
 	Hashable, PalletId,
 };
 #[cfg(feature = "runtime-benchmarks")]
-use frame_support::{traits::Currency, BoundedVec};
+use frame_support::{traits::tokens::fungible::Mutate, BoundedVec};
 use frame_system as system;
 use once_cell::sync::Lazy;
 use sp_core::{ConstU128, ConstU32, ConstU8, H256};
@@ -107,6 +107,10 @@ impl pallet_balances::Config for Test {
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
+	type HoldIdentifier = ();
+	type FreezeIdentifier = ();
+	type MaxHolds = ConstU32<0>;
+	type MaxFreezes = ConstU32<0>;
 }
 
 impl pallet_timestamp::Config for Test {
@@ -215,7 +219,7 @@ impl<MaxQueryDataLength: sp_core::Get<u32>>
 	}
 
 	fn set_balance(account_id: AccountId, amount: u128) {
-		Balances::make_free_balance_be(&account_id, Balance::from_be(amount));
+		Balances::set_balance(&account_id, Balance::from_be(amount));
 	}
 
 	fn get_staking_token_price_query_data() -> BoundedVec<u8, MaxQueryDataLength> {
@@ -257,7 +261,16 @@ impl<MaxQueryDataLength: sp_core::Get<u32>>
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	let mut ext = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+
+	// Fund pallet account
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![(Tellor::account(), 1_000_000 * 10u128.pow(12))],
+	}
+	.assimilate_storage(&mut ext)
+	.unwrap();
+
+	ext.into()
 }
 
 /// Starts a new block, executing the supplied closure thereafter.
@@ -303,22 +316,26 @@ impl UniversalWeigher for DestinationParachainWeigher {
 			MultiLocation { parents: _, interior: X1(Parachain(EVM_PARA_ID)) } => {
 				for instruction in message.0.iter() {
 					match instruction {
-						DescendOrigin(_) =>
+						DescendOrigin(_) => {
 							weight = weight
 								.checked_add(&DestinationParachainWeigher::descend_origin())
-								.ok_or(())?,
-						WithdrawAsset(_) =>
+								.ok_or(())?
+						},
+						WithdrawAsset(_) => {
 							weight = weight
 								.checked_add(&DestinationParachainWeigher::withdraw_asset())
-								.ok_or(())?,
-						BuyExecution { .. } =>
+								.ok_or(())?
+						},
+						BuyExecution { .. } => {
 							weight = weight
 								.checked_add(&DestinationParachainWeigher::buy_execution())
-								.ok_or(())?,
-						Transact { .. } =>
+								.ok_or(())?
+						},
+						Transact { .. } => {
 							weight = weight
 								.checked_add(&DestinationParachainWeigher::transact())
-								.ok_or(())?,
+								.ok_or(())?
+						},
 						_ => weight = weight.checked_add(&Weight::zero()).ok_or(())?,
 					};
 				}
@@ -328,7 +345,7 @@ impl UniversalWeigher for DestinationParachainWeigher {
 				log::trace!(target: "xcm::UniversalWeigher", "Unsupported MultiLocation");
 				Err(())
 			},
-		}
+		};
 	}
 }
 
@@ -343,7 +360,7 @@ impl Weigher for DestinationParachainWeigher {
 					.saturating_add(RocksDbWeight::get().reads(1_u64))
 			},
 			_ => Weight::zero(),
-		}
+		};
 	}
 }
 

@@ -32,7 +32,7 @@ use ethabi::{Bytes, Token, Uint};
 use frame_support::{
 	assert_noop, assert_ok,
 	dispatch::WithPostDispatchInfo,
-	traits::{Get, UnixTime},
+	traits::{tokens::fungible::Mutate, Get, UnixTime},
 	weights::Weight,
 };
 use sp_core::{bytes::to_hex, keccak_256, H256, U256};

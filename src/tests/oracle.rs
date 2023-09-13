@@ -20,11 +20,7 @@ use crate::{
 	types::{Nonce, QueryId, Timestamp},
 	Config, VoteResult,
 };
-use frame_support::{
-	assert_err, assert_noop, assert_ok,
-	dispatch::DispatchResult,
-	traits::{Currency, Hooks},
-};
+use frame_support::{assert_err, assert_noop, assert_ok, dispatch::DispatchResult, traits::Hooks};
 use sp_core::{bounded_vec, Get, U256};
 use sp_runtime::{
 	traits::{BadOrigin, Convert},
@@ -163,7 +159,7 @@ fn remove_value() {
 			assert_eq!(Tellor::retrieve_data(query_id, timestamp).unwrap(), uint_value(100));
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
 
-			Balances::make_free_balance_be(&another_reporter, token(1_000));
+			Balances::set_balance(&another_reporter, token(1_000));
 			// Value can only be removed via dispute
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
@@ -451,7 +447,7 @@ fn slash_reporter() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L195
 	ext.execute_with(|| {
 		let dispute_id = with_block(|| {
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::set_balance(&reporter, token(1_000));
 			assert_noop!(
 				Tellor::report_slash(
 					RuntimeOrigin::signed(reporter),
@@ -1409,7 +1405,7 @@ fn is_in_dispute() {
 
 			let timestamp = now();
 			assert!(!Tellor::is_in_dispute(query_id, timestamp));
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::set_balance(&reporter, token(1_000));
 			// Value can only be removed via dispute
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
@@ -1483,7 +1479,7 @@ fn add_staking_rewards() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L539
 	ext.execute_with(|| {
 		with_block(|| {
-			Balances::make_free_balance_be(&funder, token(1_000));
+			Balances::set_balance(&funder, token(1_000));
 			assert_eq!(Balances::free_balance(funder), token(1_000));
 
 			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), token(1_000)));
@@ -1503,8 +1499,11 @@ fn add_staking_rewards() {
 			assert_eq!(System::event_count(), 0);
 
 			// Test max value
-			Balances::make_free_balance_be(&funder, Balance::MAX);
-			Balances::make_free_balance_be(&staking_rewards, 0);
+			Balances::set_balance(&Tellor::account(), 0);
+			Balances::set_balance(&Tellor::tips(), 0);
+			Balances::set_balance(&Tellor::dispute_fees(), 0);
+			Balances::set_balance(&staking_rewards, 0);
+			Balances::set_balance(&funder, Balance::MAX);
 			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), Balance::MAX));
 			assert_eq!(Balances::free_balance(staking_rewards), Balance::MAX);
 			assert_eq!(Balances::free_balance(funder), 0);
@@ -2115,9 +2114,9 @@ fn update_stake_amount() {
 		});
 		with_block_after(60 * 60 * 12, || {
 			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
-			let expected_stake_amount = (U256::from(stake_amount_currency_target) *
-				U256::from(10u128.pow(18))) /
-				U256::from(price);
+			let expected_stake_amount = (U256::from(stake_amount_currency_target)
+				* U256::from(10u128.pow(18)))
+				/ U256::from(price);
 			System::assert_has_event(
 				Event::NewStakeAmount { amount: expected_stake_amount }.into(),
 			);
@@ -2360,16 +2359,16 @@ fn update_dispute_fee() {
 		});
 		with_block_after(60 * 60 * 12, || {
 			assert_ok!(Tellor::update_stake_amount(RuntimeOrigin::signed(reporter)));
-			let expected_stake_amount = (U256::from(stake_amount_currency_target) *
-				U256::from(10u128.pow(18))) /
-				U256::from(price);
+			let expected_stake_amount = (U256::from(stake_amount_currency_target)
+				* U256::from(10u128.pow(18)))
+				/ U256::from(price);
 			System::assert_has_event(
 				Event::NewStakeAmount { amount: expected_stake_amount }.into(),
 			);
 			// Dispute fee changes with stake amount
 			let expected_dispute_fee =
-				U256ToBalance::convert(Tellor::convert(expected_stake_amount / 10).unwrap()) *
-					6 * 9; // TRB 1:(6*9) OCP
+				U256ToBalance::convert(Tellor::convert(expected_stake_amount / 10).unwrap())
+					* 6 * 9; // TRB 1:(6*9) OCP
 			System::assert_last_event(
 				Event::NewDisputeFee { dispute_fee: expected_dispute_fee }.into(),
 			);
@@ -2583,9 +2582,9 @@ fn update_stake_amount_and_dispute_fee_via_hook() {
 		with_block_after(60 * 60 * 12, || {
 			Tellor::on_initialize(System::block_number());
 			let stake_amount_currency_target: u128 = StakeAmountCurrencyTarget::get();
-			let expected_stake_amount = (U256::from(stake_amount_currency_target) *
-				U256::from(10u128.pow(18))) /
-				U256::from(price);
+			let expected_stake_amount = (U256::from(stake_amount_currency_target)
+				* U256::from(10u128.pow(18)))
+				/ U256::from(price);
 			assert_eq!(Tellor::get_stake_amount(), expected_stake_amount);
 			// Dispute fee changes with stake amount
 			let dispute_fee =
@@ -2619,7 +2618,7 @@ fn update_rewards() {
 
 		let timestamp_0 = with_block(|| {
 			// deposit a stake
-			Balances::make_free_balance_be(&Tellor::tips(), token(1_000));
+			Balances::set_balance(&Tellor::tips(), token(1_000));
 			assert_ok!(Tellor::report_stake_deposited(
 				Origin::Staking.into(),
 				reporter,
@@ -2656,7 +2655,7 @@ fn update_rewards() {
 		let expected_reward_rate = staking_rewards / (86_400 * 30);
 		let timestamp_1 = with_block(|| {
 			// add staking rewards
-			Balances::make_free_balance_be(&funder, staking_rewards);
+			Balances::set_balance(&funder, staking_rewards);
 			assert_eq!(Balances::free_balance(staking_rewards_account), 0);
 			assert_ok!(Tellor::add_staking_rewards(RuntimeOrigin::signed(funder), staking_rewards));
 
@@ -2682,9 +2681,9 @@ fn update_rewards() {
 			assert_eq!(Tellor::total_reward_debt(), 0);
 			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
 			// expAccumRewPerShare = BigInt(blocky2.timestamp - blocky1.timestamp) * BigInt(expectedRewardRate) * BigInt(1e18) / BigInt(100e18)
-			let expected_accumulated_reward_per_share = u128::from(timestamp - timestamp_1) *
-				u128::from(expected_reward_rate) *
-				unit / (100 * unit);
+			let expected_accumulated_reward_per_share = u128::from(timestamp - timestamp_1)
+				* u128::from(expected_reward_rate)
+				* unit / (100 * unit);
 			assert_eq!(
 				Tellor::accumulated_reward_per_share(),
 				expected_accumulated_reward_per_share
@@ -2706,9 +2705,9 @@ fn update_rewards() {
 			let timestamp = now();
 			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
 			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
-			let expected_accumulated_reward_per_share = expected_accumulated_reward_per_share +
-				(u128::from(timestamp - timestamp_2) * u128::from(expected_reward_rate) * unit /
-					(100 * unit));
+			let expected_accumulated_reward_per_share = expected_accumulated_reward_per_share
+				+ (u128::from(timestamp - timestamp_2) * u128::from(expected_reward_rate) * unit
+					/ (100 * unit));
 			assert_eq!(
 				Tellor::accumulated_reward_per_share(),
 				expected_accumulated_reward_per_share
@@ -2783,7 +2782,7 @@ fn update_stake_and_pay_rewards() {
 	// Based on https://github.com/tellor-io/tellorFlex/blob/3b3820f2111ec2813cb51455ef68cf0955c51674/test/functionTests-TellorFlex.js#L919
 	ext.execute_with(|| {
 		let (timestamp_0, expected_reward_rate) = with_block(|| {
-			Balances::make_free_balance_be(&funder, token(1_000));
+			Balances::set_balance(&funder, token(1_000));
 			// check initial conditions
 			assert_eq!(Balances::free_balance(staking_rewards), 0);
 			assert_eq!(Tellor::reward_rate(), 0);
@@ -2838,8 +2837,8 @@ fn update_stake_and_pay_rewards() {
 				let expected_accumulated_reward_per_share =
 					(timestamp - timestamp_0) as Balance * expected_reward_rate / 10;
 				let expected_balance = U256ToBalance::convert(
-					U256::from(token(10)) * U256::from(expected_accumulated_reward_per_share) /
-						U256::from(token(1)),
+					U256::from(token(10)) * U256::from(expected_accumulated_reward_per_share)
+						/ U256::from(token(1)),
 				);
 				assert_eq!(Balances::free_balance(1), expected_balance);
 				assert_eq!(
@@ -2872,9 +2871,9 @@ fn update_stake_and_pay_rewards() {
 				// check conditions after updating rewards
 				assert_eq!(Tellor::time_of_last_allocation(), timestamp);
 				assert_eq!(Tellor::reward_rate(), expected_reward_rate);
-				let expected_accumulated_reward_per_share = ((timestamp - timestamp_1) as Balance *
-					expected_reward_rate / 10) +
-					expected_accumulated_reward_per_share;
+				let expected_accumulated_reward_per_share =
+					((timestamp - timestamp_1) as Balance * expected_reward_rate / 10)
+						+ expected_accumulated_reward_per_share;
 				assert_eq!(Balances::free_balance(1), expected_balance);
 				assert_eq!(
 					Tellor::accumulated_reward_per_share(),
@@ -2907,11 +2906,11 @@ fn update_stake_and_pay_rewards() {
 			// check conditions after updating rewards
 			assert_eq!(Tellor::time_of_last_allocation(), timestamp);
 			assert_eq!(Tellor::reward_rate(), expected_reward_rate);
-			let expected_accumulated_reward_per_share = ((timestamp - timestamp_2) as Balance *
-				expected_reward_rate /
-				10) + expected_accumulated_reward_per_share;
-			let expected_balance = expected_balance +
-				((expected_accumulated_reward_per_share * 10 - expected_reward_debt) / 2);
+			let expected_accumulated_reward_per_share =
+				((timestamp - timestamp_2) as Balance * expected_reward_rate / 10)
+					+ expected_accumulated_reward_per_share;
+			let expected_balance = expected_balance
+				+ ((expected_accumulated_reward_per_share * 10 - expected_reward_debt) / 2);
 			assert_eq!(Balances::free_balance(1), expected_balance);
 			assert_eq!(
 				Tellor::accumulated_reward_per_share(),
