@@ -121,6 +121,7 @@ fn dispute_id(para_id: u32, query_id: QueryId, timestamp: Timestamp) -> DisputeI
 
 benchmarks! {
 	register {
+		T::BenchmarkHelper::set_balance(Tellor::<T>::account(), token::<T>(1u8));
 	}: _(RawOrigin::Root)
 
 	claim_onetime_tip {
@@ -566,6 +567,7 @@ benchmarks! {
 		let reporter = account::<AccountIdOf<T>>("account", 256, SEED);
 		let caller = T::GovernanceOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let address = Address::zero();
+		T::BenchmarkHelper::set_balance(Tellor::<T>::account(), token::<T>(1u8));
 		Tellor::<T>::register(RawOrigin::Root.into())?;
 		deposit_stake::<T>(reporter.clone(), trb(1_200), address)?;
 		T::BenchmarkHelper::set_time(HOURS);
