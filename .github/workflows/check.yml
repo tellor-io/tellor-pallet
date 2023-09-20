@@ -18,8 +18,6 @@ jobs:
     defaults:
       run:
         working-directory: runtime-api # use to check both crates at the same time
-    env:
-      NIGHTLY: nightly-2023-02-01 # Fix version to prevent cache misses with nightly changes
 
     steps:
       - uses: actions/checkout@v3
@@ -32,13 +30,6 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-
-      - name: Install Nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.NIGHTLY }}
-          override: true
           target: wasm32-unknown-unknown
           components: rustfmt, clippy
 

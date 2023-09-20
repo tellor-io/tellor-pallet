@@ -22,10 +22,13 @@ use crate::{
 };
 use frame_support::{
 	assert_noop, assert_ok,
-	traits::{fungible::Inspect, Currency, Get},
+	traits::{fungible::Inspect, Get},
 };
 use sp_core::{bounded::BoundedVec, bounded_vec, keccak_256};
-use sp_runtime::traits::{BadOrigin, Convert};
+use sp_runtime::{
+	traits::{BadOrigin, Convert},
+	TokenError,
+};
 
 type Fee = <Test as Config>::Fee;
 type FeedsWithFunding = crate::pallet::FeedsWithFunding<Test>;
@@ -50,7 +53,7 @@ fn claim_tip_ensures() {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 			deposit_stake(another_reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 
-			Balances::make_free_balance_be(&feed_creator, token(1_010) + 1);
+			Balances::set_balance(&feed_creator, token(1_010) + 1);
 			feed_id = create_feed(
 				feed_creator,
 				query_id,
@@ -228,7 +231,7 @@ fn claim_tip_ensures() {
 			now()
 		});
 		with_block(|| {
-			Balances::make_free_balance_be(&another_reporter, token(1_000));
+			Balances::set_balance(&another_reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -352,7 +355,7 @@ fn claim_tip() {
 		with_block(|| {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 
-			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			Balances::set_balance(&feed_creator, token(1_000) + 1);
 			feed_id = create_feed(
 				feed_creator,
 				query_id,
@@ -445,7 +448,7 @@ fn do_get_reward_amount() {
 	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L136
 	ext.execute_with(|| {
 		let (timestamp, feed_id) = with_block(|| {
-			Balances::make_free_balance_be(&feed_creator, token(100) + 1);
+			Balances::set_balance(&feed_creator, token(100) + 1);
 			let feed_id = create_feed(
 				feed_creator,
 				query_id,
@@ -531,11 +534,11 @@ fn fund_feed() {
 			);
 			assert_noop!(
 				Tellor::fund_feed(RuntimeOrigin::signed(feed_funder), feed_id, query_id, amount),
-				pallet_balances::Error::<Test>::InsufficientBalance
+				TokenError::FundsUnavailable
 			);
 
 			// Variable updates
-			Balances::make_free_balance_be(&feed_funder, amount * 3);
+			Balances::set_balance(&feed_funder, amount * 3);
 			assert_ok!(Tellor::fund_feed(
 				RuntimeOrigin::signed(feed_funder),
 				feed_id,
@@ -720,7 +723,7 @@ fn setup_data_feed() {
 			assert_eq!(result.reward_increase_per_second, 3);
 			assert_eq!(FeedsWithFunding::contains_key(feed_id), false);
 
-			Balances::make_free_balance_be(&feed_creator, token(100));
+			Balances::set_balance(&feed_creator, token(100));
 			create_feed(
 				feed_creator,
 				query_id,
@@ -792,7 +795,7 @@ fn get_reward_claimed_status() {
 		with_block(|| {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 			timestamp = now();
-			Balances::make_free_balance_be(&feed_creator, token(3));
+			Balances::set_balance(&feed_creator, token(3));
 			feed_id = create_feed(
 				feed_creator,
 				query_id,
@@ -872,11 +875,11 @@ fn tip() {
 		);
 		assert_noop!(
 			Tellor::tip(RuntimeOrigin::signed(tipper), query_id, amount, query_data.clone()),
-			<pallet_balances::Error<Test>>::InsufficientBalance
+			TokenError::FundsUnavailable
 		);
 
 		with_block(|| {
-			Balances::make_free_balance_be(&tipper, token(1_000));
+			Balances::set_balance(&tipper, token(1_000));
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id,
@@ -991,7 +994,7 @@ fn claim_onetime_tip() {
 
 		// buffer time has not passed
 		with_block(|| {
-			Balances::make_free_balance_be(&tipper, token(100));
+			Balances::set_balance(&tipper, token(100));
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id,
@@ -1045,7 +1048,7 @@ fn claim_onetime_tip() {
 			now()
 		});
 		with_block_after((86_400 / 2) - 2 /* within reporting lock */, || {
-			Balances::make_free_balance_be(&reporter, token(1_000));
+			Balances::set_balance(&reporter, token(1_000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,
@@ -1201,7 +1204,7 @@ fn claim_onetime_tip() {
 	ext.execute_with(|| {
 		let start_balance = Balances::balance(&reporter);
 		with_block(|| {
-			Balances::make_free_balance_be(&tipper, token(100) + 1);
+			Balances::set_balance(&tipper, token(100) + 1);
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id,
@@ -1246,7 +1249,7 @@ fn get_data_feed() {
 	// Prerequisites
 	let timestamp = ext.execute_with(|| {
 		with_block(|| {
-			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			Balances::set_balance(&feed_creator, token(1_000) + 1);
 			feed_id = create_feed(
 				feed_creator,
 				query_id,
@@ -1298,9 +1301,9 @@ fn get_current_tip() {
 					token(100),
 					query_data.clone()
 				),
-				pallet_balances::Error::<Test>::InsufficientBalance
+				TokenError::FundsUnavailable
 			);
-			Balances::make_free_balance_be(&tipper, token(100) + 1);
+			Balances::set_balance(&tipper, token(100) + 1);
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id,
@@ -1332,7 +1335,7 @@ fn get_past_tips() {
 		let timestamp_1 = with_block(|| {
 			assert_eq!(Tellor::get_past_tips(query_id), vec![], "should be no tips");
 
-			Balances::make_free_balance_be(&tipper, token(800) + 1);
+			Balances::set_balance(&tipper, token(800) + 1);
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id,
@@ -1426,7 +1429,7 @@ fn get_past_tip_by_index() {
 	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L297
 	ext.execute_with(|| {
 		let timestamp_1 = with_block(|| {
-			Balances::make_free_balance_be(&tipper, token(800) + 1);
+			Balances::set_balance(&tipper, token(800) + 1);
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id,
@@ -1525,7 +1528,7 @@ fn get_past_tip_count() {
 	ext.execute_with(|| {
 		with_block(|| {
 			assert_eq!(Tellor::get_past_tip_count(query_id), 0, "past tip count should be correct");
-			Balances::make_free_balance_be(&tipper, token(300) + 1);
+			Balances::set_balance(&tipper, token(300) + 1);
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id,
@@ -1579,7 +1582,7 @@ fn get_funded_feeds() {
 	ext.execute_with(|| {
 		with_block(|| {
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
-			Balances::make_free_balance_be(&feed_creator, token(3) + 1);
+			Balances::set_balance(&feed_creator, token(3) + 1);
 			create_feed(
 				feed_creator,
 				query_id,
@@ -1726,7 +1729,7 @@ fn get_funded_query_ids() {
 	// Based on https://github.com/tellor-io/autoPay/blob/b0eca105f536d7fd6046cf1f53125928839a3bb0/test/functionTests-TellorAutopay.js#L403
 	ext.execute_with(|| {
 		with_block(|| {
-			Balances::make_free_balance_be(&tipper, token(1_000) + 1);
+			Balances::set_balance(&tipper, token(1_000) + 1);
 			assert_eq!(Tellor::get_funded_query_ids(), vec![]);
 			// Tip queryId 1
 			assert_ok!(Tellor::tip(
@@ -1912,7 +1915,7 @@ fn get_tips_by_address() {
 	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L621
 	new_test_ext().execute_with(|| {
 		with_block(|| {
-			Balances::make_free_balance_be(&tipper, token(1_000));
+			Balances::set_balance(&tipper, token(1_000));
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id,
@@ -1964,7 +1967,7 @@ fn get_reward_amount() {
 	ext.execute_with(|| {
 		let (timestamp_0, feed_id) = with_block(|| {
 			// setup data feed with time based rewards
-			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			Balances::set_balance(&feed_creator, token(1_000) + 1);
 			let feed_id = create_feed(
 				feed_creator,
 				query_id,
@@ -2126,7 +2129,7 @@ fn get_funded_single_tips_info() {
 	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L713
 	new_test_ext().execute_with(|| {
 		with_block(|| {
-			Balances::make_free_balance_be(&tipper, token(1_000));
+			Balances::set_balance(&tipper, token(1_000));
 			assert_ok!(Tellor::tip(
 				RuntimeOrigin::signed(tipper),
 				query_id_1,
@@ -2156,7 +2159,7 @@ fn get_funded_feed_details() {
 	// Based on https://github.com/tellor-io/autoPay/blob/ffff033170db06e231fba90213db59b4dc42b982/test/functionTests-TellorAutopay.js#L724
 	new_test_ext().execute_with(|| {
 		with_block(|| {
-			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			Balances::set_balance(&feed_creator, token(1_000) + 1);
 			let feed_id = create_feed(
 				feed_creator,
 				query_id,
@@ -2209,7 +2212,7 @@ fn get_reward_claim_status_list() {
 	ext.execute_with(|| {
 		// setup feeds with funding
 		let feed_id = with_block(|| {
-			Balances::make_free_balance_be(&feed_creator, token(1_000) + 1);
+			Balances::set_balance(&feed_creator, token(1_000) + 1);
 			create_feed(
 				feed_creator,
 				query_id,

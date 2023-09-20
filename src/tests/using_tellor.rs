@@ -16,7 +16,6 @@
 
 use super::*;
 use crate::{constants::REPORTING_LOCK, UsingTellor};
-use frame_support::traits::Currency;
 use sp_core::bytes::from_hex;
 
 #[test]
@@ -316,7 +315,7 @@ fn is_in_dispute() {
 
 		with_block(|| {
 			assert_eq!(Tellor::is_in_dispute(query_id, timestamp_1), false);
-			Balances::make_free_balance_be(&another_reporter, token(1000));
+			Balances::set_balance(&another_reporter, token(1000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(another_reporter),
 				query_id,
@@ -337,7 +336,7 @@ fn is_in_dispute() {
 			assert!(Tellor::is_in_dispute(query_id, timestamp_1));
 
 			assert_eq!(Tellor::is_in_dispute(query_id, timestamp_2), false);
-			Balances::make_free_balance_be(&reporter, token(1000));
+			Balances::set_balance(&reporter, token(1000));
 			assert_ok!(Tellor::begin_dispute(
 				RuntimeOrigin::signed(reporter),
 				query_id,

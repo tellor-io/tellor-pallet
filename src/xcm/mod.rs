@@ -89,8 +89,9 @@ where
 			origin, kind,
 		);
 		match kind {
-			OriginKind::SovereignAccount if origin == Location::get().into() =>
-				Ok(PalletOrigin::get()),
+			OriginKind::SovereignAccount if origin == Location::get().into() => {
+				Ok(PalletOrigin::get())
+			},
 			_ => Err(origin),
 		}
 	}

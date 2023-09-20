@@ -15,10 +15,11 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use codec::{Decode, Encode};
+use scale_info::TypeInfo;
 use sp_std::vec::Vec;
 use tellor::Feed;
 
-#[derive(Encode, Debug, Decode, Eq, PartialEq)]
+#[derive(Encode, Debug, Decode, Eq, PartialEq, TypeInfo)]
 pub struct FeedDetailsWithQueryData<Balance> {
 	/// Feed details for feed identifier with funding.
 	pub details: Feed<Balance>,
@@ -26,7 +27,7 @@ pub struct FeedDetailsWithQueryData<Balance> {
 	pub query_data: Vec<u8>,
 }
 
-#[derive(Encode, Debug, Decode, Eq, PartialEq)]
+#[derive(Encode, Debug, Decode, Eq, PartialEq, TypeInfo)]
 pub struct SingleTipWithQueryData<Balance> {
 	/// Query data with single tip for requested data.
 	pub query_data: Vec<u8>,

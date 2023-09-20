@@ -17,7 +17,7 @@
 use super::*;
 use crate::constants::DECIMALS;
 use ::xcm::prelude::Parachain;
-use frame_support::traits::fungible::Inspect;
+use frame_support::traits::{fungible::Inspect, tokens::Preservation};
 use sp_runtime::{
 	traits::{CheckedAdd, CheckedMul, CheckedSub, Hash},
 	ArithmeticError, SaturatedConversion,
@@ -25,6 +25,14 @@ use sp_runtime::{
 use sp_std::cmp::Ordering;
 
 impl<T: Config> Pallet<T> {
+	/// The primary account used by the pallet.
+	///
+	/// This actually does computation. If you need to keep using it, then make sure you cache the
+	/// value and only call this once.
+	pub(super) fn account() -> T::AccountId {
+		T::PalletId::get().into_account_truncating()
+	}
+
 	/// Calculates the latest dispute fee based on the supplied price.
 	/// # Arguments
 	/// * `price` - The current staking token to local balance price.
@@ -63,7 +71,7 @@ impl<T: Config> Pallet<T> {
 	/// The converted amount if successful.
 	pub(super) fn convert_to_decimals(amount: U256, decimals: u32) -> Result<U256, DispatchError> {
 		if amount == U256::zero() {
-			return Ok(amount)
+			return Ok(amount);
 		}
 		match DECIMALS.cmp(&decimals) {
 			Ordering::Greater => U256::from(10)
@@ -110,7 +118,9 @@ impl<T: Config> Pallet<T> {
 		amount: BalanceOf<T>,
 	) -> DispatchResult {
 		let staking_rewards = Self::staking_rewards();
-		T::Asset::transfer(source, &staking_rewards, amount, false)?;
+		if amount > Zero::zero() {
+			T::Asset::transfer(source, &staking_rewards, amount, Preservation::Expendable)?;
+		}
 		Self::update_rewards()?;
 		let staking_rewards_balance = T::Asset::balance(&staking_rewards).into();
 		// update reward rate = real staking rewards balance / 30 days
@@ -152,7 +162,7 @@ impl<T: Config> Pallet<T> {
 
 		ensure!(amount > Zero::zero(), Error::<T>::InvalidAmount);
 		feed.balance.saturating_accrue(amount);
-		T::Asset::transfer(&feed_funder, &Self::tips(), amount, true)?;
+		T::Asset::transfer(&feed_funder, &Self::tips(), amount, Preservation::Expendable)?;
 		// Add to feeds with funding
 		<FeedsWithFunding<T>>::insert(feed_id, ());
 		<DataFeeds<T>>::insert(query_id, feed_id, &feed);
@@ -312,7 +322,7 @@ impl<T: Config> Pallet<T> {
 		let (Some((value, _)), iterations) = Self::get_data_before_with_start(
 			T::StakingTokenPriceQueryId::get(),
 			Self::now().checked_sub(12 * HOURS).ok_or(ArithmeticError::Underflow)?,
-			0
+			0,
 		) else {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
@@ -320,8 +330,8 @@ impl<T: Config> Pallet<T> {
 			return Err(Error::<T>::InvalidStakingTokenPrice.into());
 		};
 		ensure!(
-			staking_token_price >= 10u128.pow(16).into() &&
-				staking_token_price < 10u128.pow(24).into(),
+			staking_token_price >= 10u128.pow(16).into()
+				&& staking_token_price < 10u128.pow(24).into(),
 			Error::<T>::InvalidStakingTokenPrice
 		);
 		let adjusted_stake_amount = (Tributes::from(T::StakeAmountCurrencyTarget::get())
@@ -355,9 +365,9 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResult {
 		// Ensure that dispute has not been executed and that vote does not exist and is not tallied
 		ensure!(
-			dispute_id != <DisputeId>::default() &&
-				dispute_id != Keccak256::hash(&[]) &&
-				<DisputeInfo<T>>::contains_key(dispute_id),
+			dispute_id != <DisputeId>::default()
+				&& dispute_id != Keccak256::hash(&[])
+				&& <DisputeInfo<T>>::contains_key(dispute_id),
 			Error::<T>::InvalidDispute
 		);
 		let vote_round = <VoteRounds<T>>::get(dispute_id); // use most recent round
@@ -381,14 +391,15 @@ impl<T: Config> Pallet<T> {
 							vote.reporters.invalid_query.saturating_accrue(reports.into());
 							vote.users.invalid_query.saturating_accrue(user_tips);
 						},
-						Some(supports) =>
+						Some(supports) => {
 							if supports {
 								vote.reporters.does_support.saturating_accrue(reports.into());
 								vote.users.does_support.saturating_accrue(user_tips);
 							} else {
 								vote.reporters.against.saturating_accrue(reports.into());
 								vote.users.against.saturating_accrue(user_tips);
-							},
+							}
+						},
 					};
 					Ok(())
 				},
@@ -406,9 +417,9 @@ impl<T: Config> Pallet<T> {
 	pub(super) fn execute_vote(dispute_id: DisputeId) -> Result<u8, DispatchError> {
 		// Ensure validity of dispute id, vote has been executed, and vote must be tallied
 		ensure!(
-			dispute_id != <DisputeId>::default() &&
-				dispute_id != Keccak256::hash(&[]) &&
-				<DisputeInfo<T>>::contains_key(dispute_id),
+			dispute_id != <DisputeId>::default()
+				&& dispute_id != Keccak256::hash(&[])
+				&& <DisputeInfo<T>>::contains_key(dispute_id),
 			Error::<T>::InvalidDispute
 		);
 		let final_vote_round = <VoteRounds<T>>::get(dispute_id);
@@ -428,8 +439,8 @@ impl<T: Config> Pallet<T> {
 						ensure!(
 							Self::now()
 								.checked_sub(vote.tally_date)
-								.ok_or(ArithmeticError::Underflow)? >=
-								1 * DAYS,
+								.ok_or(ArithmeticError::Underflow)?
+								>= 1 * DAYS,
 							Error::<T>::TallyDisputePeriodActive
 						);
 						vote.executed = true;
@@ -460,7 +471,12 @@ impl<T: Config> Pallet<T> {
 								// If vote failed, transfer the dispute fee to disputed reporter
 								VoteResult::Failed => &dispute.disputed_reporter,
 							};
-							T::Asset::transfer(dispute_fees, dest, dispute_fee, false)?;
+							T::Asset::transfer(
+								dispute_fees,
+								dest,
+								dispute_fee,
+								Preservation::Protect,
+							)?;
 						}
 						Ok(result)
 					},
@@ -685,11 +701,11 @@ impl<T: Config> Pallet<T> {
 			// Checking Boundaries to short-circuit the algorithm
 			let mut time = <ReportedTimestampsByIndex<T>>::get(query_id, start)?;
 			if time >= timestamp {
-				return None
+				return None;
 			}
 			let mut end = <Reports<T>>::get(query_id, last_reported_timestamp)?.index;
 			if last_reported_timestamp < timestamp {
-				return Some(end)
+				return Some(end);
 			}
 			// Since the value is within our boundaries, do a binary search
 			let mut middle;
@@ -710,7 +726,7 @@ impl<T: Config> Pallet<T> {
 							report
 								.previous
 								.and_then(|t| <Reports<T>>::get(query_id, t).map(|r| r.index))
-						}
+						};
 					} else {
 						// look from middle + 1(next value) to end
 						start = middle.checked_add(1)?;
@@ -727,7 +743,7 @@ impl<T: Config> Pallet<T> {
 							report
 								.previous
 								.and_then(|t| <Reports<T>>::get(query_id, t).map(|r| r.index))
-						}
+						};
 					} else {
 						// look from start to middle -1(prev value)
 						end = middle.checked_sub(1)?;
@@ -790,8 +806,8 @@ impl<T: Config> Pallet<T> {
 			if report
 				.index
 				.checked_sub(index_before.unwrap_or_default())
-				.ok_or(ArithmeticError::Underflow)? >
-				1 || index_before.is_none()
+				.ok_or(ArithmeticError::Underflow)?
+				> 1 || index_before.is_none()
 			{
 				if index_before.is_none() {
 					tip_amount = <Tips<T>>::get(query_id, min_backup)
@@ -805,8 +821,8 @@ impl<T: Config> Pallet<T> {
 						mid = (max.checked_add(min).ok_or(ArithmeticError::Overflow)?)
 							.checked_div(2)
 							.expect("divisor is non-zero");
-						if <Tips<T>>::get(query_id, mid).ok_or(Error::<T>::InvalidIndex)?.timestamp >
-							timestamp_before
+						if <Tips<T>>::get(query_id, mid).ok_or(Error::<T>::InvalidIndex)?.timestamp
+							> timestamp_before
 						{
 							max = mid;
 						} else {
@@ -961,7 +977,7 @@ impl<T: Config> Pallet<T> {
 		query_id: QueryId,
 		timestamps: Vec<Timestamp>,
 	) -> BalanceOf<T> {
-		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return Zero::zero()};
+		let Some(feed) = <DataFeeds<T>>::get(query_id, feed_id) else { return Zero::zero() };
 		let mut cumulative_reward = <BalanceOf<T>>::zero();
 		for timestamp in timestamps.into_iter().take(T::MaxClaimTimestamps::get() as usize) {
 			cumulative_reward.saturating_accrue(
@@ -1182,15 +1198,18 @@ impl<T: Config> Pallet<T> {
 				for index in start..=end {
 					iterations.saturating_inc();
 					if iterations > T::MaxDisputedTimeSeries::get() {
-						return Err(Error::<T>::MaxDisputedTimeSeriesReached.into())
+						return Err(Error::<T>::MaxDisputedTimeSeriesReached.into());
 					}
-					let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index) else { break };
+					let Some(timestamp) = <ReportedTimestampsByIndex<T>>::get(query_id, index)
+					else {
+						break;
+					};
 					let mut next_report = <Reports<T>>::get(query_id, timestamp)
 						.ok_or(Error::<T>::InvalidTimestamp)?;
 					next_report.previous = report.previous;
 					<Reports<T>>::insert(query_id, timestamp, &next_report);
 					if !next_report.is_disputed {
-						break
+						break;
 					}
 				}
 				Ok(iterations)
@@ -1244,11 +1263,11 @@ impl<T: Config> Pallet<T> {
 						ensure!(
 							Self::now()
 								.checked_sub(vote.start_date)
-								.ok_or(ArithmeticError::Underflow)? >=
-								(vote.vote_round as Timestamp)
+								.ok_or(ArithmeticError::Underflow)?
+								>= (vote.vote_round as Timestamp)
 									.checked_mul(DAYS)
-									.expect("cannot overflow based on types; qed") ||
-								Self::now()
+									.expect("cannot overflow based on types; qed")
+								|| Self::now()
 									.checked_sub(vote.start_date)
 									.ok_or(ArithmeticError::Underflow)? >= 6
 									.checked_mul(&DAYS)
@@ -1296,7 +1315,7 @@ impl<T: Config> Pallet<T> {
 		let (Some((value, _)), iterations) = Self::get_data_before_with_start(
 			T::StakingToLocalTokenPriceQueryId::get(),
 			Self::now().checked_sub(12 * HOURS).ok_or(ArithmeticError::Underflow)?,
-			0
+			0,
 		) else {
 			return Err(Error::<T>::InvalidPrice.into());
 		};
@@ -1326,20 +1345,20 @@ impl<T: Config> Pallet<T> {
 		let timestamp = Self::now();
 		let time_of_last_allocation = <TimeOfLastAllocation<T>>::get();
 		if time_of_last_allocation == timestamp {
-			return Ok(())
+			return Ok(());
 		}
 		let total_stake_amount = Self::convert(<TotalStakeAmount<T>>::get())?;
 		let reward_rate = <RewardRate<T>>::get();
 		if total_stake_amount == U256::zero() || reward_rate == Zero::zero() {
 			<TimeOfLastAllocation<T>>::set(timestamp);
-			return Ok(())
+			return Ok(());
 		}
 
 		// calculate accumulated reward per token staked
 		let unit: U256 = Self::unit()?.into();
 		let accumulated_reward_per_share = <AccumulatedRewardPerShare<T>>::get().into();
-		let new_accumulated_reward_per_share: U256 = accumulated_reward_per_share +
-			(U256::from(timestamp - time_of_last_allocation)
+		let new_accumulated_reward_per_share: U256 = accumulated_reward_per_share
+			+ (U256::from(timestamp - time_of_last_allocation)
 				.checked_mul(reward_rate.into())
 				.ok_or(ArithmeticError::Overflow)?
 				.checked_mul(unit)
@@ -1436,7 +1455,7 @@ impl<T: Config> Pallet<T> {
 					pending_reward = temp_pending_reward;
 				}
 			}
-			T::Asset::transfer(&staking_rewards, staker, pending_reward, true)?;
+			T::Asset::transfer(&staking_rewards, staker, pending_reward, Preservation::Protect)?;
 			<TotalRewardDebt<T>>::try_mutate(|debt| -> DispatchResult {
 				*debt =
 					debt.checked_sub(&stake_info.reward_debt).ok_or(ArithmeticError::Underflow)?;
@@ -1535,7 +1554,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 	fn get_index_for_data_after(query_id: QueryId, timestamp: Timestamp) -> Option<u32> {
 		let mut count = Self::get_new_value_count_by_query_id(query_id);
 		if count == 0 {
-			return None
+			return None;
 		}
 		count.saturating_dec();
 		let mut search = true; // perform binary search
@@ -1546,7 +1565,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		let mut timestamp_retrieved =
 			Self::get_timestamp_by_query_id_and_index(query_id, end).unwrap_or_default();
 		if timestamp_retrieved <= timestamp {
-			return None
+			return None;
 		}
 		timestamp_retrieved =
 			Self::get_timestamp_by_query_id_and_index(query_id, start).unwrap_or_default();
@@ -1599,7 +1618,7 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 					Self::get_timestamp_by_query_id_and_index(query_id, middle).unwrap_or_default();
 			}
 			if middle == count && Self::is_in_dispute(query_id, timestamp_retrieved) {
-				return None
+				return None;
 			}
 			// timestamp_retrieved is correct
 			Some(middle)
@@ -1617,10 +1636,9 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		max_count: u32,
 	) -> Vec<(Vec<u8>, Timestamp)> {
 		// get index of first possible value
-		let Some(start_index) = Self::get_index_for_data_after(
-			query_id,
-			timestamp.saturating_sub(max_age)
-		) else {
+		let Some(start_index) =
+			Self::get_index_for_data_after(query_id, timestamp.saturating_sub(max_age))
+		else {
 			// no value within range
 			return Vec::default();
 		};
@@ -1634,8 +1652,8 @@ impl<T: Config> UsingTellor<AccountIdOf<T>> for Pallet<T> {
 		let max_count = max_count as usize;
 		let mut timestamps = Vec::with_capacity(max_count);
 		// generate array of non-disputed timestamps within range
-		while value_count < max_count &&
-			end_index.saturating_add(1).saturating_sub(index) > start_index
+		while value_count < max_count
+			&& end_index.saturating_add(1).saturating_sub(index) > start_index
 		{
 			if let Some(timestamp_retrieved) =
 				Self::get_timestamp_by_query_id_and_index(query_id, end_index.saturating_sub(index))

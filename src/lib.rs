@@ -27,7 +27,7 @@ pub use constants::{DAYS, HOURS, MAX_VOTE_ROUNDS, MINUTES, WEEKS};
 use frame_support::{
 	dispatch::{DispatchError, DispatchResult},
 	ensure,
-	traits::{fungible::Transfer, EnsureOrigin, Len, UnixTime},
+	traits::{fungible::Mutate, tokens::Preservation, EnsureOrigin, Len, UnixTime},
 };
 pub use pallet::*;
 use sp_core::Get;
@@ -79,7 +79,7 @@ pub mod pallet {
 		pallet_prelude::*,
 		sp_runtime::traits::{CheckedAdd, CheckedMul, Hash},
 		traits::{
-			fungible::{Inspect, Transfer},
+			fungible::{Inspect, Mutate},
 			tokens::Balance,
 			PalletInfoAccess,
 		},
@@ -106,7 +106,7 @@ pub mod pallet {
 		type RuntimeOrigin: From<<Self as frame_system::Config>::RuntimeOrigin>
 			+ Into<result::Result<Origin, <Self as Config>::RuntimeOrigin>>;
 		/// The fungible asset used for tips, dispute fees and staking rewards.
-		type Asset: Inspect<Self::AccountId, Balance = Self::Balance> + Transfer<Self::AccountId>;
+		type Asset: Inspect<Self::AccountId, Balance = Self::Balance> + Mutate<Self::AccountId>;
 		/// The units in which we record balances.
 		type Balance: Balance + From<Timestamp> + From<u128> + Into<U256>;
 		/// The number of decimals used by the balance unit.
@@ -576,8 +576,8 @@ pub mod pallet {
 
 			// update stake amount/dispute fee
 			let interval = T::UpdateStakeAmountInterval::get();
-			let (s, l) = if interval > Zero::zero() &&
-				timestamp >= <LastStakeAmountUpdate<T>>::get() + interval.max(12 * HOURS)
+			let (s, l) = if interval > Zero::zero()
+				&& timestamp >= <LastStakeAmountUpdate<T>>::get() + interval.max(12 * HOURS)
 			{
 				// use storage layer (transaction) to ensure stake amount/dispute fee updated together
 				storage::with_storage_layer(|| -> Result<(u32, u32), DispatchResult> {
@@ -606,6 +606,14 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::register())]
 		pub fn register(origin: OriginFor<T>) -> DispatchResult {
 			T::RegisterOrigin::ensure_origin(origin)?;
+			// Initialize sub-accounts
+			let min_balance = T::Asset::minimum_balance();
+			let source = &Self::account();
+			for account in [Self::dispute_fees(), Self::staking_rewards(), Self::tips()] {
+				if T::Asset::balance(&account) < min_balance {
+					T::Asset::transfer(source, &account, min_balance, Preservation::Protect)?;
+				}
+			}
 			// Register with parachain registry contract
 			let registry_contract = T::Registry::get();
 			const GAS_LIMIT: u64 = gas_limits::REGISTER;
@@ -685,7 +693,7 @@ pub mod pallet {
 				tips,
 				&reporter,
 				cumulative_reward.checked_sub(&fee).ok_or(ArithmeticError::Underflow)?,
-				false,
+				Preservation::Protect,
 			)?;
 			Self::do_add_staking_rewards(tips, fee)?;
 			if Self::get_current_tip(query_id) == Zero::zero() {
@@ -727,13 +735,13 @@ pub mod pallet {
 				timestamps.iter().enumerate().map(|(i, t)| (i.saturating_add(1) as u32, t))
 			{
 				ensure!(
-					Self::now().checked_sub(timestamp.0).ok_or(ArithmeticError::Underflow)? >
-						12 * HOURS,
+					Self::now().checked_sub(timestamp.0).ok_or(ArithmeticError::Underflow)?
+						> 12 * HOURS,
 					Error::<T>::ClaimBufferNotPassed.with_weight(T::WeightInfo::claim_tip(i))
 				);
 				ensure!(
-					Some(&reporter) ==
-						Self::get_reporter_by_timestamp(query_id, timestamp.0).as_ref(),
+					Some(&reporter)
+						== Self::get_reporter_by_timestamp(query_id, timestamp.0).as_ref(),
 					Error::<T>::InvalidClaimer.with_weight(T::WeightInfo::claim_tip(i))
 				);
 				cumulative_reward.saturating_accrue(
@@ -766,7 +774,7 @@ pub mod pallet {
 				tips,
 				&reporter,
 				cumulative_reward.checked_sub(&fee).ok_or(ArithmeticError::Underflow)?,
-				false,
+				Preservation::Protect,
 			)?;
 			Self::do_add_staking_rewards(tips, fee)?;
 			Self::deposit_event(Event::TipClaimed {
@@ -937,7 +945,7 @@ pub mod pallet {
 			if Self::get_current_tip(query_id) > Zero::zero() {
 				<QueryIdsWithFunding<T>>::insert(query_id, ());
 			}
-			T::Asset::transfer(&tipper, &Self::tips(), amount, true)?;
+			T::Asset::transfer(&tipper, &Self::tips(), amount, Preservation::Expendable)?;
 			<UserTipsTotal<T>>::mutate(&tipper, |total| total.saturating_accrue(amount));
 			Self::deposit_event(Event::TipAdded { query_id, amount, query_data, tipper });
 			Ok(())
@@ -996,8 +1004,8 @@ pub mod pallet {
 						.ok_or(ArithmeticError::Underflow)?
 				)
 				.checked_mul(1_000.into())
-				.ok_or(ArithmeticError::Overflow)? >
-					(U256::from(REPORTING_LOCK)
+				.ok_or(ArithmeticError::Overflow)?
+					> (U256::from(REPORTING_LOCK)
 						.checked_mul(1_000.into())
 						.ok_or(ArithmeticError::Overflow)?)
 					.checked_div(
@@ -1116,7 +1124,7 @@ pub mod pallet {
 					*vote_rounds =
 						vote_rounds.checked_add(1).ok_or(Error::<T>::MaxVoteRoundsReached)?;
 					if *vote_rounds > MAX_VOTE_ROUNDS {
-						return Err(Error::<T>::MaxVoteRoundsReached.into())
+						return Err(Error::<T>::MaxVoteRoundsReached.into());
 					}
 					Ok(*vote_rounds)
 				},
@@ -1140,8 +1148,8 @@ pub mod pallet {
 			};
 			let (dispute, disputed_timestamps) = if vote_round == 1 {
 				ensure!(
-					Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)? <
-						REPORTING_LOCK,
+					Self::now().checked_sub(timestamp).ok_or(ArithmeticError::Underflow)?
+						< REPORTING_LOCK,
 					Error::<T>::DisputeReportingPeriodExpired
 						.with_weight(T::WeightInfo::begin_dispute(0))
 				);
@@ -1208,7 +1216,12 @@ pub mod pallet {
 			}
 			<VoteCount<T>>::mutate(|count| count.saturating_inc());
 			let dispute_fee = vote.fee;
-			T::Asset::transfer(&dispute_initiator, &Self::dispute_fees(), dispute_fee, false)?;
+			T::Asset::transfer(
+				&dispute_initiator,
+				&Self::dispute_fees(),
+				dispute_fee,
+				Preservation::Protect,
+			)?;
 			<PendingVotes<T>>::insert(dispute_id, (vote_round, vote.start_date + (11 * HOURS)));
 			<VoteInfo<T>>::insert(dispute_id, vote_round, vote);
 			Self::deposit_event(Event::NewDispute {
@@ -1433,8 +1446,8 @@ pub mod pallet {
 						ensure!(
 							Self::now()
 								.checked_sub(staker.start_date)
-								.ok_or(ArithmeticError::Underflow)? >=
-								7 * DAYS,
+								.ok_or(ArithmeticError::Underflow)?
+								>= 7 * DAYS,
 							Error::<T>::WithdrawalPeriodPending
 						);
 						<ToWithdraw<T>>::try_mutate(|locked| -> DispatchResult {
@@ -1478,8 +1491,8 @@ pub mod pallet {
 						ensure!(
 							staked_balance
 								.checked_add(locked_balance)
-								.ok_or(ArithmeticError::Overflow)? >
-								U256::zero(),
+								.ok_or(ArithmeticError::Overflow)?
+								> U256::zero(),
 							Error::<T>::InsufficientStake
 						);
 						if locked_balance >= amount {
@@ -1495,8 +1508,8 @@ pub mod pallet {
 							})?;
 						} else if locked_balance
 							.checked_add(staked_balance)
-							.ok_or(ArithmeticError::Overflow)? >=
-							amount
+							.ok_or(ArithmeticError::Overflow)?
+							>= amount
 						{
 							// if locked balance + staked balance is at least stake amount,
 							// slash from locked balance and slash remainder from staked balance

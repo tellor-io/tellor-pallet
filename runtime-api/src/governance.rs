@@ -15,8 +15,9 @@
 // along with Tellor. If not, see <http://www.gnu.org/licenses/>.
 
 use codec::{Decode, Encode};
+use scale_info::TypeInfo;
 
-#[derive(Encode, Debug, Decode, Eq, PartialEq)]
+#[derive(Encode, Debug, Decode, Eq, PartialEq, TypeInfo)]
 pub struct VoteInfo<Balance, BlockNumber, Timestamp> {
 	pub vote_round: u8,
 	pub start_date: Timestamp,
