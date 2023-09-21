@@ -133,7 +133,7 @@ impl From<ContractLocation> for MultiLocation {
 /// # Returns
 /// A XCM message for remote transact.
 pub(crate) fn transact<T: Config>(
-	dest: impl Into<MultiLocation> + sp_std::marker::Copy,
+	dest: impl Into<MultiLocation> + Copy,
 	call: Vec<u8>,
 	gas_limit: u64,
 ) -> Result<Xcm<()>, DispatchError> {
@@ -282,8 +282,7 @@ mod tests {
 	#[test]
 	fn transact() {
 		const GAS_LIMIT: u64 = 100_000;
-		let xt_weight =
-			<Test as crate::Config>::Weigher::transact(Parachain(EVM_PARA_ID), GAS_LIMIT);
+		let xt_weight = <Test as Config>::Weigher::transact(Parachain(EVM_PARA_ID), GAS_LIMIT);
 
 		let descend_origin = Weight::from_parts(5_992_000, 0);
 		let withdraw_asset = Weight::from_parts(200_000_000, 0);

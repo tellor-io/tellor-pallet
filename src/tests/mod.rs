@@ -233,7 +233,7 @@ fn registers() {
 			for origin in
 				vec![RuntimeOrigin::signed(0), Origin::Governance.into(), Origin::Staking.into()]
 			{
-				assert_noop!(Tellor::register(origin), BadOrigin);
+				assert_noop!(Tellor::register(origin, None), BadOrigin);
 			}
 
 			let weights = Weights {
@@ -253,7 +253,8 @@ fn registers() {
 				report_slash: <Test as crate::Config>::WeightInfo::report_slash().ref_time(),
 			};
 
-			assert_ok!(Tellor::register(RuntimeOrigin::root()));
+			let gas_limit = 42;
+			assert_ok!(Tellor::register(RuntimeOrigin::root(), Some(gas_limit)));
 			assert_eq!(
 				sent_xcm(),
 				vec![xcm_transact(
@@ -269,10 +270,10 @@ fn registers() {
 						)
 						.try_into()
 						.unwrap(),
-						gas_limits::REGISTER
+						gas_limit
 					)
 					.into(),
-					gas_limits::REGISTER
+					gas_limit
 				)]
 			);
 			System::assert_last_event(

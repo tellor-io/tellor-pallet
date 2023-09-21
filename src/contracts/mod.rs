@@ -33,7 +33,7 @@ fn call(function: &[u8; 4], mut parameters: Vec<u8>) -> Vec<u8> {
 pub(crate) mod gas_limits {
 	// Static gas limits, based on max gas from `forge test --gas-report` of contracts
 	pub(crate) const BEGIN_PARACHAIN_DISPUTE: u64 = 600_000;
-	pub(crate) const REGISTER: u64 = 250_000;
+	pub(crate) const REGISTER: u64 = 400_000;
 	pub(crate) const VOTE: u64 = 150_000;
 }
 

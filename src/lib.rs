@@ -604,7 +604,7 @@ pub mod pallet {
 		/// Registers the parachain with the Tellor controller contracts.
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::register())]
-		pub fn register(origin: OriginFor<T>) -> DispatchResult {
+		pub fn register(origin: OriginFor<T>, gas_limit: Option<u64>) -> DispatchResult {
 			T::RegisterOrigin::ensure_origin(origin)?;
 			// Initialize sub-accounts
 			let min_balance = T::Asset::minimum_balance();
@@ -616,7 +616,7 @@ pub mod pallet {
 			}
 			// Register with parachain registry contract
 			let registry_contract = T::Registry::get();
-			const GAS_LIMIT: u64 = gas_limits::REGISTER;
+			let gas_limit = gas_limit.unwrap_or(gas_limits::REGISTER);
 			let weights = Weights {
 				report_stake_deposited: T::WeightInfo::report_stake_deposited().ref_time(),
 				report_staking_withdraw_request: T::WeightInfo::report_staking_withdraw_request()
@@ -641,9 +641,9 @@ pub mod pallet {
 					)
 					.try_into()
 					.map_err(|_| Error::<T>::MaxEthereumXcmInputSizeExceeded)?,
-					GAS_LIMIT,
+					gas_limit,
 				),
-				GAS_LIMIT,
+				gas_limit,
 			)?;
 			Self::send_xcm(
 				registry_contract.para_id,
