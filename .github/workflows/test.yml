@@ -22,13 +22,6 @@ jobs:
       - name: Set-Up
         run: sudo apt update && sudo apt install -y git clang curl libssl-dev llvm libudev-dev cmake protobuf-compiler
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          target: wasm32-unknown-unknown
-
       - name: Cache Build artefacts
         uses: actions/cache@v3
         with:
