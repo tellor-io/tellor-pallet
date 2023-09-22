@@ -580,7 +580,7 @@ fn execute_vote() {
 
 	// Prerequisites
 	ext.execute_with(|| {
-		assert_ok!(Tellor::register(RuntimeOrigin::root()));
+		assert_ok!(Tellor::register(RuntimeOrigin::root(), None));
 		with_block(|| deposit_stake(dispute_reporter, MINIMUM_STAKE_AMOUNT, Address::random()))
 	});
 
@@ -1576,7 +1576,7 @@ fn get_vote_count() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	assert_ok!(ext.execute_with(|| with_block(|| Tellor::register(RuntimeOrigin::root()))));
+	assert_ok!(ext.execute_with(|| with_block(|| Tellor::register(RuntimeOrigin::root(), None))));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L298
 	ext.execute_with(|| {
@@ -1648,7 +1648,7 @@ fn get_vote_info() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	assert_ok!(ext.execute_with(|| with_block(|| Tellor::register(RuntimeOrigin::root()))));
+	assert_ok!(ext.execute_with(|| with_block(|| Tellor::register(RuntimeOrigin::root(), None))));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L322
 	ext.execute_with(|| {
@@ -1867,7 +1867,7 @@ fn get_tips_by_address() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	assert_ok!(ext.execute_with(|| with_block(|| Tellor::register(RuntimeOrigin::root()))));
+	assert_ok!(ext.execute_with(|| with_block(|| Tellor::register(RuntimeOrigin::root(), None))));
 
 	// Based on https://github.com/tellor-io/governance/blob/0dcc2ad501b1e51383a99a22c60eeb8c36d61bc3/test/functionTests.js#L404
 	ext.execute_with(|| {
@@ -1941,7 +1941,7 @@ fn invalid_dispute() {
 	// Prerequisites
 	ext.execute_with(|| {
 		with_block(|| {
-			assert_ok!(Tellor::register(RuntimeOrigin::root()));
+			assert_ok!(Tellor::register(RuntimeOrigin::root(), None));
 			deposit_stake(reporter, MINIMUM_STAKE_AMOUNT, Address::random());
 		})
 	});
@@ -1987,7 +1987,7 @@ fn slash_dispute_initiator() {
 	let mut ext = new_test_ext();
 
 	// Prerequisites
-	assert_ok!(ext.execute_with(|| with_block(|| Tellor::register(RuntimeOrigin::root()))));
+	assert_ok!(ext.execute_with(|| with_block(|| Tellor::register(RuntimeOrigin::root(), None))));
 
 	ext.execute_with(|| {
 		Balances::set_balance(&another_reporter, token(1_000));
