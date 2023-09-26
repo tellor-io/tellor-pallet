@@ -1,4 +1,4 @@
-name: Check Set-Up & Build
+name: Check Set-Up & Build Sample
 
 # Controls when the action will run.
 on:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-22.04
     defaults:
       run:
-        working-directory: runtime-api # use to check both crates at the same time
+        working-directory: using-tellor
 
     steps:
       - uses: actions/checkout@v3
@@ -33,7 +33,7 @@ jobs:
       - name: Cache Build artefacts
         uses: Swatinem/rust-cache@v2.7.0
         with:
-          shared-key: check
+          shared-key: sample
 
       - name: Check Build
         run: |

@@ -91,4 +91,7 @@ docker build -t tellor-pallet-tests . && docker run --rm tellor-pallet-tests
 docker build -f Dockerfile.runtime-api -t tellor-runtime-api-tests . && docker run --rm tellor-runtime-api-tests
 ```
 
+## Sample
+A sample showing how a parachain might use the `tellor` pallet within a runtime can be found at [using-tellor](./using-tellor).
+
 License: GPL-3.0
